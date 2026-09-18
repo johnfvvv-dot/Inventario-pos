@@ -1,0 +1,170 @@
+[
+                     {
+                                          "nombre": "Laptop Inspiron 15",
+                                          "precio": 3200,
+                                          "cantidad": 15,
+                                          "marca": "Dell",
+                                          "categor\u00c3\u00ada": "Laptops",
+                                          "fecha_entrada": "2026-07-01"
+                     },
+                     {
+                                          "nombre": "Laptop ProBook 440",
+                                          "precio": 3500,
+                                          "cantidad": 10,
+                                          "marca": "HP",
+                                          "categor\u00c3\u00ada": "Laptops",
+                                          "fecha_entrada": "2026-07-02"
+                     },
+                     {
+                                          "nombre": "ThinkPad E14",
+                                          "precio": 4100,
+                                          "cantidad": 8,
+                                          "marca": "Lenovo",
+                                          "categor\u00c3\u00ada": "Laptops",
+                                          "fecha_entrada": "2026-07-03"
+                     },
+                     {
+                                          "nombre": "Monitor 24 IPS",
+                                          "precio": 780,
+                                          "cantidad": 20,
+                                          "marca": "LG",
+                                          "categor\u00c3\u00ada": "Monitores",
+                                          "fecha_entrada": "2026-07-04"
+                     },
+                     {
+                                          "nombre": "Monitor 27 FHD",
+                                          "precio": 980,
+                                          "cantidad": 12,
+                                          "marca": "Samsung",
+                                          "categor\u00c3\u00ada": "Monitores",
+                                          "fecha_entrada": "2026-07-05"
+                     },
+                     {
+                                          "nombre": "Teclado K120",
+                                          "precio": 65,
+                                          "cantidad": 50,
+                                          "marca": "Logitech",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-06"
+                     },
+                     {
+                                          "nombre": "Mouse M185",
+                                          "precio": 55,
+                                          "cantidad": 60,
+                                          "marca": "Logitech",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-07"
+                     },
+                     {
+                                          "nombre": "SSD A400 480GB",
+                                          "precio": 180,
+                                          "cantidad": 40,
+                                          "marca": "Kingston",
+                                          "categor\u00c3\u00ada": "Almacenamiento",
+                                          "fecha_entrada": "2026-07-08"
+                     },
+                     {
+                                          "nombre": "SSD NVMe 1TB",
+                                          "precio": 420,
+                                          "cantidad": 25,
+                                          "marca": "Samsung",
+                                          "categor\u00c3\u00ada": "Almacenamiento",
+                                          "fecha_entrada": "2026-07-09"
+                     },
+                     {
+                                          "nombre": "Memoria USB 64GB",
+                                          "precio": 38,
+                                          "cantidad": 100,
+                                          "marca": "Kingston",
+                                          "categor\u00c3\u00ada": "Almacenamiento",
+                                          "fecha_entrada": "2026-07-10"
+                     },
+                     {
+                                          "nombre": "Router Archer C6",
+                                          "precio": 210,
+                                          "cantidad": 18,
+                                          "marca": "TP-Link",
+                                          "categor\u00c3\u00ada": "Redes",
+                                          "fecha_entrada": "2026-07-11"
+                     },
+                     {
+                                          "nombre": "Switch 8 Puertos",
+                                          "precio": 160,
+                                          "cantidad": 14,
+                                          "marca": "TP-Link",
+                                          "categor\u00c3\u00ada": "Redes",
+                                          "fecha_entrada": "2026-07-12"
+                     },
+                     {
+                                          "nombre": "Laptop Aspire 5",
+                                          "precio": 2950,
+                                          "cantidad": 9,
+                                          "marca": "Acer",
+                                          "categor\u00c3\u00ada": "Laptops",
+                                          "fecha_entrada": "2026-07-13"
+                     },
+                     {
+                                          "nombre": "Monitor 22 LED",
+                                          "precio": 620,
+                                          "cantidad": 16,
+                                          "marca": "Acer",
+                                          "categor\u00c3\u00ada": "Monitores",
+                                          "fecha_entrada": "2026-07-14"
+                     },
+                     {
+                                          "nombre": "Mouse Gamer G203",
+                                          "precio": 145,
+                                          "cantidad": 22,
+                                          "marca": "Logitech",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-15"
+                     },
+                     {
+                                          "nombre": "Teclado Mec\u00c3\u00a1nico K552",
+                                          "precio": 230,
+                                          "cantidad": 17,
+                                          "marca": "ASUS",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-16"
+                     },
+                     {
+                                          "nombre": "Disco Externo 2TB",
+                                          "precio": 390,
+                                          "cantidad": 13,
+                                          "marca": "Samsung",
+                                          "categor\u00c3\u00ada": "Almacenamiento",
+                                          "fecha_entrada": "2026-07-17"
+                     },
+                     {
+                                          "nombre": "Webcam HD",
+                                          "precio": 175,
+                                          "cantidad": 19,
+                                          "marca": "HP",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-18"
+                     },
+                     {
+                                          "nombre": "Aud\u00c3\u00adfonos USB",
+                                          "precio": 120,
+                                          "cantidad": 27,
+                                          "marca": "Dell",
+                                          "categor\u00c3\u00ada": "Perif\u00c3\u00a9ricos",
+                                          "fecha_entrada": "2026-07-19"
+                     },
+                     {
+                                          "nombre": "Repetidor WiFi",
+                                          "precio": 130,
+                                          "cantidad": 21,
+                                          "marca": "TP-Link",
+                                          "categor\u00c3\u00ada": "Redes",
+                                          "fecha_entrada": "2026-07-20"
+                     },
+                     {
+                                          "nombre": "Xbox Series X",
+                                          "precio": "790",
+                                          "cantidad": "15",
+                                          "marca": "Microsoft",
+                                          "categor\u00eda": "Video Juegos",
+                                          "fecha_entrada": "2026-08-03"
+                     }
+]

@@ -1,0 +1,21 @@
+﻿nombre,precio,cantidad,marca,categoría,fecha_entrada,total_value
+Laptop Inspiron 15,3200,15,Dell,Laptops,2026-07-01,48000.0
+Laptop ProBook 440,3500,10,HP,Laptops,2026-07-02,35000.0
+ThinkPad E14,4100,8,Lenovo,Laptops,2026-07-03,32800.0
+Monitor 24 IPS,780,20,LG,Monitores,2026-07-04,15600.0
+Monitor 27 FHD,980,12,Samsung,Monitores,2026-07-05,11760.0
+Teclado K120,65,50,Logitech,Periféricos,2026-07-06,3250.0
+Mouse M185,55,60,Logitech,Periféricos,2026-07-07,3300.0
+SSD A400 480GB,180,40,Kingston,Almacenamiento,2026-07-08,7200.0
+SSD NVMe 1TB,420,25,Samsung,Almacenamiento,2026-07-09,10500.0
+Memoria USB 64GB,38,100,Kingston,Almacenamiento,2026-07-10,3800.0
+Router Archer C6,210,18,TP-Link,Redes,2026-07-11,3780.0
+Switch 8 Puertos,160,14,TP-Link,Redes,2026-07-12,2240.0
+Laptop Aspire 5,2950,9,Acer,Laptops,2026-07-13,26550.0
+Monitor 22 LED,620,16,Acer,Monitores,2026-07-14,9920.0
+Mouse Gamer G203,145,22,Logitech,Periféricos,2026-07-15,3190.0
+Teclado Mecánico K552,230,17,ASUS,Periféricos,2026-07-16,3910.0
+Disco Externo 2TB,390,13,Samsung,Almacenamiento,2026-07-17,5070.0
+Webcam HD,175,19,HP,Periféricos,2026-07-18,3325.0
+Audífonos USB,120,27,Dell,Periféricos,2026-07-19,3240.0
+Repetidor WiFi,130,21,TP-Link,Redes,2026-07-20,2730.0

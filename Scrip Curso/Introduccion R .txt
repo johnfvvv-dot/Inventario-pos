@@ -1,0 +1,59 @@
+INTRODUCCIÓN A R
+
+1. Introducción a lo básico
+- Lenguaje R: orientado a análisis estadístico y manipulación de datos
+- Entorno de trabajo: RStudio como IDE más usado
+- Operaciones básicas:
+  Asignación: <- o =
+  Operaciones aritméticas: +, -, *, /, ^
+  Ayuda: ?funcion o help(funcion)
+Funciones clave: print(), cat(), class(), typeof(), str()
+
+2. Vectores
+- Definición: colección de elementos del mismo tipo
+- Creación: c(1,2,3)
+- Secuencias: 1:10, seq(1,10,2)
+- Repeticiones: rep(5, times=3)
+Funciones clave: length(), sum(), mean(), sort(), unique()
+
+3. Matrices
+- Definición: estructura bidimensional con elementos del mismo tipo
+- Creación: matrix(1:9, nrow=3, ncol=3)
+- Acceso: mat[1,2]
+Funciones clave: dim(), t(), apply()
+
+4. Factores
+- Definición: variables categóricas con niveles definidos
+- Creación: factor(c("M","F","M"))
+- Niveles: levels()
+Funciones clave: table(), summary(), as.factor()
+
+5. Marcos de datos (Data Frames)
+- Definición: tabla con columnas de distintos tipos de datos
+- Creación:
+  df <- data.frame(
+    nombre = c("Ana","Luis"),
+    edad = c(23,30),
+    genero = c("F","M")
+  )
+- Acceso: df$edad, df[1,], df[,2]
+Funciones clave: head(), tail(), nrow(), ncol(), names(), summary()
+
+6. Listas
+- Definición: colecciones heterogéneas (pueden contener vectores, matrices, data frames)
+- Creación:
+  lista <- list(
+    numeros = c(1,2,3),
+    matriz = matrix(1:4,2,2),
+    texto = "Hola"
+  )
+- Acceso: lista[[1]], lista$texto
+Funciones clave: length(), str(), unlist()
+
+RESUMEN DE FUNCIONES IMPORTANTES
+Generales: print(), class(), str(), summary()
+Vectores: c(), seq(), rep(), sort(), unique()
+Matrices: matrix(), dim(), t(), apply()
+Factores: factor(), levels(), table()
+Data Frames: data.frame(), head(), names(), summary()
+Listas: list(), unlist(), str()
