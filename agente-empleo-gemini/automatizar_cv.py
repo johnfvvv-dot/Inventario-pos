@@ -40,7 +40,15 @@ def generar_datos_cv(texto_oferta):
     5. Devuelve ÚNICAMENTE el bloque de código Python limpio, empezando exactamente desde los comentarios y el diccionario `nuevos_datos = {`. No agregues texto adicional fuera del código.
     """
 
-    client = genai.Client(api_key="<GEMINI_API_KEY>")
+    # La clave se toma de una variable de entorno para no quedar guardada en el código
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Falta la variable de entorno GEMINI_API_KEY.\n"
+            "Configúrala así:  export GEMINI_API_KEY=\"tu_clave\""
+        )
+
+    client = genai.Client(api_key=api_key)
     
     response = client.models.generate_content(
         model='gemini-3.6-flash',
