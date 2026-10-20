@@ -28,7 +28,7 @@ def listar_productos(db: Session = Depends(get_db)):
     return db.query(Producto).all()
 
 @router.put("/{producto_id}/stock", response_model=ProductoOut)
-actualizar_stock(
+def actualizar_stock(
     producto_id: int, 
     nuevo_stock: int, 
     db: Session = Depends(get_db)
@@ -44,7 +44,7 @@ actualizar_stock(
     return producto
 
 @router.delete("/{producto_id}")
-eliminar_producto(producto_id: int, db: Session = Depends(get_db)):
+def eliminar_producto(producto_id: int, db: Session = Depends(get_db)):
     """Eliminar producto del inventario."""
     producto = db.query(Producto).filter(Producto.id == producto_id).first()
     if not producto:

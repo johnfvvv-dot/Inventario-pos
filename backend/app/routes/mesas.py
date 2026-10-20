@@ -22,7 +22,7 @@ def crear_mesa(numero: int, capacidad: int = 4, db: Session = Depends(get_db)):
     return {"message": f"Mesa {numero} creada exitosamente", "mesa_id": nueva_mesa.id}
 
 @router.get("/", response_model=List[dict])
-listar_mesas(db: Session = Depends(get_db)):
+def listar_mesas(db: Session = Depends(get_db)):
     """Listar todas las mesas con estado actual."""
     mesas = db.query(Mesa).all()
     return [
@@ -36,7 +36,7 @@ listar_mesas(db: Session = Depends(get_db)):
     ]
 
 @router.put("/{mesa_id}/estado", response_model=dict)
-actualizar_estado_mesa(
+def actualizar_estado_mesa(
     mesa_id: int, 
     nuevo_estado: str, 
     db: Session = Depends(get_db)

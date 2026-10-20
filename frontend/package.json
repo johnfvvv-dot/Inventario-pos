@@ -17,15 +17,22 @@
     "react-router-dom": "^6.23.0",
     "chart.js": "^4.4.3",
     "react-chartjs-2": "^5.2.0",
-    "typescript": "^5.5.2",
-    "@types/charts.js": "^1.1.0",
-    "@types/react-chartjs-2": "^5.2.0"
+    "typescript": "^5.5.2"
   },
   "devDependencies": {
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/charts.js": "^1.1.0",
+    "@types/react-chartjs-2": "^5.2.0",
     "eslint": "^8.57.0",
-    "prettier": "^3.3.0"
+    "prettier": "^3.3.0",
+    "react-scripts": "5.0.1"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   }
 }

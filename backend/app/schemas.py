@@ -7,9 +7,9 @@ from datetime import datetime
 # --- Usuarios ---
 
 class UsuarioBase(BaseModel):
-    nombre: str = Field(..., max_length=100, nombre del usuario)
-    rol: str = Field(..., max_length=20, role)
-    email: str = Field(..., max_length=100, email)
+    nombre: str = Field(..., max_length=100)
+    rol: str = Field(..., max_length=20)
+    email: str = Field(..., max_length=100)
 
 class UsuarioCreate(UsuarioBase):
     pass
