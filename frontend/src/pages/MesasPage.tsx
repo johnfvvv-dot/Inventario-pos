@@ -156,6 +156,8 @@ export default function MesasPage() {
           mesaId={mesaCuenta}
           onClose={() => setMesaCuenta(null)}
           onDividir={() => {
+            // Cerrar la ventana de cuenta antes de abrir la de división
+            setMesaCuenta(null);
             setMesaDivision(mesaCuenta);
           }}
         />

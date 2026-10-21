@@ -1,9 +1,12 @@
 /**
  * Ventana de división de cuenta por mesa.
- * - Carga los productos pendientes de la mesa (pedidos abiertos).
- * - El mesero crea clientes con alias (Cliente A, Cliente B, ...).
- * - Asigna productos a cada cliente y ve el subtotal de cada uno.
- * - Al confirmar, se generan los subtotales separados y la mesa sigue ocupada.
+ *
+ * - Productos de la mesa a la izquierda, clientes (alias) a la derecha.
+ * - Al crear un alias se pueden marcar los productos que se le asignan.
+ * - El subtotal de cada alias se calcula automáticamente.
+ * - La parte NO asignada se mantiene como bloque único ("Resto de la cuenta"),
+ *   sin obligar a crear alias adicionales.
+ * - Al confirmar, la mesa permanece ocupada.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -17,15 +20,22 @@ interface Linea {
   subtotal: number;
 }
 
-interface Pedido {
-  id: number;
-  items: Linea[];
+interface ItemParticipante {
+  producto_id: number;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
 }
 
 interface Participante {
   alias: string;
-  items: { producto_id: number; cantidad: number; precio_unitario: number; subtotal: number }[];
+  items: ItemParticipante[];
 }
+
+const redondear = (n: number) => Math.round(n * 100) / 100;
+
+const subtotalDe = (p: Participante) =>
+  redondear(p.items.reduce((s, i) => s + i.subtotal, 0));
 
 interface Props {
   mesaId: number;
@@ -37,6 +47,9 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [aliasNuevo, setAliasNuevo] = useState("");
+  const [destino, setDestino] = useState<string>("nuevo"); // "nuevo" o índice de participante
+  const [seleccion, setSeleccion] = useState<Record<number, number>>({});
+  const [totalCuenta, setTotalCuenta] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -49,18 +62,19 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
       try {
         const data: any = await api.getCuentaMesa(mesaId);
         const todas: Linea[] = [];
-        (data.pedidos || []).forEach((p: Pedido) => {
-          p.items.forEach((i) => {
+        (data.pedidos || []).forEach((pedido: any) => {
+          pedido.items.forEach((i: Linea) => {
             const existente = todas.find((t) => t.producto_id === i.producto_id);
             if (existente) {
               existente.cantidad += i.cantidad;
-              existente.subtotal = round(existente.subtotal + i.subtotal);
+              existente.subtotal = redondear(existente.subtotal + i.subtotal);
             } else {
               todas.push({ ...i });
             }
           });
         });
         setLineas(todas);
+        setTotalCuenta(data.total || 0);
         setError(null);
       } catch (err: any) {
         setError(err.message);
@@ -69,70 +83,130 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
     cargar();
   }, [mesaId]);
 
-  const round = (n: number) => Math.round(n * 100) / 100;
-
-  /** Cantidad ya asignada de un producto en los participantes */
-  const cantidadAsignada = (productoId: number) =>
+  /** Unidades ya asignadas de un producto, en todos los alias */
+  const unidadesAsignadas = (productoId: number) =>
     participantes.reduce(
       (sum, p) =>
-        sum + p.items.filter((i) => i.producto_id === productoId).reduce((s, i) => s + i.cantidad, 0),
+        sum +
+        p.items
+          .filter((i) => i.producto_id === productoId)
+          .reduce((s, i) => s + i.cantidad, 0),
       0
     );
 
-  const disponible = (linea: Linea) => linea.cantidad - cantidadAsignada(linea.producto_id);
+  const disponible = (linea: Linea) => linea.cantidad - unidadesAsignadas(linea.producto_id);
 
-  const agregarParticipante = () => {
+  /** Unidades marcadas actualmente para el destino seleccionado */
+  const marcadas = (productoId: number): number => {
+    if (destino === "nuevo") return seleccion[productoId] || 0;
+    const p = participantes[Number(destino)];
+    if (!p) return 0;
+    const item = p.items.find((i) => i.producto_id === productoId);
+    return item ? item.cantidad : 0;
+  };
+
+  const alternarProducto = (linea: Linea) => {
+    const actual = marcadas(linea.producto_id);
+    const maximo = disponible(linea) + actual;
+    let nuevo: number;
+
+    if (actual > 0) {
+      nuevo = actual - 1;
+    } else {
+      if (disponible(linea) <= 0) {
+        setError(`No quedan unidades de ${linea.producto_nombre}`);
+        return;
+      }
+      nuevo = 1;
+    }
+    if (nuevo > maximo) nuevo = maximo;
+
+    if (destino === "nuevo") {
+      setSeleccion((prev) => {
+        const copia = { ...prev };
+        if (nuevo <= 0) delete copia[linea.producto_id];
+        else copia[linea.producto_id] = nuevo;
+        return copia;
+      });
+    } else {
+      const index = Number(destino);
+      setParticipantes(
+        participantes.map((p, i) => {
+          if (i !== index) return p;
+          const items = p.items.filter((x) => x.producto_id !== linea.producto_id);
+          if (nuevo > 0) {
+            items.push({
+              producto_id: linea.producto_id,
+              cantidad: nuevo,
+              precio_unitario: linea.precio_unitario,
+              subtotal: redondear(linea.precio_unitario * nuevo),
+            });
+          }
+          return { ...p, items };
+        })
+      );
+    }
+    setError(null);
+  };
+
+  const cambiarDestino = (valor: string) => {
+    setDestino(valor);
+    if (valor === "nuevo") {
+      setSeleccion({});
+    } else {
+      const p = participantes[Number(valor)];
+      const preseleccion: Record<number, number> = {};
+      p?.items.forEach((i) => (preseleccion[i.producto_id] = i.cantidad));
+      setSeleccion(preseleccion);
+    }
+  };
+
+  const agregarAlias = () => {
     const alias = aliasNuevo.trim();
-    if (!alias) return;
+    if (!alias) {
+      setError("Escribe el alias del cliente");
+      return;
+    }
     if (participantes.some((p) => p.alias.toLowerCase() === alias.toLowerCase())) {
       setError(`Ya existe el alias "${alias}"`);
       return;
     }
-    setParticipantes([...participantes, { alias, items: [] }]);
-    setAliasNuevo("");
-    setError(null);
-  };
 
-  const eliminarParticipante = (index: number) => {
-    setParticipantes(participantes.filter((_, i) => i !== index));
-  };
-
-  const asignar = (participanteIndex: number, linea: Linea) => {
-    if (disponible(linea) <= 0) {
-      setError(`No quedan unidades de ${linea.producto_nombre}`);
-      return;
-    }
-    setParticipantes(
-      participantes.map((p, i) => {
-        if (i !== participanteIndex) return p;
-        const items = [...p.items];
-        const existente = items.find((x) => x.producto_id === linea.producto_id);
-        if (existente) {
-          existente.cantidad += 1;
-          existente.subtotal = round(
-            existente.subtotal + existente.precio_unitario
-          );
-        } else {
-          items.push({
-            producto_id: linea.producto_id,
-            cantidad: 1,
-            precio_unitario: linea.precio_unitario,
-            subtotal: linea.precio_unitario,
-          });
-        }
-        return { ...p, items };
+    // Los productos marcados se asignan al nuevo alias
+    const items: ItemParticipante[] = Object.entries(seleccion)
+      .map(([pid, cantidad]) => {
+        const linea = lineas.find((l) => l.producto_id === Number(pid))!;
+        return {
+          producto_id: Number(pid),
+          cantidad,
+          precio_unitario: linea.precio_unitario,
+          subtotal: redondear(linea.precio_unitario * cantidad),
+        };
       })
-    );
+      .filter((i) => i.cantidad > 0);
+
+    setParticipantes([...participantes, { alias, items }]);
+    setAliasNuevo("");
+    setSeleccion({});
+    setDestino("nuevo");
     setError(null);
   };
 
-  const quitar = (participanteIndex: number, productoId: number) => {
+  const eliminarAlias = (index: number) => {
+    setParticipantes(participantes.filter((_, i) => i !== index));
+    if (destino === String(index)) {
+      setDestino("nuevo");
+      setSeleccion({});
+    }
+  };
+
+  const quitarUnidad = (participanteIndex: number, productoId: number) => {
     setParticipantes(
       participantes.map((p, i) => {
         if (i !== participanteIndex) return p;
-        const existente = p.items.find((x) => x.producto_id === productoId);
-        if (!existente) return p;
-        if (existente.cantidad <= 1) {
+        const item = p.items.find((x) => x.producto_id === productoId);
+        if (!item) return p;
+        if (item.cantidad <= 1) {
           return { ...p, items: p.items.filter((x) => x.producto_id !== productoId) };
         }
         return {
@@ -142,7 +216,7 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
               ? {
                   ...x,
                   cantidad: x.cantidad - 1,
-                  subtotal: round(x.subtotal - x.precio_unitario),
+                  subtotal: redondear(x.subtotal - x.precio_unitario),
                 }
               : x
           ),
@@ -151,13 +225,15 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
     );
   };
 
-  const totalDivision = useMemo(
-    () => round(participantes.reduce((s, p) => s + subtotal(p), 0)),
+  const totalAsignado = useMemo(
+    () => redondear(participantes.reduce((s, p) => s + subtotalDe(p), 0)),
     [participantes]
   );
 
-  const subtotal = (p: Participante) =>
-    round(p.items.reduce((s, i) => s + i.subtotal, 0));
+  const resto = useMemo(
+    () => redondear(Math.max(0, totalCuenta - totalAsignado)),
+    [totalCuenta, totalAsignado]
+  );
 
   const confirmar = async () => {
     if (participantes.length === 0) {
@@ -165,7 +241,7 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
       return;
     }
     if (participantes.some((p) => p.items.length === 0)) {
-      setError("Cada cliente debe tener al menos un producto");
+      setError("Cada alias debe tener al menos un producto asignado");
       return;
     }
     setProcesando(true);
@@ -181,11 +257,15 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
           })),
         })),
       });
-      setMensaje("Cuenta dividida. La mesa permanece ocupada.");
+      setMensaje(
+        resto > 0
+          ? `División guardada. Quedan $${resto.toFixed(2)} sin asignar en la cuenta.`
+          : "División guardada. La mesa permanece ocupada."
+      );
       setTimeout(() => {
         onConfirmado?.();
         onClose();
-      }, 900);
+      }, 1200);
     } catch (err: any) {
       setError(err.message);
       setProcesando(false);
@@ -211,44 +291,97 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
           </p>
         ) : (
           <>
+            <div className="division-toolbar">
+              <div className="form-group">
+                <label>Asignar productos a</label>
+                <select value={destino} onChange={(e) => cambiarDestino(e.target.value)}>
+                  <option value="nuevo">— Nuevo cliente —</option>
+                  {participantes.map((p, i) => (
+                    <option key={i} value={String(i)}>
+                      {p.alias} (${subtotalDe(p).toFixed(2)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {destino === "nuevo" && (
+                <div className="form-group">
+                  <label>Alias del cliente</label>
+                  <input
+                    value={aliasNuevo}
+                    onChange={(e) => setAliasNuevo(e.target.value)}
+                    placeholder="Cliente A"
+                    onKeyDown={(e) => e.key === "Enter" && agregarAlias()}
+                  />
+                </div>
+              )}
+
+              {destino === "nuevo" ? (
+                <button className="btn-primary" onClick={agregarAlias}>
+                  + Agregar cliente
+                </button>
+              ) : (
+                <span className="muted small">
+                  Marca los productos que pertenecen a{" "}
+                  <strong>{participantes[Number(destino)]?.alias}</strong>
+                </span>
+              )}
+            </div>
+
             <div className="division-grid">
               {/* Columna 1: productos de la mesa */}
               <section className="panel">
-                <h3>Productos de la mesa</h3>
-                {lineas.map((linea) => (
-                  <div key={linea.producto_id} className="cuenta-linea">
-                    <span>
-                      {linea.producto_nombre}{" "}
-                      <span className="muted small">
-                        (disp. {disponible(linea)} de {linea.cantidad})
+                <h3>Productos de la cuenta</h3>
+                {lineas.map((linea) => {
+                  const cantidad = marcadas(linea.producto_id);
+                  const libre = disponible(linea);
+                  return (
+                    <label
+                      key={linea.producto_id}
+                      className={`producto-check ${cantidad > 0 ? "seleccionado" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={cantidad > 0}
+                        onChange={() => alternarProducto(linea)}
+                        disabled={cantidad === 0 && libre <= 0}
+                      />
+                      <span className="producto-check-nombre">
+                        {linea.producto_nombre}
+                        <span className="muted small">
+                          {" "}
+                          · {cantidad > 0 ? `${cantidad} marcado(s)` : `libre ${libre}`}
+                        </span>
                       </span>
-                    </span>
-                    <strong>${linea.subtotal.toFixed(2)}</strong>
+                      <strong>${linea.subtotal.toFixed(2)}</strong>
+                    </label>
+                  );
+                })}
+
+                {destino === "nuevo" && Object.keys(seleccion).length > 0 && (
+                  <div className="resto-bloque">
+                    <span>Marcado para el nuevo alias</span>
+                    <strong>
+                      $
+                      {redondear(
+                        Object.entries(seleccion).reduce((s, [pid, cant]) => {
+                          const linea = lineas.find((l) => l.producto_id === Number(pid));
+                          return s + (linea ? linea.precio_unitario * cant : 0);
+                        }, 0)
+                      ).toFixed(2)}
+                    </strong>
                   </div>
-                ))}
+                )}
               </section>
 
               {/* Columna 2: clientes */}
               <section className="panel">
-                <h3>Clientes</h3>
-
-                <div className="inline-form">
-                  <div className="form-group">
-                    <label>Alias del cliente</label>
-                    <input
-                      value={aliasNuevo}
-                      onChange={(e) => setAliasNuevo(e.target.value)}
-                      placeholder="Cliente A"
-                      onKeyDown={(e) => e.key === "Enter" && agregarParticipante()}
-                    />
-                  </div>
-                  <button className="btn-primary" onClick={agregarParticipante}>
-                    + Agregar
-                  </button>
-                </div>
+                <h3>Clientes de la mesa</h3>
 
                 {participantes.length === 0 && (
-                  <p className="empty-state">Crea los alias de los clientes.</p>
+                  <p className="empty-state">
+                    Escribe un alias y marca los productos que le asignas.
+                  </p>
                 )}
 
                 {participantes.map((p, index) => (
@@ -256,11 +389,11 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
                     <div className="participante-head">
                       <strong>{p.alias}</strong>
                       <span>
-                        ${subtotal(p).toFixed(2)}
+                        ${subtotalDe(p).toFixed(2)}
                         <button
                           className="btn-icon danger"
                           title="Quitar cliente"
-                          onClick={() => eliminarParticipante(index)}
+                          onClick={() => eliminarAlias(index)}
                         >
                           ×
                         </button>
@@ -268,22 +401,24 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
                     </div>
 
                     {p.items.length === 0 && (
-                      <p className="muted small">Sin productos asignados.</p>
+                      <p className="muted small">
+                        Sin productos. Selecciónalos en la columna izquierda.
+                      </p>
                     )}
 
                     {p.items.map((item) => {
-                      const linea = lineas.find((l) => l.producto_id === item.producto_id)!;
+                      const linea = lineas.find((l) => l.producto_id === item.producto_id);
                       return (
                         <div key={item.producto_id} className="cuenta-linea small">
                           <span>
-                            {item.cantidad} × {linea.producto_nombre}
+                            {item.cantidad} × {linea?.producto_nombre || "Producto"}
                           </span>
                           <span>
                             ${item.subtotal.toFixed(2)}
                             <button
                               className="btn-icon danger"
-                              title="Quitar"
-                              onClick={() => quitar(index, item.producto_id)}
+                              title="Quitar una unidad"
+                              onClick={() => quitarUnidad(index, item.producto_id)}
                             >
                               −
                             </button>
@@ -291,32 +426,28 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
                         </div>
                       );
                     })}
-
-                    <div className="participante-asignar">
-                      {lineas
-                        .filter((l) => disponible(l) > 0)
-                        .map((l) => (
-                          <button
-                            key={l.producto_id}
-                            className="btn-secondary btn-small"
-                            onClick={() => asignar(index, l)}
-                          >
-                            + {l.producto_nombre}
-                          </button>
-                        ))}
-                    </div>
                   </div>
                 ))}
+
+                {participantes.length > 0 && (
+                  <div className="resto-bloque">
+                    <span>Resto sin asignar (queda como bloque único)</span>
+                    <strong>${resto.toFixed(2)}</strong>
+                  </div>
+                )}
               </section>
             </div>
 
             <div className="total-row">
-              <span>Total de la división</span>
-              <strong>${totalDivision.toFixed(2)}</strong>
+              <span>
+                Total de la división: ${totalAsignado.toFixed(2)} · Resto: $
+                {resto.toFixed(2)}
+              </span>
+              <strong>${totalCuenta.toFixed(2)}</strong>
             </div>
 
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={onClose}>
+              <button className="btn-secondary" onClick={onClose} disabled={procesando}>
                 Cancelar
               </button>
               <button

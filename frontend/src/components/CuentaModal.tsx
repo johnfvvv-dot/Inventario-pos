@@ -102,7 +102,7 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-box modal-xl" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>
             {cuenta ? `Cuenta Mesa ${cuenta.mesa_numero}` : "Cargando cuenta..."}

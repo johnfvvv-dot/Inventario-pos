@@ -207,7 +207,11 @@ def cerrar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
 
 @router.post("/dividir", response_model=DivisionOut, status_code=201)
 def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
-    """Divide la cuenta de una mesa entre varios clientes (alias)."""
+    """Divide la cuenta de una mesa entre varios clientes (alias).
+
+    Solo se divide lo asignado a los alias. El resto de los productos queda
+    en un pedido abierto (bloque único) para que la cuenta se complete.
+    """
     mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -219,82 +223,140 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     if not datos.participantes:
         raise HTTPException(status_code=400, detail="Agrega al menos un cliente")
 
-    # Verificar que los productos existen y calcular subtotales
-    productos_cache: dict = {}
-    total = 0.0
-    participantes_preparados = []
+    # Pool de productos pendientes (pedidos abiertos de la mesa)
+    pedidos = (
+        db.query(Pedido)
+        .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))
+        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .order_by(Pedido.id)
+        .all()
+    )
 
-    for participante in datos.participantes:
-        subtotal = 0.0
-        items_preparados = []
-        for item in participante.items:
-            producto = productos_cache.get(item.producto_id)
-            if producto is None:
-                producto = (
-                    db.query(Producto).filter(Producto.id == item.producto_id).first()
-                )
-                if not producto:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Producto con ID {item.producto_id} no encontrado",
-                    )
-                productos_cache[item.producto_id] = producto
-
-            subtotal_item = round(producto.precio * item.cantidad, 2)
-            subtotal = round(subtotal + subtotal_item, 2)
-            items_preparados.append(
+    pool: dict = {}
+    for pedido in pedidos:
+        for item in pedido.items:
+            entry = pool.setdefault(
+                item.producto_id,
                 {
-                    "producto": producto,
-                    "cantidad": item.cantidad,
-                    "precio_unitario": producto.precio,
-                    "subtotal": subtotal_item,
-                }
+                    "cantidad": 0,
+                    "precio_unitario": item.precio_unitario,
+                    "producto": item.producto,
+                },
             )
-        total = round(total + subtotal, 2)
-        participantes_preparados.append(
-            {"alias": participante.alias, "subtotal": subtotal, "items": items_preparados}
+            entry["cantidad"] += item.cantidad
+
+    if not pool:
+        raise HTTPException(
+            status_code=400, detail="La mesa no tiene productos pendientes para dividir"
         )
 
-    if total <= 0:
-        raise HTTPException(status_code=400, detail="La división no tiene productos")
+    # Validar que lo asignado no exceda lo disponible
+    solicitado: dict = {}
+    for participante in datos.participantes:
+        for item in participante.items:
+            solicitado[item.producto_id] = (
+                solicitado.get(item.producto_id, 0) + item.cantidad
+            )
 
-    # Crear la división
+    for producto_id, cantidad in solicitado.items():
+        disponible = pool.get(producto_id, {}).get("cantidad", 0)
+        if cantidad > disponible:
+            nombre = (
+                pool[producto_id]["producto"].nombre
+                if producto_id in pool and pool[producto_id]["producto"]
+                else f"#{producto_id}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cantidad insuficiente de {nombre}: "
+                    f"disponible {disponible}, asignado {cantidad}"
+                ),
+            )
+
+    # Crear la división con los subtotales por alias
     division = Division(
         mesa_id=mesa.id,
         usuario_id=usuario.id,
-        total=total,
+        total=0.0,
         estado="pendiente",
     )
     db.add(division)
     db.flush()
 
-    for data in participantes_preparados:
-        participante = Participante(
+    total = 0.0
+    for participante in datos.participantes:
+        subtotal = 0.0
+        items_preparados = []
+        for item in participante.items:
+            entry = pool[item.producto_id]
+            producto = entry["producto"]
+            precio_unitario = entry["precio_unitario"]
+            subtotal_item = round(precio_unitario * item.cantidad, 2)
+            subtotal = round(subtotal + subtotal_item, 2)
+            items_preparados.append((producto, item.cantidad, precio_unitario, subtotal_item))
+
+        if not items_preparados:
+            continue
+
+        nuevo_participante = Participante(
             division_id=division.id,
-            alias=data["alias"],
-            subtotal=data["subtotal"],
+            alias=participante.alias,
+            subtotal=subtotal,
             pagado=0,
         )
-        db.add(participante)
+        db.add(nuevo_participante)
         db.flush()
-        for item in data["items"]:
+
+        for producto, cantidad, precio_unitario, subtotal_item in items_preparados:
             db.add(
                 ParticipanteItem(
-                    participante_id=participante.id,
-                    producto_id=item["producto"].id,
-                    cantidad=item["cantidad"],
-                    precio_unitario=item["precio_unitario"],
-                    subtotal=item["subtotal"],
+                    participante_id=nuevo_participante.id,
+                    producto_id=producto.id,
+                    cantidad=cantidad,
+                    precio_unitario=precio_unitario,
+                    subtotal=subtotal_item,
+                )
+            )
+        total = round(total + subtotal, 2)
+
+    if total <= 0:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="La división no tiene productos")
+
+    division.total = total
+
+    # El RESTO no asignado queda como un pedido abierto (bloque único)
+    resto_items = []
+    resto_total = 0.0
+    for producto_id, entry in pool.items():
+        restante = entry["cantidad"] - solicitado.get(producto_id, 0)
+        if restante > 0:
+            subtotal = round(entry["precio_unitario"] * restante, 2)
+            resto_total = round(resto_total + subtotal, 2)
+            resto_items.append((producto_id, entry, restante, subtotal))
+
+    if resto_items:
+        pedido_resto = Pedido(
+            mesa_id=mesa.id,
+            usuario_id=usuario.id,
+            estado="abierto",
+            total=resto_total,
+        )
+        db.add(pedido_resto)
+        db.flush()
+        for producto_id, entry, restante, subtotal in resto_items:
+            db.add(
+                PedidoItem(
+                    pedido_id=pedido_resto.id,
+                    producto_id=producto_id,
+                    cantidad=restante,
+                    precio_unitario=entry["precio_unitario"],
+                    subtotal=subtotal,
                 )
             )
 
-    # Los pedidos abiertos de la mesa quedan cubiertos por la división
-    pedidos = (
-        db.query(Pedido)
-        .options(joinedload(Pedido.items))
-        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
-        .all()
-    )
+    # Los pedidos originales quedan cubiertos por la división
     for pedido in pedidos:
         pedido.estado = "dividido"
 

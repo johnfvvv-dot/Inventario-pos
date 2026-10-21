@@ -629,11 +629,13 @@ select:focus {
 
 /* -------------------- CUENTA / DIVISIÓN -------------------- */
 
-.modal-lg {
-  max-width: 860px;
-  max-height: 88vh;
+.modal-xl {
+  width: min(1180px, 96vw);
+  max-width: 1180px;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 .modal-head {
@@ -641,11 +643,93 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 
 .modal-head h3 {
   margin: 0;
   font-size: 1.05rem;
+}
+
+/* Barra superior de la división: alias + destino */
+.division-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1rem;
+  background: #f7f9fb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.9rem;
+  flex-shrink: 0;
+}
+
+.division-toolbar .form-group {
+  margin-bottom: 0;
+  min-width: 180px;
+}
+
+.division-toolbar input,
+.division-toolbar select {
+  min-width: 170px;
+}
+
+/* Selector de productos con casilla */
+.producto-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.producto-check:hover {
+  background: #f4f7fa;
+}
+
+.producto-check.seleccionado {
+  background: #eef6fd;
+  border-color: #cfe4f7;
+}
+
+.producto-check input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.producto-check-nombre {
+  flex: 1;
+  min-width: 0;
+}
+
+.producto-check strong {
+  white-space: nowrap;
+}
+
+/* Bloque de resto sin asignar */
+.resto-bloque {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  background: #fff8ec;
+  border: 1px dashed #e8c98a;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #8a6a20;
+}
+
+.resto-bloque strong {
+  white-space: nowrap;
 }
 
 .cuenta-total {
@@ -716,15 +800,23 @@ select:focus {
 
 .division-grid {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 1rem;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
 }
 
 .division-grid .panel {
   box-shadow: none;
   border: 1px solid var(--border);
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.division-grid .panel h3 {
+  margin-top: 0;
 }
 
 .participante-card {
@@ -789,7 +881,7 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
-  .modal-lg {
+  .modal-xl {
     max-height: 92vh;
   }
 }
