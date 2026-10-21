@@ -1,13 +1,19 @@
-"""Endpoints para gestión de inventario de productos."""
+"""Endpoints para gestión de inventario de productos (con búsqueda y paginación)."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Producto
-from app.schemas import ProductoCreate, ProductoOut, StockUpdate
+from app.schemas import (
+    ProductoCreate,
+    ProductoFiltroOut,
+    ProductoOut,
+    StockUpdate,
+)
 
 router = APIRouter(tags=["inventario"])
 
@@ -20,6 +26,7 @@ def crear_producto(datos: ProductoCreate, db: Session = Depends(get_db)):
         descripcion=datos.descripcion,
         precio=datos.precio,
         stock=datos.stock,
+        categoria_id=datos.categoria_id,
     )
     db.add(nuevo_producto)
     db.commit()
@@ -27,10 +34,44 @@ def crear_producto(datos: ProductoCreate, db: Session = Depends(get_db)):
     return nuevo_producto
 
 
-@router.get("/", response_model=List[ProductoOut])
-def listar_productos(db: Session = Depends(get_db)):
-    """Listar todos los productos con stock actual."""
-    return db.query(Producto).order_by(Producto.id).all()
+@router.get("/", response_model=ProductoFiltroOut)
+def listar_productos(
+    buscar: Optional[str] = None,
+    categoria_id: Optional[int] = None,
+    limite: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Lista los productos con búsqueda, filtro por categoría y paginación."""
+    limite = max(1, min(limite, 500))
+    offset = max(0, offset)
+
+    query = db.query(Producto)
+
+    if buscar:
+        texto = f"%{buscar.strip().lower()}%"
+        query = query.filter(
+            or_(
+                func.lower(Producto.nombre).like(texto),
+                func.lower(func.coalesce(Producto.descripcion, "")).like(texto),
+            )
+        )
+
+    if categoria_id:
+        query = query.filter(Producto.categoria_id == categoria_id)
+
+    total = query.count()
+    items = (
+        query.order_by(Producto.nombre).offset(offset).limit(limite).all()
+    )
+
+    return ProductoFiltroOut(
+        items=items,
+        total=total,
+        limite=limite,
+        offset=offset,
+        paginas=max(1, (total + limite - 1) // limite),
+    )
 
 
 @router.put("/{producto_id}/stock", response_model=ProductoOut)
@@ -43,6 +84,24 @@ def actualizar_stock(
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
     producto.stock = datos.nuevo_stock
+    db.commit()
+    db.refresh(producto)
+    return producto
+
+
+@router.put("/{producto_id}", response_model=ProductoOut)
+def actualizar_producto(
+    producto_id: int, datos: ProductoCreate, db: Session = Depends(get_db)
+):
+    """Editar un producto (nombre, precio, categoría...)."""
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    producto.nombre = datos.nombre
+    producto.descripcion = datos.descripcion
+    producto.precio = datos.precio
+    producto.categoria_id = datos.categoria_id
     db.commit()
     db.refresh(producto)
     return producto

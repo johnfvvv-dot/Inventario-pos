@@ -128,7 +128,20 @@ export const api = {
     }),
 
   // ---------- Inventario ----------
-  getProductos: () => request("/inventario/"),
+  /** Inventario con búsqueda, filtro por categoría y paginación */
+  getProductos: (filtros: {
+    buscar?: string;
+    categoria_id?: number | null;
+    limite?: number;
+    offset?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (filtros.buscar) params.append("buscar", filtros.buscar);
+    if (filtros.categoria_id) params.append("categoria_id", String(filtros.categoria_id));
+    params.append("limite", String(filtros.limite ?? 50));
+    params.append("offset", String(filtros.offset ?? 0));
+    return request(`/inventario/?${params.toString()}`);
+  },
 
   createProducto: (datos: {
     nombre: string;
@@ -150,6 +163,36 @@ export const api = {
   deleteProducto: (productoId: number) =>
     request(`/inventario/${productoId}`, { method: "DELETE" }),
 
+  updateProducto: (productoId: number, datos: {
+    nombre: string;
+    descripcion?: string;
+    precio: number;
+    stock: number;
+    categoria_id?: number | null;
+  }) =>
+    request(`/inventario/${productoId}`, {
+      method: "PUT",
+      body: JSON.stringify(datos),
+    }),
+
+  // ---------- Categorias ----------
+  getCategorias: () => request("/categorias/"),
+
+  createCategoria: (nombre: string) =>
+    request("/categorias/", {
+      method: "POST",
+      body: JSON.stringify({ nombre }),
+    }),
+
+  actualizarCategoria: (categoriaId: number, nombre: string) =>
+    request(`/categorias/${categoriaId}`, {
+      method: "PUT",
+      body: JSON.stringify({ nombre }),
+    }),
+
+  eliminarCategoria: (categoriaId: number) =>
+    request(`/categorias/${categoriaId}`, { method: "DELETE" }),
+
   // ---------- Pedidos ----------
   getPedidos: () => request("/pedidos/"),
 
@@ -163,6 +206,13 @@ export const api = {
     request("/pedidos/", {
       method: "POST",
       body: JSON.stringify(datos),
+    }),
+
+  /** Ajusta la cantidad de una línea de un pedido abierto (0 = eliminar) */
+  ajustarItemPedido: (pedidoId: number, itemId: number, cantidad: number) =>
+    request(`/pedidos/${pedidoId}/items/${itemId}`, {
+      method: "PUT",
+      body: JSON.stringify({ cantidad }),
     }),
 
   closePedido: (pedidoId: number, formaPago = "efectivo") =>
@@ -210,4 +260,27 @@ export const api = {
   getTurnos: (limite = 20) => request(`/caja/turnos?limite=${limite}`),
 
   getResumenCaja: (dias = 1) => request(`/caja/resumen?dias=${dias}`),
+
+  getVentasPorDia: (dias = 14) => request(`/caja/ventas-por-dia?dias=${dias}`),
+
+  /** Historial de ventas con filtros */
+  getHistorial: (filtros: {
+    desde?: string;
+    hasta?: string;
+    mesa?: number | null;
+    producto?: number | null;
+    forma_pago?: string | null;
+    limite?: number;
+    offset?: number;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (filtros.desde) params.append("desde", filtros.desde);
+    if (filtros.hasta) params.append("hasta", filtros.hasta);
+    if (filtros.mesa) params.append("mesa", String(filtros.mesa));
+    if (filtros.producto) params.append("producto", String(filtros.producto));
+    if (filtros.forma_pago) params.append("forma_pago", filtros.forma_pago);
+    params.append("limite", String(filtros.limite ?? 50));
+    params.append("offset", String(filtros.offset ?? 0));
+    return request(`/caja/historial?${params.toString()}`);
+  },
 };

@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Pedido, TurnoCaja, Usuario
+from app.models import Mesa, Pedido, TurnoCaja, Usuario
 from app.schemas import (
     AbrirTurnoOut,
     CerrarTurnoIn,
@@ -167,3 +167,149 @@ def resumen_caja(
         mesas_atendidas=len(mesas),
         por_forma_pago=por_forma,
     )
+
+
+@router.get("/ventas-por-dia")
+def ventas_por_dia(dias: int = 14, db: Session = Depends(get_db)):
+    """Serie diaria de ventas (para el gráfico de líneas) y top de productos."""
+    dias = max(1, min(dias, 90))
+    desde = (datetime.utcnow() - timedelta(days=dias - 1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    cerrados = (
+        db.query(Pedido)
+        .filter(Pedido.estado == "cerrado", Pedido.fecha_cierre >= desde)
+        .all()
+    )
+
+    serie: dict = {}
+    for i in range(dias):
+        dia = (desde + timedelta(days=i)).date()
+        serie[dia] = {"efectivo": 0.0, "tarjeta": 0.0, "transferencia": 0.0, "total": 0.0}
+
+    for pedido in cerrados:
+        if not pedido.fecha_cierre:
+            continue
+        clave = pedido.fecha_cierre.date()
+        if clave not in serie:
+            continue
+        forma = pedido.forma_pago if pedido.forma_pago in FORMAS_PAGO else "efectivo"
+        serie[clave][forma] = round(serie[clave][forma] + (pedido.total or 0), 2)
+        serie[clave]["total"] = round(serie[clave]["total"] + (pedido.total or 0), 2)
+
+    etiquetas = [str(d) for d in sorted(serie.keys())]
+    datos = [serie[d] for d in sorted(serie.keys())]
+
+    # Top de productos vendidos en el periodo
+    from app.models import PedidoItem
+
+    conteo: dict = {}
+    pedidos_ids = [p.id for p in cerrados]
+    if pedidos_ids:
+        items = db.query(PedidoItem).filter(PedidoItem.pedido_id.in_(pedidos_ids)).all()
+        for item in items:
+            clave = item.producto_id
+            if clave not in conteo:
+                conteo[clave] = {"producto_id": clave, "cantidad": 0, "total": 0.0}
+            conteo[clave]["cantidad"] += item.cantidad
+            conteo[clave]["total"] = round(conteo[clave]["total"] + (item.subtotal or 0), 2)
+
+        from app.models import Producto
+
+        for clave in conteo:
+            producto = db.query(Producto).filter(Producto.id == clave).first()
+            conteo[clave]["nombre"] = producto.nombre if producto else f"#{clave}"
+
+    top = sorted(conteo.values(), key=lambda x: x["cantidad"], reverse=True)[:10]
+
+    return {
+        "etiquetas": etiquetas,
+        "serie": datos,
+        "top_productos": top,
+        "dias": dias,
+    }
+
+
+@router.get("/historial")
+def historial_ventas(
+    desde: Optional[str] = None,
+    hasta: Optional[str] = None,
+    mesa: Optional[int] = None,
+    producto: Optional[int] = None,
+    forma_pago: Optional[str] = None,
+    limite: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Historial de ventas con filtros por fecha, mesa, producto y forma de pago."""
+    from datetime import datetime as _dt
+
+    from app.models import PedidoItem, Producto
+
+    limite = max(1, min(limite, 500))
+    offset = max(0, offset)
+
+    query = db.query(Pedido).filter(Pedido.estado == "cerrado")
+
+    if desde:
+        try:
+            query = query.filter(Pedido.fecha_cierre >= _dt.fromisoformat(desde))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            query = query.filter(Pedido.fecha_cierre <= _dt.fromisoformat(hasta))
+        except ValueError:
+            pass
+    if mesa:
+        query = query.filter(Pedido.mesa_id == mesa)
+    if forma_pago:
+        query = query.filter(Pedido.forma_pago == forma_pago)
+
+    if producto:
+        subq = (
+            db.query(PedidoItem.pedido_id)
+            .filter(PedidoItem.producto_id == producto)
+            .subquery()
+        )
+        query = query.filter(Pedido.id.in_(subq))
+
+    total = query.count()
+    pedidos = (
+        query.order_by(Pedido.fecha_cierre.desc()).offset(offset).limit(limite).all()
+    )
+
+    resultados = []
+    for pedido in pedidos:
+        items = (
+            db.query(PedidoItem).filter(PedidoItem.pedido_id == pedido.id).all()
+        )
+        productos_txt = []
+        for item in items:
+            prod = db.query(Producto).filter(Producto.id == item.producto_id).first()
+            productos_txt.append(
+                f"{item.cantidad}x {prod.nombre if prod else '?'}"
+            )
+        mesa_obj = db.query(Mesa).filter(Mesa.id == pedido.mesa_id).first() if pedido.mesa_id else None
+        usuario = db.query(Usuario).filter(Usuario.id == pedido.usuario_id).first()
+        resultados.append(
+            {
+                "id": pedido.id,
+                "fecha": pedido.fecha_cierre.isoformat() if pedido.fecha_cierre else None,
+                "estado": pedido.estado,
+                "forma_pago": pedido.forma_pago or "efectivo",
+                "total": pedido.total,
+                "mesa_numero": mesa_obj.numero if mesa_obj else None,
+                "usuario_nombre": usuario.nombre if usuario else "",
+                "productos": productos_txt,
+            }
+        )
+
+    return {
+        "items": resultados,
+        "total": total,
+        "limite": limite,
+        "offset": offset,
+        "paginas": max(1, (total + limite - 1) // limite),
+    }

@@ -28,6 +28,23 @@ class UsuarioOut(UsuarioBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ---------- Categorias ----------
+
+class CategoriaBase(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=80)
+
+
+class CategoriaCreate(CategoriaBase):
+    pass
+
+
+class CategoriaOut(CategoriaBase):
+    id: int
+    activa: bool = True
+    total_productos: int = 0
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ---------- Productos ----------
 
 class ProductoBase(BaseModel):
@@ -35,6 +52,7 @@ class ProductoBase(BaseModel):
     descripcion: Optional[str] = Field(default=None, max_length=255)
     precio: float = Field(..., gt=0)
     stock: int = Field(default=0, ge=0)
+    categoria_id: Optional[int] = Field(default=None, gt=0)
 
 
 class ProductoCreate(ProductoBase):
@@ -48,6 +66,27 @@ class ProductoOut(ProductoBase):
 
 class StockUpdate(BaseModel):
     nuevo_stock: int = Field(..., ge=0)
+
+
+class ProductoFiltroOut(BaseModel):
+    """Respuesta paginada del inventario."""
+    items: List[ProductoOut]
+    total: int
+    limite: int
+    offset: int
+    paginas: int
+
+
+class PedidoHistorialOut(BaseModel):
+    """Datos del historial de ventas."""
+    id: int
+    fecha: datetime
+    estado: str
+    forma_pago: Optional[str] = None
+    total: float
+    mesa_numero: Optional[int] = None
+    usuario_nombre: str = ""
+    productos: List[str] = []
 
 
 # ---------- Mesas ----------
@@ -152,6 +191,11 @@ class PedidoCreate(BaseModel):
     mesa_id: int = Field(..., gt=0)
     usuario_id: int = Field(..., gt=0)
     items: List[PedidoItemCreate]
+
+
+class PedidoItemAjuste(BaseModel):
+    """Ajuste de cantidad de una línea de un pedido abierto."""
+    cantidad: int = Field(..., ge=0)
 
 
 class PedidoOut(BaseModel):

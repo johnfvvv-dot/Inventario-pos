@@ -1046,6 +1046,89 @@ select:focus {
   color: var(--accent-dark);
 }
 
+/* -------------------- FILTROS / PAGINACIÓN -------------------- */
+
+.filtros-barra {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--card);
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.filtros-barra .form-group {
+  margin-bottom: 0;
+  min-width: 130px;
+}
+
+.input-busqueda {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.input-busqueda:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+}
+
+.select-categoria {
+  min-width: 150px;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+
+.linea-pedido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.linea-acciones {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.linea-acciones .btn-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 0.85rem;
+  margin-right: 0;
+}
+
+/* -------------------- GRÁFICOS -------------------- */
+
+.chart-wrap {
+  position: relative;
+  height: 280px;
+  width: 100%;
+}
+
+.chart-wrap-small {
+  height: 220px;
+}
+
+@media (max-width: 600px) {
+  .chart-wrap {
+    height: 230px;
+  }
+}
+
 /* -------------------- RESPONSIVE -------------------- */
 
 @media (max-width: 960px) {

@@ -20,6 +20,13 @@ interface Producto {
   nombre: string;
   precio: number;
   stock: number;
+  categoria_id?: number | null;
+}
+
+interface Categoria {
+  id: number;
+  nombre: string;
+  total_productos: number;
 }
 
 interface ItemCarrito {
@@ -34,7 +41,13 @@ interface Pedido {
   mesa?: { numero: number } | null;
   total: number;
   estado: string;
-  items: { producto_nombre: string; cantidad: number; subtotal: number }[];
+  items: {
+    id?: number;
+    producto_id?: number;
+    producto_nombre: string;
+    cantidad: number;
+    subtotal: number;
+  }[];
 }
 
 export default function PedidoMesaPage() {
@@ -52,6 +65,8 @@ export default function PedidoMesaPage() {
   const [mostrarDivision, setMostrarDivision] = useState(false);
   const [mostrarTransferir, setMostrarTransferir] = useState(false);
   const [pedidoACobrar, setPedidoACobrar] = useState<Pedido | null>(null);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<number | "">("");
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -63,9 +78,14 @@ export default function PedidoMesaPage() {
 
   const cargarCatalogos = async () => {
     try {
-      const [m, p]: any = await Promise.all([api.getMesas(), api.getProductos()]);
+      const [m, inv, cats]: any = await Promise.all([
+        api.getMesas(),
+        api.getProductos({ limite: 500, categoria_id: categoriaFiltro || undefined }),
+        api.getCategorias(),
+      ]);
       setMesas(m);
-      setProductos(p);
+      setProductos(inv.items);
+      setCategorias(cats);
     } catch (err: any) {
       setError(err.message);
     }
@@ -99,6 +119,10 @@ export default function PedidoMesaPage() {
     if (mesaId) cargarPedidos(Number(mesaId));
     else setPedidos([]);
   }, [mesaId]);
+
+  useEffect(() => {
+    cargarCatalogos();
+  }, [categoriaFiltro]);
 
   const agregar = (producto: Producto) => {
     setError(null);
@@ -168,6 +192,16 @@ export default function PedidoMesaPage() {
     }
   };
 
+  /** Ajusta la cantidad de una linea de un pedido abierto */
+  const ajustarLinea = async (pedidoId: number, itemId: number, cantidad: number) => {
+    try {
+      await api.ajustarItemPedido(pedidoId, itemId, cantidad);
+      await Promise.all([cargarPedidos(Number(mesaId)), cargarCatalogos()]);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const cerrarPedido = async (pedidoId: number, formaPago = "efectivo") => {
     try {
       await api.closePedido(pedidoId, formaPago);
@@ -200,6 +234,20 @@ export default function PedidoMesaPage() {
             {mesas.map((m) => (
               <option key={m.id} value={m.id}>
                 Mesa {m.numero} ({m.estado})
+              </option>
+            ))}
+          </select>
+          <select
+            className="select-categoria"
+            value={categoriaFiltro}
+            onChange={(e) =>
+              setCategoriaFiltro(e.target.value ? Number(e.target.value) : "")
+            }
+          >
+            <option value="">Todas las categorías</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
               </option>
             ))}
           </select>
@@ -319,9 +367,35 @@ export default function PedidoMesaPage() {
                   <tr key={p.id}>
                     <td>{p.id}</td>
                     <td>
-                      {p.items
-                        .map((i) => `${i.producto_nombre} x${i.cantidad}`)
-                        .join(", ")}
+                      {p.items.map((i) => (
+                        <div key={i.producto_id} className="linea-pedido">
+                          <span>
+                            {i.cantidad} × {i.producto_nombre}
+                          </span>
+                          {i.id !== undefined && (
+                            <span className="linea-acciones">
+                              <button
+                                className="btn-icon"
+                                title="Quitar una unidad"
+                                onClick={() =>
+                                  ajustarLinea(p.id, i.id as number, i.cantidad - 1)
+                                }
+                              >
+                                −
+                              </button>
+                              <button
+                                className="btn-icon"
+                                title="Añadir una unidad"
+                                onClick={() =>
+                                  ajustarLinea(p.id, i.id as number, i.cantidad + 1)
+                                }
+                              >
+                                +
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </td>
                     <td>${p.total.toFixed(2)}</td>
                     <td>

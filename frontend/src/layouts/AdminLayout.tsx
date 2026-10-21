@@ -33,6 +33,7 @@ export default function AdminLayout() {
           <Link to="/admin/pedidos">Pedidos</Link>
           <Link to="/admin/reportes">Reportes</Link>
           <Link to="/admin/corte-caja">Corte de caja</Link>
+          <Link to="/admin/historial">Historial</Link>
         </nav>
 
         <main className="admin-content">

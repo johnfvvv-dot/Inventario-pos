@@ -11,6 +11,7 @@ from app.models import Division, Mesa, Pedido, PedidoItem, Producto, Usuario
 from app.schemas import (
     FORMAS_PAGO,
     PedidoCreate,
+    PedidoItemAjuste,
     PedidoItemOut,
     PedidoOut,
 )
@@ -115,6 +116,78 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     db.commit()
 
     pedido_cargado = _cargar_pedido(db, nuevo_pedido.id)
+    return _pedido_to_out(pedido_cargado)
+
+
+@router.put("/{pedido_id}/items/{item_id}", response_model=PedidoOut)
+def ajustar_item_pedido(
+    pedido_id: int,
+    item_id: int,
+    datos: PedidoItemAjuste,
+    db: Session = Depends(get_db),
+):
+    """Ajusta la cantidad de una línea de un pedido abierto.
+
+    cantidad=0 elimina la línea; devuelve el stock al inventario.
+    """
+    pedido = (
+        db.query(Pedido)
+        .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))
+        .filter(Pedido.id == pedido_id)
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    if pedido.estado != "abierto":
+        raise HTTPException(
+            status_code=400, detail="Solo se pueden editar pedidos abiertos"
+        )
+
+    item = next((i for i in pedido.items if i.id == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Línea no encontrada")
+
+    producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    diferencia = datos.cantidad - item.cantidad
+    if diferencia > 0 and producto.stock < diferencia:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Stock insuficiente de {producto.nombre}: "
+                f"disponible {producto.stock}"
+            ),
+        )
+
+    producto.stock -= diferencia
+    item.cantidad = datos.cantidad
+    item.subtotal = round(producto.precio * datos.cantidad, 2)
+
+    # Si la cantidad llega a 0, se elimina la línea
+    if datos.cantidad == 0:
+        db.delete(item)
+
+    # Recalcular el total
+    db.flush()
+    total = round(
+        sum(
+            i.subtotal
+            for i in db.query(PedidoItem).filter(PedidoItem.pedido_id == pedido.id).all()
+        ),
+        2,
+    )
+    pedido.total = total
+
+    # Si el pedido se queda sin líneas, se cierra
+    if total == 0:
+        pedido.estado = "cerrado"
+        pedido.forma_pago = "efectivo"
+        pedido.fecha_cierre = datetime.utcnow()
+
+    db.commit()
+    pedido_cargado = _cargar_pedido(db, pedido.id)
     return _pedido_to_out(pedido_cargado)
 
 

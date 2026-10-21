@@ -11,6 +11,7 @@ import MesasPage from "./pages/MesasPage";
 import PedidoMesaPage from "./pages/PedidoMesaPage";
 import ReportesPage from "./pages/ReportesPage";
 import CorteCajaPage from "./pages/CorteCajaPage";
+import HistorialPage from "./pages/HistorialPage";
 
 function App() {
   return (
@@ -20,10 +21,12 @@ function App() {
 
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<InventarioPage />} />
+          <Route path="inventario" element={<InventarioPage />} />
           <Route path="mesas" element={<MesasPage />} />
           <Route path="pedidos" element={<PedidoMesaPage />} />
           <Route path="reportes" element={<ReportesPage />} />
           <Route path="corte-caja" element={<CorteCajaPage />} />
+          <Route path="historial" element={<HistorialPage />} />
         </Route>
 
         <Route path="/mesero" element={<MeseroLayout />}>

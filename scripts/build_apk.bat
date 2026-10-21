@@ -58,13 +58,12 @@ if exist "frontend\android\app\build\outputs\apk\debug\app-debug.apk" (
     echo ==========================================
     echo   APK LISTO
     echo ==========================================
-    for %%f in ("frontend\android\app\build\outputs\apk\debug\app-debug.apk") do echo   %%~zf
-    echo   frontend\android\app\build\outputs\apk\debug\app-debug.apk
+    echo   Ubicacion: frontend\android\app\build\outputs\apk\debug\app-debug.apk
     echo.
     echo   Para instalarlo en el celular conectado:
     echo     adb install -r frontend\android\app\build\outputs\apk\debug\app-debug.apk
     echo.
-    echo   O copia el .apk al celular y abrilo (activar "installar apps desconocidas").
+    echo   O copia el .apk al celular y abrilo (activa "instalar apps desconocidas").
     echo.
 ) else (
     echo [ERROR] No se genero el APK

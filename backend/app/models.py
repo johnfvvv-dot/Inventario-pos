@@ -19,6 +19,18 @@ class Usuario(Base):
     pedidos = relationship("Pedido", back_populates="usuario")
 
 
+class Categoria(Base):
+    """Categoría de productos (bebidas, comidas, postres...)."""
+
+    __tablename__ = "categorias"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(80), nullable=False, unique=True)
+    activa = Column(Integer, default=1)
+
+    productos = relationship("Producto", back_populates="categoria")
+
+
 class Producto(Base):
     __tablename__ = "productos"
 
@@ -27,6 +39,9 @@ class Producto(Base):
     descripcion = Column(String(255), nullable=True)
     precio = Column(Float, nullable=False)
     stock = Column(Integer, nullable=False, default=0)
+    categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
+
+    categoria = relationship("Categoria", back_populates="productos")
 
 
 class Mesa(Base):

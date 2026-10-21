@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from app.database import Base, SessionLocal, engine, _data_dir
 from app.models import Division, Mesa, Producto, TurnoCaja, Usuario
 from app.routes.caja import router as caja_router
+from app.routes.categorias import router as categorias_router
 from app.routes.cuentas import router as cuentas_router
 from app.routes.inventario import router as inventario_router
 from app.routes.mesas import router as mesas_router
@@ -44,6 +45,7 @@ app.include_router(inventario_router, prefix="/api/inventario", tags=["inventari
 app.include_router(pedidos_router, prefix="/api/pedidos", tags=["pedidos"])
 app.include_router(cuentas_router, prefix="/api/cuentas", tags=["cuentas"])
 app.include_router(caja_router, prefix="/api/caja", tags=["caja"])
+app.include_router(categorias_router, prefix="/api/categorias", tags=["categorias"])
 
 
 # ------------------------------------------------------------------
