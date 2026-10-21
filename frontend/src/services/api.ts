@@ -152,4 +152,8 @@ export const api = {
 
   pagarDivision: (divisionId: number) =>
     request(`/cuentas/division/${divisionId}/pagar`, { method: "POST" }),
+
+  /** Cierra solo la cuenta de un alias (el cliente paga su parte) */
+  pagarParticipante: (participanteId: number) =>
+    request(`/cuentas/participante/${participanteId}/pagar`, { method: "POST" }),
 };

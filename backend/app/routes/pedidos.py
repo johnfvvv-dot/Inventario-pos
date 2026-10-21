@@ -162,6 +162,7 @@ def cerrar_pedido(pedido_id: int, db: Session = Depends(get_db)):
 
     # La mesa se libera solo si no quedan pedidos abiertos NI divisiones pendientes
     if pedido.mesa_id:
+        db.flush()  # volcar cambios para que los COUNT sean exactos
         abiertos = (
             db.query(Pedido)
             .filter(

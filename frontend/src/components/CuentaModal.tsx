@@ -26,6 +26,7 @@ interface Participante {
 interface Division {
   id: number;
   total: number;
+  total_pendiente: number;
   estado: string;
   participantes: Participante[];
 }
@@ -100,6 +101,20 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
     }
   };
 
+  /** Cierra solo la cuenta de un alias: ese cliente paga su parte */
+  const cerrarAlias = async (participanteId: number, alias: string) => {
+    setProcesando(true);
+    try {
+      await api.pagarParticipante(participanteId);
+      setMensaje(`"${alias}" pagó su parte. La cuenta sigue abierta para los demás.`);
+      await cargar();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-xl" onClick={(e) => e.stopPropagation()}>
@@ -147,15 +162,38 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
 
               {cuenta.divisiones.map((division) => (
                 <div key={`d-${division.id}`} className="cuenta-bloque">
-                  <h4>División #{division.id}</h4>
+                  <div className="cuenta-bloque-head">
+                    <h4>División #{division.id}</h4>
+                    <span className="muted small">
+                      Total ${division.total.toFixed(2)} · Pendiente $
+                      {division.total_pendiente.toFixed(2)}
+                    </span>
+                  </div>
+
                   {division.participantes.map((p) => (
                     <div key={p.id} className="cuenta-participante">
                       <div className="cuenta-linea">
                         <span>
-                          {p.alias}{" "}
-                          {p.pagado && <span className="badge badge-success">pagado</span>}
+                          <strong>{p.alias}</strong>{" "}
+                          {p.pagado ? (
+                            <span className="badge badge-success">pagado</span>
+                          ) : (
+                            <span className="badge badge-warning">pendiente</span>
+                          )}
                         </span>
-                        <strong>${p.subtotal.toFixed(2)}</strong>
+                        <span>
+                          ${p.subtotal.toFixed(2)}
+                          {!p.pagado && (
+                            <button
+                              className="btn-secondary btn-small"
+                              title={`Cerrar la división de ${p.alias}`}
+                              onClick={() => cerrarAlias(p.id, p.alias)}
+                              disabled={procesando}
+                            >
+                              Cerrar división
+                            </button>
+                          )}
+                        </span>
                       </div>
                       {p.items.map((item, i) => (
                         <div key={i} className="cuenta-linea small">
@@ -167,6 +205,13 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
                       ))}
                     </div>
                   ))}
+
+                  {division.participantes.some((p) => !p.pagado) && (
+                    <div className="cuenta-linea cuenta-subtotal">
+                      <span>Pendiente de cobro</span>
+                      <strong>${division.total_pendiente.toFixed(2)}</strong>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -186,7 +231,8 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
               </button>
             </div>
             <p className="muted small">
-              Al cerrar la cuenta la mesa sigue ocupada: se puede abrir una nueva cuenta.
+              "Cerrar división" cobra la parte de un solo cliente y mantiene abierta la
+              cuenta de los demás. "Cerrar cuenta" cobra todo y la mesa sigue ocupada.
             </p>
           </>
         )}

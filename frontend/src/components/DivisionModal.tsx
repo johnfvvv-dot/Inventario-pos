@@ -96,6 +96,12 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
 
   const disponible = (linea: Linea) => linea.cantidad - unidadesAsignadas(linea.producto_id);
 
+  /** Máximo de unidades que puede recibir el destino actual */
+  const maximoAsignable = (linea: Linea) => {
+    const propio = destino === "nuevo" ? 0 : marcadas(linea.producto_id);
+    return Math.max(0, linea.cantidad - (unidadesAsignadas(linea.producto_id) - propio));
+  };
+
   /** Unidades marcadas actualmente para el destino seleccionado */
   const marcadas = (productoId: number): number => {
     if (destino === "nuevo") return seleccion[productoId] || 0;
@@ -105,21 +111,19 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
     return item ? item.cantidad : 0;
   };
 
-  const alternarProducto = (linea: Linea) => {
+  /** Ajusta la cantidad asignada de un producto (+1 / -1) para el destino actual */
+  const ajustarCantidad = (linea: Linea, delta: number) => {
     const actual = marcadas(linea.producto_id);
-    const maximo = disponible(linea) + actual;
-    let nuevo: number;
+    const maximo = maximoAsignable(linea);
+    let nuevo = actual + delta;
 
-    if (actual > 0) {
-      nuevo = actual - 1;
-    } else {
-      if (disponible(linea) <= 0) {
-        setError(`No quedan unidades de ${linea.producto_nombre}`);
-        return;
-      }
-      nuevo = 1;
+    if (nuevo < 0) nuevo = 0;
+    if (nuevo > maximo) {
+      nuevo = maximo;
+      setError(
+        `Solo hay ${maximo} unidad(es) de ${linea.producto_nombre} para asignar`
+      );
     }
-    if (nuevo > maximo) nuevo = maximo;
 
     if (destino === "nuevo") {
       setSeleccion((prev) => {
@@ -334,27 +338,64 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
                 <h3>Productos de la cuenta</h3>
                 {lineas.map((linea) => {
                   const cantidad = marcadas(linea.producto_id);
-                  const libre = disponible(linea);
+                  const maximo = maximoAsignable(linea);
+                  const libre = maximo - cantidad;
+                  const totalProducto = linea.producto_nombre;
                   return (
-                    <label
+                    <div
                       key={linea.producto_id}
-                      className={`producto-check ${cantidad > 0 ? "seleccionado" : ""}`}
+                      className={`producto-fila ${cantidad > 0 ? "seleccionado" : ""}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={cantidad > 0}
-                        onChange={() => alternarProducto(linea)}
-                        disabled={cantidad === 0 && libre <= 0}
-                      />
-                      <span className="producto-check-nombre">
-                        {linea.producto_nombre}
-                        <span className="muted small">
-                          {" "}
-                          · {cantidad > 0 ? `${cantidad} marcado(s)` : `libre ${libre}`}
+                      <div className="producto-fila-info">
+                        <span className="producto-check-nombre">
+                          {totalProducto}
+                          <span className="muted small">
+                            {" "}
+                            · {linea.precio_unitario.toFixed(2)} c/u · libre {libre} de{" "}
+                            {maximo}
+                          </span>
                         </span>
-                      </span>
-                      <strong>${linea.subtotal.toFixed(2)}</strong>
-                    </label>
+                        <strong>
+                          ${redondear(linea.precio_unitario * cantidad).toFixed(2)}
+                        </strong>
+                      </div>
+
+                      <div className="stepper">
+                        <button
+                          className="btn-icon"
+                          title="Quitar una unidad"
+                          onClick={() => ajustarCantidad(linea, -1)}
+                          disabled={cantidad === 0}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          className="stepper-input"
+                          value={cantidad}
+                          min={0}
+                          max={maximo}
+                          onChange={(e) => {
+                            const valor = Math.max(
+                              0,
+                              Math.min(maximo, Number(e.target.value) || 0)
+                            );
+                            const diferencia = valor - cantidad;
+                            if (diferencia !== 0) {
+                              ajustarCantidad(linea, diferencia);
+                            }
+                          }}
+                        />
+                        <button
+                          className="btn-icon"
+                          title="Añadir una unidad"
+                          onClick={() => ajustarCantidad(linea, +1)}
+                          disabled={libre <= 0}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
 

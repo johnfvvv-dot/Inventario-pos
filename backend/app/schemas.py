@@ -128,6 +128,7 @@ class ParticipanteResumen(BaseModel):
 class DivisionResumen(BaseModel):
     id: int
     total: float
+    total_pendiente: float
     estado: str
     fecha: datetime
     participantes: List[ParticipanteResumen]

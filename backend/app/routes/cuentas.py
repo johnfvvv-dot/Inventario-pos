@@ -122,8 +122,15 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
 
     divisiones = [d for d in _cargar_divisiones(db, mesa_id) if d.estado == "pendiente"]
 
+    # La cuenta solo suma lo que falta por cobrar:
+    # pedidos abiertos + partes de alias que aún no pagaron
     total = round(
-        sum(p.total for p in pedidos) + sum(d.total for d in divisiones), 2
+        sum(p.total for p in pedidos)
+        + sum(
+            round(sum(p.subtotal for p in d.participantes if not p.pagado), 2)
+            for d in divisiones
+        ),
+        2,
     )
 
     return CuentaMesaOut(
@@ -136,6 +143,9 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
             DivisionResumen(
                 id=d.id,
                 total=d.total,
+                total_pendiente=round(
+                    sum(p.subtotal for p in d.participantes if not p.pagado), 2
+                ),
                 estado=d.estado,
                 fecha=d.fecha,
                 participantes=[
@@ -378,9 +388,69 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     return _division_out(division)
 
 
+@router.post("/participante/{participante_id}/pagar", response_model=ParticipanteOut)
+def pagar_participante(participante_id: int, db: Session = Depends(get_db)):
+    """Cierra la división de UN alias (el cliente paga su parte).
+
+    La cuenta general de la mesa sigue abierta para los demás clientes.
+    La mesa se libera solo cuando todos pagaron y no quedan pedidos abiertos.
+    """
+    participante = (
+        db.query(Participante)
+        .options(
+            joinedload(Participante.items).joinedload(ParticipanteItem.producto),
+            joinedload(Participante.division),
+        )
+        .filter(Participante.id == participante_id)
+        .first()
+    )
+    if not participante:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+    if not participante.pagado:
+        participante.pagado = 1
+
+    division = participante.division
+    todos = (
+        db.query(Participante).filter(Participante.division_id == division.id).all()
+    )
+    if todos and all(p.pagado for p in todos):
+        division.estado = "pagada"
+
+    # La mesa se libera cuando ya no queda nada por cobrar
+    mesa = db.query(Mesa).filter(Mesa.id == division.mesa_id).first()
+    if mesa:
+        # Importante: volcar los cambios en memoria para que los COUNT
+        # reflejen el estado real (la sesion usa autoflush=False)
+        db.flush()
+
+        pedidos_abiertos = (
+            db.query(Pedido)
+            .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+            .count()
+        )
+        divisiones_pendientes = (
+            db.query(Division)
+            .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
+            .count()
+        )
+        if pedidos_abiertos == 0 and divisiones_pendientes == 0:
+            mesa.estado = "disponible"
+
+    db.commit()
+
+    participante = (
+        db.query(Participante)
+        .options(joinedload(Participante.items).joinedload(ParticipanteItem.producto))
+        .filter(Participante.id == participante_id)
+        .first()
+    )
+    return _participante_out(participante)
+
+
 @router.post("/division/{division_id}/pagar", response_model=DivisionOut)
-def pagar_participante(division_id: int, db: Session = Depends(get_db)):
-    """Marca como pagado un cliente (participante) de una división."""
+def pagar_division(division_id: int, db: Session = Depends(get_db)):
+    """Marca como pagados TODOS los clientes de una división."""
     division = (
         db.query(Division)
         .options(
