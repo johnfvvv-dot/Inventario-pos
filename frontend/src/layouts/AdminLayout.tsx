@@ -1,37 +1,32 @@
-/** Layout para el rol de Administrador */
-import { useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux"; // Opcional, usando contexto simple
-import { api } from "../services/api";
-import { Link } from "react-router-dom";
+/** Layout del panel de administración. */
 
-// Simulación de contexto de usuario (en producción usaríamos Redux o Context API simple)
-const UserContext = {
-  user: JSON.parse(localStorage.getItem("user") || "{}"),
-  isAdmin: true, // Simplificado - en producción verificar rol
-};
+import { Link, Outlet, useNavigate } from "react-router-dom";
 
 export default function AdminLayout() {
-  const user = UserContext.user;
+  const navigate = useNavigate();
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
 
-  useEffect(() => {
-    // Verificar autenticación al cargar
-    if (!user || !user.id) {
-      // Si no hay usuario, ir al login
-      window.location.href = "/";
-    }
-  }, [user]);
+  const cerrarSesion = () => {
+    localStorage.removeItem("user");
+    navigate("/");
+  };
 
   return (
     <div className="admin-layout">
       <header className="admin-header">
-        <h1>Panel de Administración</h1>
+        <div>
+          <h1>Inventario POS</h1>
+          <p className="muted">Panel de Administración</p>
+        </div>
         <div className="user-info">
-          <span>Bienvenido, {user.nombre || "Admin"}</span>
-          <Link to="/">Cerrar Sesión</Link>
+          <span>{usuario.nombre || "Administrador"}</span>
+          <button className="btn-logout" onClick={cerrarSesion}>
+            Cerrar sesión
+          </button>
         </div>
       </header>
 
-      <main className="admin-main">
+      <div className="admin-body">
         <nav className="admin-nav">
           <Link to="/admin">Inventario</Link>
           <Link to="/admin/mesas">Mesas</Link>
@@ -39,10 +34,10 @@ export default function AdminLayout() {
           <Link to="/admin/reportes">Reportes</Link>
         </nav>
 
-        <div className="admin-content">
-          {this.props.children}
-        </div>
-      </main>
+        <main className="admin-content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

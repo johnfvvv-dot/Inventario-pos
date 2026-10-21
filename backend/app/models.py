@@ -1,54 +1,71 @@
 """Modelos ORM SQLAlchemy para la base de datos."""
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Table
-from sqlalchemy.orm import relationship
 from datetime import datetime
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 
-# Tabla intermedia: producto <-> pedido
-producto_pedido = Table(
-    "producto_pedido",
-    Base.metadata,
-    Column("pedido_id", Integer, ForeignKey("pedidos.id"), primary_key=True),
-    Column("producto_id", Integer, ForeignKey("productos.id"), primary_key=True),
-    Column("cantidad", Integer, default=1)
-)
+from app.database import Base
+
 
 class Usuario(Base):
     __tablename__ = "usuarios"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
-    rol = Column(String(20), nullable=False)  # "admin" o "mesero"
-    email = Column(String(100), unique=True, nullable=False)
+    rol = Column(String(20), nullable=False, default="mesero")  # "admin" o "mesero"
+    email = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(128), nullable=False)
+
+    pedidos = relationship("Pedido", back_populates="usuario")
+
 
 class Producto(Base):
     __tablename__ = "productos"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(150), nullable=False)
     descripcion = Column(String(255), nullable=True)
     precio = Column(Float, nullable=False)
     stock = Column(Integer, nullable=False, default=0)
 
+
 class Mesa(Base):
     __tablename__ = "mesas"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(Integer, unique=True, nullable=False)
     capacidad = Column(Integer, nullable=False, default=4)
-    estado = Column(String(20), default="disponible")  # "disponible", "ocupada", "cerrada"
+    estado = Column(String(20), default="disponible")  # disponible | ocupada | cerrada
+
+    pedidos = relationship("Pedido", back_populates="mesa")
+
 
 class Pedido(Base):
     __tablename__ = "pedidos"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     fecha = Column(DateTime, default=datetime.utcnow)
     total = Column(Float, default=0.0)
-    estado = Column(String(20), default="abierto")  # "abierto", "cerrado", "pagado"
-    
-    # Relaciones
-    mesa = relationship("Mesa", backref="pedidos")
-    usuario = relationship("Usuario", backref="pedidos")
-    items = relationship("Producto", secondary=producto_pedido, backref="pedidos")
+    estado = Column(String(20), default="abierto")  # abierto | cerrado
+
+    mesa = relationship("Mesa", back_populates="pedidos")
+    usuario = relationship("Usuario", back_populates="pedidos")
+    items = relationship(
+        "PedidoItem", back_populates="pedido", cascade="all, delete-orphan"
+    )
+
+
+class PedidoItem(Base):
+    __tablename__ = "pedido_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos.id"), nullable=False)
+    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
+    cantidad = Column(Integer, nullable=False, default=1)
+    precio_unitario = Column(Float, nullable=False)
+    subtotal = Column(Float, nullable=False)
+
+    pedido = relationship("Pedido", back_populates="items")
+    producto = relationship("Producto")

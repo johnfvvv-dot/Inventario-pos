@@ -1,193 +1,183 @@
-/** Pantalla de Reportes - Administrador */
-import { useEffect, useState } from "react";
+/** Pantalla de Reportes - Administrador. */
+
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
-import { Link } from "react-router-dom";
+
+interface Producto {
+  id: number;
+  nombre: string;
+  precio: number;
+  stock: number;
+}
+
+interface Pedido {
+  id: number;
+  total: number;
+  estado: string;
+  mesa?: { numero: number } | null;
+  items: {
+    producto_id: number;
+    producto_nombre: string;
+    cantidad: number;
+    subtotal: number;
+  }[];
+}
 
 export default function ReportesPage() {
-  const [ventas, setVentas] = useState({
-    totalVentas: 0,
-    totalProductos: 0,
-    mesasAtendidas: 0,
-    promedioPorMesa: 0,
-  });
-  const [topProductos, setTopProductos] = useState<any[]>([]);
-  const [inventoryState, setInventoryState] = useState<any[]>([]);
-  const [periodo, setPeriodo] = useState({ inicio: "", fin: "" });
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<"hoy" | "todos">("todos");
 
-  // Cargar reportes al inicializar
-  useEffect(() => {
-    fetchReportes();
-  }, []);
-
-  const fetchReportes = async () => {
+  const cargar = async () => {
     try {
-      // Obtener datos combinados
-      const [productos, pedidos] = await Promise.all([
+      const [p, ped]: any = await Promise.all([
         api.getProductos(),
         api.getPedidos(),
       ]);
-
-      // Calcular estadísticas
-      let totalVentas = 0;
-      let totalProductos = 0;
-      const mapaVentas: any = {};
-      let mesasAtendidas = new Set();
-
-      // Procesar pedidos cerrados
-      const pedidosCerrados = pedidos.filter((p: any) => p.estado === "cerrado");
-      
-      pedidosCerrados.forEach((pedido: any) => {
-        totalVentas += pedido.total || 0;
-        mesasAtendidas.add(pedido.mesa?.numero || 0);
-        
-        // Contar productos vendidos
-        pedido.items?.forEach(((item: any) => {
-          const prodId = item.producto_id || item.id;
-          mapaVentas[prodId] = (mapaVentas[prodId] || 0) + (item.cantidad || 1);
-          totalProductos += item.cantidad || 1;
-        }));
-      });
-
-      // Calcular promedio
-      const promedio = mesasAtendidas.size > 0 ? totalVentas / mesasAtendidas.size : 0;
-
-      // Top productos
-      const top = Object.entries(mapaVentas)
-        .sort((a: any, b: any) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([nombre, cantidad]) => ({
-          nombre,
-          cantidad,
-        }));
-
-      setVentas({
-        totalVentas: totalVentas.toFixed(2),
-        totalProductos,
-        mesasAtendidas: mesasAtendidas.size,
-        promedioPorMesa: promedio.toFixed(2),
-      });
-      setTopProductos(top);
-
-      // Estado actual de inventario
-      setInventoryState(productos.map((p: any) => ({
-        nombre: p.nombre,
-        stockActual: p.stock,
-        ventasHoy: mapaVentas[p.id] || 0,
-      })));
-
+      setProductos(p);
+      setPedidos(ped);
+      setError(null);
     } catch (err: any) {
-      setError("Error al generar reportes: " + err.message);
+      setError(err.message);
     }
   };
 
-  return (
-    <div className="reportes-page">
-      <h2>REPORTES - VENTAS E INVENTARIO</h2>
+  useEffect(() => {
+    cargar();
+  }, []);
 
-      {/* Selector de período simplificado */}
-      <div className="period-select">
-        <label>Periodo:</label>
-        <select
-          value={periodo.inicio}
-          onChange={(e) => setPeriodo({ ...periodo, inicio: e.target.value })}
-        >
-          <option value="hoy">Hoy</option>
-          <option value="this-week">Esta Semana</option>
-          <option value="this-month">Este Mes</option>
-          <option value="custom">Personalizado</option>
-        </select>
-        <select
-          value={periodo.fin}
-          onChange={(e) => setPeriodo({ ...periodo, fin: e.target.value })}
-        >
-          <option value="hoy">Hoy</option>
-          <option value="this-week">Esta Semana</option>
-          <option value="this-month">Este Mes</option>
-        </select>
-        <button onClick={fetchReportes} className="btn-small">
-          Actualizar
-        </button>
+  const pedidosFiltrados = useMemo(() => {
+    const cerrados = pedidos.filter((p) => p.estado === "cerrado");
+    if (filtro === "todos") return cerrados;
+    const hoy = new Date().toDateString();
+    return cerrados.filter(
+      (p: any) => new Date(p.fecha).toDateString() === hoy
+    );
+  }, [pedidos, filtro]);
+
+  const resumen = useMemo(() => {
+    const totalVentas = pedidosFiltrados.reduce((s, p) => s + (p.total || 0), 0);
+    const mesas = new Set(
+      pedidosFiltrados.map((p) => p.mesa?.numero).filter(Boolean)
+    );
+    const unidades = pedidosFiltrados.reduce(
+      (s, p) => s + p.items.reduce((x, i) => x + i.cantidad, 0),
+      0
+    );
+
+    const ventasPorProducto: Record<string, number> = {};
+    pedidosFiltrados.forEach((p) =>
+      p.items.forEach((i) => {
+        ventasPorProducto[i.producto_nombre] =
+          (ventasPorProducto[i.producto_nombre] || 0) + i.cantidad;
+      })
+    );
+
+    const top = Object.entries(ventasPorProducto)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return {
+      totalVentas,
+      mesasAtendidas: mesas.size,
+      unidades,
+      promedio: mesas.size ? totalVentas / mesas.size : 0,
+      top,
+    };
+  }, [pedidosFiltrados]);
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <h2>Reportes de ventas e inventario</h2>
+        <div className="filters">
+          <select
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value as "hoy" | "todos")}
+          >
+            <option value="todos">Todo el historial</option>
+            <option value="hoy">Solo hoy</option>
+          </select>
+          <button className="btn-secondary" onClick={cargar}>
+            Actualizar
+          </button>
+        </div>
       </div>
 
-      {/* Errores */}
       {error && <p className="error-msg">{error}</p>}
 
-      {/* KPIs Principales */}
       <div className="kpis">
         <div className="kpi-card">
-          <h3>Total Ventas</h3>
-          <h2>${ventas.totalVentas}</h2>
+          <h3>Total ventas</h3>
+          <h2>${resumen.totalVentas.toFixed(2)}</h2>
         </div>
         <div className="kpi-card">
-          <h3>Productos Vendidos</h3>
-          <h2>{ventas.totalProductos} und.</h2>
+          <h3>Mesas atendidas</h3>
+          <h2>{resumen.mesasAtendidas}</h2>
         </div>
         <div className="kpi-card">
-          <h3>Mesas Atendidas</h3>
-          <h2>{ventas.mesasAtendidas}</h2>
+          <h3>Unidades vendidas</h3>
+          <h2>{resumen.unidades}</h2>
         </div>
         <div className="kpi-card">
-          <h3>Promedio/Mesa</h3>
-          <h2>${ventas.promedioPorMesa}</h2>
+          <h3>Promedio por mesa</h3>
+          <h2>${resumen.promedio.toFixed(2)}</h2>
         </div>
       </div>
 
-      {/* Top Productos Más Vendidos */}
-      <div className="top-productos-section">
-        <h3>Top Productos Más Vendidos</h3>
-        {topProductos.length === 0 ? (
-          <p>No hay datos de ventas</p>
-        ) : (
-          <ul>
-            {topProductos.map((producto: any, index: number) => (
-              <li key={index}>
-                {producto.nombre}: {producto.cantidad} unidad{"es".repeat(producto.cantidad > 1)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Estado de Inventario */}
-      <div className="inventario-estado">
-        <h3>Estado Actual de Inventario</h3>
-        {inventoryState.length === 0 ? (
-          <p>Cargando...</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Stock Actual</th>
-                <th>Ventas Hoy</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventoryState.map((item: any) => (
-                <tr key={item.nombre}>
-                  <td>{item.nombre}</td>
-                  <td>{item.stockActual}</td>
-                  <td>{item.ventasHoy}</td>
-                  <td>
-                    <span
-                      className={
-                        item.stockActual <= 0
-                          ? "stock-agotado"
-                        : item.stockActual < 10
-                          ? "stock-bajo"
-                          : "stock-bien"
-                      }
-                    >
-                      {item.stockActual <= 0 ? "Agotado" : item.stockActual < 10 ? "Bajo" : "Bien"}
-                    </span>
-                  </td>
-                </tr>
+      <div className="report-grid">
+        <section className="panel">
+          <h3>Top productos vendidos</h3>
+          {resumen.top.length === 0 ? (
+            <p className="empty-state">Aún no hay ventas registradas.</p>
+          ) : (
+            <ul className="ranking">
+              {resumen.top.map(([nombre, cantidad]) => (
+                <li key={nombre}>
+                  <span>{nombre}</span>
+                  <strong>{cantidad} und.</strong>
+                </li>
               ))}
-            </tbody>
-          </table>
-        )}
+            </ul>
+          )}
+        </section>
+
+        <section className="panel">
+          <h3>Estado del inventario</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Stock</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productos.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.nombre}</td>
+                    <td>{p.stock}</td>
+                    <td>
+                      <span
+                        className={
+                          p.stock === 0
+                            ? "badge badge-danger"
+                            : p.stock < 10
+                            ? "badge badge-warning"
+                            : "badge badge-success"
+                        }
+                      >
+                        {p.stock === 0 ? "Agotado" : p.stock < 10 ? "Bajo" : "OK"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   );

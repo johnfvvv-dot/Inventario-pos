@@ -47,43 +47,11 @@ cd ../frontend
 npm install
 echo "✓ Dependencias Node.js instaladas"
 
-# 6. Configurar base de datos
-echo "Configurando base de datos..."
+# 6. Crear base de datos y datos iniciales
+echo "Creando base de datos y datos iniciales..."
 cd ../backend
 source venv/bin/activate
-alembic upgrade head
-
-# 7. Crear usuario admin por defecto
-echo "Creando usuario administrador por defecto..."
-python3 - << PYTHON_SCRIPT
-from app.main import app
-from app.database import get_db, engine, Base
-from app.models import Usuario
-from sqlalchemy.orm import Session
-
-# Crear tablas
-Base.metadata.create_all(bind=engine)
-
-# Obtener sesión
-db_gen = get_db()
-db = next(db_gen)
-
-# Verificar si ya existe un usuario admin
-admin_existente = db.query(Usuario).filter(Usuario.rol == "admin").first()
-if not admin_existente:
-    admin = Usuario(
-        nombre="Administrador",
-        rol="admin",
-        email="admin@localpos.com"
-    )
-    db.add(admin)
-    db.commit()
-    print("✓ Usuario admin creado: admin@localpos.com")
-else:
-    print("✓ Usuario admin ya existe")
-
-db.close()
-PYTHON_SCRIPT
+python3 -c "from app.main import crear_datos_iniciales; crear_datos_iniciales(); print('✓ Base de datos lista')"
 
 echo ""
 echo "=== Instalación completada ==="

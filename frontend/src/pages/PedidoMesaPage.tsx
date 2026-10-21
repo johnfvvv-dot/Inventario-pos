@@ -1,228 +1,310 @@
-/** Pantalla de Pedido por Mesa - Mesero/Administrador */
-import { useEffect, useState } from "react";
+/** Pantalla de Pedido por Mesa - POS para mesero/administrador. */
+
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
-import { Link, useParams } from "react-router-dom";
+
+interface Mesa {
+  id: number;
+  numero: number;
+  capacidad: number;
+  estado: string;
+}
+
+interface Producto {
+  id: number;
+  nombre: string;
+  precio: number;
+  stock: number;
+}
+
+interface ItemCarrito {
+  producto_id: number;
+  nombre: string;
+  precio: number;
+  cantidad: number;
+}
+
+interface Pedido {
+  id: number;
+  mesa?: { numero: number } | null;
+  total: number;
+  estado: string;
+  items: { producto_nombre: string; cantidad: number; subtotal: number }[];
+}
 
 export default function PedidoMesaPage() {
-  const { mesaId } = useParams<{ mesaId: string }>();
-  const [productos, setProductos] = useState<any[]>([]);
-  const [pedidoActual, setPedidoActual] = useState({
-    mesaId: Number(mesaId) || 1,
-    items: [] as any[],
-    total: 0,
-  });
+  const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [mesaId, setMesaId] = useState<number | "">("");
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [buscandoProducto, setBuscandoProducto] = useState("");
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
-  // Cargar mesas y estado inicial
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const usuarioId: number = usuario?.id || 1;
+
+  const total = useMemo(
+    () => carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
+    [carrito]
+  );
+
+  const cargarCatalogos = async () => {
+    try {
+      const [m, p]: any = await Promise.all([api.getMesas(), api.getProductos()]);
+      setMesas(m);
+      setProductos(p);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const cargarPedidos = async (id: number) => {
+    try {
+      const data: any = await api.getPedidosMesa(id);
+      setPedidos(data.filter((p: Pedido) => p.estado === "abierto"));
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   useEffect(() => {
-    // Cargar productos disponibles
-    fetchProductosDisponibles();
+    cargarCatalogos();
+  }, []);
+
+  useEffect(() => {
+    if (mesaId) cargarPedidos(Number(mesaId));
+    else setPedidos([]);
   }, [mesaId]);
 
-  const fetchProductosDisponibles = async () => {
-    try {
-      const data = await api.getProductos();
-      setProductos(data);
-    } catch (err: any) {
-      setError("Error al cargar productos: " + err.message);
-    }
-  };
+  const agregar = (producto: Producto) => {
+    setError(null);
+    setMensaje(null);
 
-  // Calcular total del pedido
-  const calcularTotal = (items: any[]) =>
-    items.reduce((sum: number, item: any) => sum + item.subtotal, 0);
-
-  // Agregar producto al pedido
-  const handleAgregarProducto = async (productoId: number) => {
-    const producto = productos.find((p: any) => p.id === productoId);
-    if (!producto) return;
-
-    // Verificar stock
-    if (producto.stock <= 0) {
-      setError("Producto sin stock disponible");
+    const enCarrito =
+      carrito.find((i) => i.producto_id === producto.id)?.cantidad || 0;
+    if (enCarrito + 1 > producto.stock) {
+      setError(`No hay más stock disponible de ${producto.nombre}`);
       return;
     }
 
-    // Crear item para el pedido
-    const nuevoItem = {
-      producto_id: producto.id,
-      producto_nombre: producto.nombre,
-      cantidad: 1,
-      precio_unitario: producto.precio,
-      subtotal: producto.precio,
-    };
+    setCarrito((actual) => {
+      const existe = actual.find((i) => i.producto_id === producto.id);
+      if (existe) {
+        return actual.map((i) =>
+          i.producto_id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i
+        );
+      }
+      return [
+        ...actual,
+        {
+          producto_id: producto.id,
+          nombre: producto.nombre,
+          precio: producto.precio,
+          cantidad: 1,
+        },
+      ];
+    });
+  };
 
-    // Actualizar pedido actual
-    const itemExistente = pedidoActual.items.find(
-      (item: any) => item.producto_id === productoId
+  const quitar = (productoId: number) => {
+    setCarrito((actual) =>
+      actual
+        .map((i) =>
+          i.producto_id === productoId ? { ...i, cantidad: i.cantidad - 1 } : i
+        )
+        .filter((i) => i.cantidad > 0)
     );
+  };
 
-    if (itemExistente) {
-      // Incrementar cantidad si ya existe
-      const actualizado = pedidoActual.items.map((item: any) => {
-        if (item.producto_id === productoId) {
-          item.cantidad += 1;
-          item.subtotal = item.precio_unitario * item.cantidad;
-        }
-        return item;
-      });
-      setPedidoActual({ ...pedidoActual, items: actualizado });
-    } else {
-      setPedidoActual({
-        ...pedidoActual,
-        items: [...pedidoActual.items, nuevoItem],
-      });
+  const confirmarPedido = async () => {
+    if (!mesaId) {
+      setError("Selecciona una mesa");
+      return;
     }
-  };
-
-  // Quitar item del pedido
-  const handleQuitarItem = (productoId: number) => {
-    const actualizado = pedidoActual.items.filter(
-      (item: any) => item.producto_id !== productoId
-    );
-    setPedidoActual({ ...pedidoActual, items: actualizado });
-  };
-
-  // Cerrar pedido
-  const handleCerrarPedido = async () => {
-    if (pedidoActual.items.length === 0) {
-      setError("El pedido está vacío");
+    if (carrito.length === 0) {
+      setError("Agrega al menos un producto");
       return;
     }
 
     try {
-      const pedidoData = {
-        mesa_id: pedidoActual.mesaId,
-        usuario_id: 1, // TODO: obtener del usuario logueado
-        items: pedidoActual.items.map((item: any) => ({
-          producto_id: item.producto_id,
-          cantidad: item.cantidad,
+      await api.createPedido({
+        mesa_id: Number(mesaId),
+        usuario_id: usuarioId,
+        items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
         })),
-      };
-
-      const response = await api.closePedido(pedidoActual.mesaId);
-      setError(null);
-      // Resetear pedido
-      setPedidoActual({
-        mesaId: pedidoActual.mesaId,
-        items: [],
-        total: 0,
       });
-      // Recargar mesas para actualizar estado
-      fetchProductosDisponibles();
+      setCarrito([]);
+      setMensaje("Pedido registrado correctamente");
+      setError(null);
+      await Promise.all([cargarCatalogos(), cargarPedidos(Number(mesaId))]);
     } catch (err: any) {
-      setError("Error al cerrar pedido: " + err.message);
+      setError(err.message);
     }
   };
 
-  if (!mesaId) {
-    return <div>ID de mesa no especificado</div>;
-  }
+  const cerrarPedido = async (pedidoId: number) => {
+    try {
+      await api.closePedido(pedidoId);
+      setMensaje(`Pedido #${pedidoId} cerrado y cobrado`);
+      await Promise.all([
+        cargarCatalogos(),
+        mesaId ? cargarPedidos(Number(mesaId)) : Promise.resolve(),
+      ]);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   return (
-    <div className="pedido-mesa-page">
-      <h2>MESA NÚMERO {mesaId}</h2>
-
-      {/* Información de la mesa */}
-      <div className="mesa-info">
-        <p>Estado: <span id="mesa-estado">Cargando...</span></p>
-        <p>Total Pedido: <strong>${pedidoActual.total.toFixed(2)}</strong></p>
+    <div className="page">
+      <div className="page-head">
+        <h2>Pedido por mesa</h2>
+        <select
+          className="select-mesa"
+          value={mesaId}
+          onChange={(e) => {
+            setMesaId(e.target.value ? Number(e.target.value) : "");
+            setCarrito([]);
+            setMensaje(null);
+          }}
+        >
+          <option value="">— Seleccionar mesa —</option>
+          {mesas.map((m) => (
+            <option key={m.id} value={m.id}>
+              Mesa {m.numero} ({m.estado})
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* Lista de productos disponibles */}
-      <div className="productos-disponibles">
-        <h3>Productos Disponibles</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Producto</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th>Añadir</th>
-            </tr>
-          </thead>
-          <tbody>
-            {productos.map((producto: any) => (
-              <tr key={producto.id}>
-                <td>{producto.nombre}</td>
-                <td>${producto.precio.toFixed(2)}</td>
-                <td>{producto.stock > 0 ? producto.stock : "🚫"}</td>
-                <td>
-                  <button
-                    onClick={() => handleAgregarProducto(producto.id)}
-                    disabled={producto.stock <= 0}
-                    className="btn-add"
-                  >
-                    +
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {error && <p className="error-msg">{error}</p>}
+      {mensaje && <p className="success-msg">{mensaje}</p>}
 
-      {/* Resumen del pedido actual */}
-      <div className="pedido-resumen">
-        <h3>Resumen del Pedido</h3>
-        {pedidoActual.items.length === 0 ? (
-          <p>El pedido está vacío</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Cantidad</th>
-                <th>Precio Unit.</th>
-                <th>Subtotal</th>
-                <th>Quitar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pedidoActual.items.map((item: any) => (
-                <tr key={item.producto_id}>
-                  <td>{item.producto_nombre}</td>
-                  <td>{item.cantidad}</td>
-                  <td>${item.precio_unitario.toFixed(2)}</td>
-                  <td>${item.subtotal.toFixed(2)}</td>
-                  <td>
-                    <button
-                      onClick={() => handleQuitarItem(item.producto_id)}
-                      className="btn-delete-small"
-                    >
-                      ×
-                    </button>
-                  </td>
+      <div className="pos-grid">
+        <section className="panel">
+          <h3>Productos disponibles</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Precio</th>
+                  <th>Stock</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={4} style={{ textAlign: "right" }}>
-                  <strong>Total: ${pedidoActual.total.toFixed(2)}</strong>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {productos.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.nombre}</td>
+                    <td>${p.precio.toFixed(2)}</td>
+                    <td>{p.stock}</td>
+                    <td>
+                      <button
+                        className="btn-primary btn-small"
+                        disabled={p.stock === 0}
+                        onClick={() => agregar(p)}
+                      >
+                        +
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Pedido actual</h3>
+          {carrito.length === 0 ? (
+            <p className="empty-state">Sin productos seleccionados.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Cant.</th>
+                    <th>Subtotal</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carrito.map((i) => (
+                    <tr key={i.producto_id}>
+                      <td>{i.nombre}</td>
+                      <td>{i.cantidad}</td>
+                      <td>${(i.precio * i.cantidad).toFixed(2)}</td>
+                      <td>
+                        <button
+                          className="btn-icon danger"
+                          onClick={() => quitar(i.producto_id)}
+                        >
+                          ×
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="total-row">
+            <span>Total</span>
+            <strong>${total.toFixed(2)}</strong>
+          </div>
+
+          <button className="btn-primary btn-block" onClick={confirmarPedido}>
+            Confirmar pedido
+          </button>
+        </section>
       </div>
 
-      {/* Acciones */}
-      <div className="pedido-acciones">
-        {pedidoActual.items.length > 0 && (
-          <button
-            onClick={handleCerrarPedido}
-            disabled={pedidoActual.estado === "cerrado"}
-            className="btn-cerrar-pedido"
-          >
-            Cerrar Pedido
-          </button>
+      <section className="panel">
+        <h3>Pedidos abiertos de la mesa</h3>
+        {pedidos.length === 0 ? (
+          <p className="empty-state">No hay pedidos abiertos.</p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Productos</th>
+                  <th>Total</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pedidos.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>
+                      {p.items
+                        .map((i) => `${i.producto_nombre} x${i.cantidad}`)
+                        .join(", ")}
+                    </td>
+                    <td>${p.total.toFixed(2)}</td>
+                    <td>
+                      <button
+                        className="btn-primary btn-small"
+                        onClick={() => cerrarPedido(p.id)}
+                      >
+                        Cobrar / cerrar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-        <Link to={`/mesas`} className="btn-regresar">
-          ← Regresar a Mesas
-        </Link>
-      </div>
+      </section>
     </div>
   );
 }

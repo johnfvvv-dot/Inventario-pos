@@ -1,72 +1,105 @@
-/** Servicios API para conectar frontend con backend FastAPI */
-
-/* Configuración de URL de la API
- * - Desarrollo local: http://localhost:8000
- * - Desde red local: http://192.168.1.xxx:8000
- * - Producción/nube: tu-dominio.com o dirección IP
+/**
+ * Servicios de conexión con el backend FastAPI.
+ *
+ * Para acceder desde otro dispositivo en la misma red WiFi,
+ * cambia localhost por la IP de la PC (ej: http://192.168.1.20:8000/api).
  */
+export const API_BASE = "http://localhost:8000/api";
 
-const API_BASE = "http://localhost:8000/api";
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${url}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+
+  if (!response.ok) {
+    let detail = `Error ${response.status}`;
+    try {
+      const body = await response.json();
+      detail = body.detail || detail;
+    } catch {
+      /* respuesta sin JSON */
+    }
+    throw new Error(detail);
+  }
+
+  return response.json() as Promise<T>;
+}
 
 export const api = {
-  // Usuarios
+  // ---------- Usuarios ----------
   login: (email: string, password: string) =>
-    fetch(`${API_BASE}/usuarios/login`, {
+    request("/usuarios/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
-    }).then((r) => r.json()),
+    }),
 
-  register: (userData) =>
-    fetch(`${API_BASE}/usuarios/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
-    }).then((r) => r.json()),
+  getUsuarios: () => request("/usuarios/"),
 
-  // Mesas
-  getMesas: () => fetch(`${API_BASE}/mesas/`).then((r) => r.json()),
-  createMesa: (numero: number, capacidad: number) =>
-    fetch(`${API_BASE}/mesas/`, {
+  createUsuario: (datos: {
+    nombre: string;
+    email: string;
+    password: string;
+    rol: string;
+  }) =>
+    request("/usuarios/", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ numero, capacidad }),
-    }).then((r) => r.json()),
-  updateMesaEstado: (mesaId: number, estado: string) =>
-    fetch(`${API_BASE}/mesas/${mesaId}/estado`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nuevo_estado: estado }),
-    }).then((r) => r.json()),
-
-  // Productos Inventario
-  getProductos: () => fetch(`${API_BASE}/inventario/`).then((r) => r.json()),
-  createProducto: (datos) =>
-    fetch(`${API_BASE}/inventario/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(datos),
-    }).then((r) => r.json()),
-  updateProductoStock: (id: number, stock: number) =>
-    fetch(`${API_BASE}/inventario/${id}/stock`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nuevo_stock: stock }),
-    }).then((r) => r.json()),
+    }),
 
-  // Pedidos/Ventas
-  getPedidos: () => fetch(`${API_BASE}/pedidos/`).then((r) => r.json()),
-  createPedido: (pedidoData) =>
-    fetch(`${API_BASE}/pedidos/`, {
+  // ---------- Mesas ----------
+  getMesas: () => request("/mesas/"),
+
+  createMesa: (numero: number, capacidad: number) =>
+    request("/mesas/", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pedidoData),
-    }).then((r) => r.json()),
-  getPedidosMesa: (mesaId: number) =>
-    fetch(`${API_BASE}/pedidos/mesa/${mesaId}`).then((r) => r.json()),
-  closePedido: (pedidoId: number) =>
-    fetch(`${API_BASE}/pedidos/${pedidoId}/cerrar`, {
+      body: JSON.stringify({ numero, capacidad, estado: "disponible" }),
+    }),
+
+  updateMesaEstado: (mesaId: number, nuevo_estado: string) =>
+    request(`/mesas/${mesaId}/estado`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
-    }).then((r) => r.json()),
+      body: JSON.stringify({ nuevo_estado }),
+    }),
+
+  // ---------- Inventario ----------
+  getProductos: () => request("/inventario/"),
+
+  createProducto: (datos: {
+    nombre: string;
+    descripcion?: string;
+    precio: number;
+    stock: number;
+  }) =>
+    request("/inventario/", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  updateProductoStock: (productoId: number, nuevo_stock: number) =>
+    request(`/inventario/${productoId}/stock`, {
+      method: "PUT",
+      body: JSON.stringify({ nuevo_stock }),
+    }),
+
+  deleteProducto: (productoId: number) =>
+    request(`/inventario/${productoId}`, { method: "DELETE" }),
+
+  // ---------- Pedidos ----------
+  getPedidos: () => request("/pedidos/"),
+
+  getPedidosMesa: (mesaId: number) => request(`/pedidos/mesa/${mesaId}`),
+
+  createPedido: (datos: {
+    mesa_id: number;
+    usuario_id: number;
+    items: { producto_id: number; cantidad: number }[];
+  }) =>
+    request("/pedidos/", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  closePedido: (pedidoId: number) =>
+    request(`/pedidos/${pedidoId}/cerrar`, { method: "PUT" }),
 };

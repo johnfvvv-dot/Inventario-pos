@@ -1,59 +1,59 @@
 """Endpoints para gestión de mesas."""
 
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from database import get_db
-from models import Mesa
 
-router = APIRouter(prefix="/mesas", tags=["mesas"])
+from app.database import get_db
+from app.models import Mesa
+from app.schemas import EstadoUpdate, MesaCreate, MesaOut
 
-@router.post("/", response_model=dict)
-def crear_mesa(numero: int, capacidad: int = 4, db: Session = Depends(get_db)):
+router = APIRouter(tags=["mesas"])
+
+ESTADOS_PERMITIDOS = ["disponible", "ocupada", "cerrada"]
+
+
+@router.post("/", response_model=MesaOut, status_code=201)
+def crear_mesa(datos: MesaCreate, db: Session = Depends(get_db)):
     """Crear nueva mesa."""
-    # Verificar si el número de mesa ya existe
-    existente = db.query(Mesa).filter(Mesa.numero == numero).first()
+    existente = db.query(Mesa).filter(Mesa.numero == datos.numero).first()
     if existente:
         raise HTTPException(status_code=400, detail="El número de mesa ya existe")
-    
-    nueva_mesa = Mesa(numero=numero, capacidad=capacidad, estado="disponible")
+
+    nueva_mesa = Mesa(
+        numero=datos.numero,
+        capacidad=datos.capacidad,
+        estado="disponible",
+    )
     db.add(nueva_mesa)
     db.commit()
     db.refresh(nueva_mesa)
-    return {"message": f"Mesa {numero} creada exitosamente", "mesa_id": nueva_mesa.id}
+    return nueva_mesa
 
-@router.get("/", response_model=List[dict])
+
+@router.get("/", response_model=List[MesaOut])
 def listar_mesas(db: Session = Depends(get_db)):
-    """Listar todas las mesas con estado actual."""
-    mesas = db.query(Mesa).all()
-    return [
-        {
-            "id": m.id,
-            "numero": m.numero,
-            "capacidad": m.capacidad,
-            "estado": m.estado
-        }
-        for m in mesas
-    ]
+    """Listar todas las mesas con su estado actual."""
+    return db.query(Mesa).order_by(Mesa.numero).all()
 
-@router.put("/{mesa_id}/estado", response_model=dict)
+
+@router.put("/{mesa_id}/estado", response_model=MesaOut)
 def actualizar_estado_mesa(
-    mesa_id: int, 
-    nuevo_estado: str, 
-    db: Session = Depends(get_db)
+    mesa_id: int, datos: EstadoUpdate, db: Session = Depends(get_db)
 ):
-    """Actualizar estado de mesa."""
+    """Actualizar el estado de una mesa."""
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
-    
-    estados_permitidos = ["disponible", "ocupada", "cerrada"]
-    if nuevo_estado not in estados_permitidos:
+
+    if datos.nuevo_estado not in ESTADOS_PERMITIDOS:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Estado inválido. Use: {', '.join(estados_permitidos)}"
+            status_code=400,
+            detail=f"Estado inválido. Use: {', '.join(ESTADOS_PERMITIDOS)}",
         )
-    
-    mesa.estado = nuevo_estado
+
+    mesa.estado = datos.nuevo_estado
     db.commit()
     db.refresh(mesa)
-    return {"message": f"Mesa {mesa.numero} actualizada a {nuevo_estado}", "mesa_id": mesa.id}
+    return mesa
