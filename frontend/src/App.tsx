@@ -10,6 +10,7 @@ import InventarioPage from "./pages/InventarioPage";
 import MesasPage from "./pages/MesasPage";
 import PedidoMesaPage from "./pages/PedidoMesaPage";
 import ReportesPage from "./pages/ReportesPage";
+import CorteCajaPage from "./pages/CorteCajaPage";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="mesas" element={<MesasPage />} />
           <Route path="pedidos" element={<PedidoMesaPage />} />
           <Route path="reportes" element={<ReportesPage />} />
+          <Route path="corte-caja" element={<CorteCajaPage />} />
         </Route>
 
         <Route path="/mesero" element={<MeseroLayout />}>

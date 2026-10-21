@@ -1,14 +1,23 @@
 /**
  * Servicios de conexión con el backend FastAPI.
  *
- * IMPORTANTE: en el celular NUNCA uses "localhost", porque ahí apunta al
- * propio teléfono. Se usa la IP local de la PC (obténla con `ipconfig`).
- * Puedes sobrescribirla con la variable de entorno REACT_APP_API_URL.
+ * La URL base se deduce del host con el que se abrió la app:
+ *  - Desarrollo (React :3000) → http://localhost:8000/api
+ *  - Ejecutable (.exe)         → http://localhost:8000/api
+ *  - Móvil / APK               → http://192.168.1.6:8000/api
+ * Para fijar una IP concreta: REACT_APP_API_URL=http://IP:8000/api
  */
-const PC_IP = "192.168.1.6"; // actualizar si cambia la IP de la PC
+const detectApiBase = (): string => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  if (envUrl) return envUrl;
 
-export const API_BASE =
-  process.env.REACT_APP_API_URL || `http://${PC_IP}:8000/api`;
+  if (typeof window !== "undefined" && window.location.hostname) {
+    return `http://${window.location.hostname}:8000/api`;
+  }
+  return "http://localhost:8000/api";
+};
+
+export const API_BASE = detectApiBase();
 
 /** Timeout de la petición: evita que la interfaz se quede cargando eternamente */
 const REQUEST_TIMEOUT_MS = 10000;
@@ -33,7 +42,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     }
     throw new Error(
       `No se pudo conectar con el backend (${API_BASE}). ` +
-        `Revisa que el servidor esté levantado y que la IP ${PC_IP} sea correcta.`
+        `Revisa que el servidor esté levantado y que la IP ${API_BASE} sea correcta.`
     );
   } finally {
     clearTimeout(timer);
@@ -53,7 +62,16 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export const FORMAS_PAGO = [
+  { id: "efectivo", label: "Efectivo" },
+  { id: "tarjeta", label: "Tarjeta" },
+  { id: "transferencia", label: "Transferencia" },
+];
+
 export const api = {
+  // ---------- Configuración ----------
+  getConfig: () => request("/config"),
+
   // ---------- Usuarios ----------
   login: (email: string, password: string) =>
     request("/usuarios/login", {
@@ -93,6 +111,22 @@ export const api = {
   liberarMesa: (mesaId: number) =>
     request(`/mesas/${mesaId}/liberar`, { method: "POST" }),
 
+  // ---------- Cuentas de mesa ----------
+  getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
+
+  /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
+  cerrarCuentaMesa: (mesaId: number, liberarMesa = false, formaPago = "efectivo") =>
+    request(
+      `/cuentas/mesa/${mesaId}/cerrar?liberar_mesa=${liberarMesa}&forma_pago=${formaPago}`,
+      { method: "POST" }
+    ),
+
+  /** Transfiere la cuenta abierta a otra mesa */
+  transferirCuenta: (mesaId: number, destinoId: number) =>
+    request(`/cuentas/mesa/${mesaId}/transferir?destino_id=${destinoId}`, {
+      method: "POST",
+    }),
+
   // ---------- Inventario ----------
   getProductos: () => request("/inventario/"),
 
@@ -131,23 +165,9 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
-  closePedido: (pedidoId: number) =>
-    request(`/pedidos/${pedidoId}/cerrar`, { method: "PUT" }),
-
-  // ---------- Cuentas de mesa ----------
-  getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
-
-  /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
-  cerrarCuentaMesa: (mesaId: number, liberarMesa = false) =>
-    request(
-      `/cuentas/mesa/${mesaId}/cerrar${liberarMesa ? "?liberar_mesa=true" : ""}`,
-      { method: "POST" }
-    ),
-
-  /** Transfiere la cuenta abierta a otra mesa */
-  transferirCuenta: (mesaId: number, destinoId: number) =>
-    request(`/cuentas/mesa/${mesaId}/transferir?destino_id=${destinoId}`, {
-      method: "POST",
+  closePedido: (pedidoId: number, formaPago = "efectivo") =>
+    request(`/pedidos/${pedidoId}/cerrar?forma_pago=${formaPago}`, {
+      method: "PUT",
     }),
 
   // ---------- División de cuenta ----------
@@ -164,10 +184,30 @@ export const api = {
   getDivisionesMesa: (mesaId: number) =>
     request(`/cuentas/mesa/${mesaId}/divisiones`),
 
-  pagarDivision: (divisionId: number) =>
-    request(`/cuentas/division/${divisionId}/pagar`, { method: "POST" }),
+  pagarDivision: (divisionId: number, formaPago = "efectivo") =>
+    request(`/cuentas/division/${divisionId}/pagar?forma_pago=${formaPago}`, {
+      method: "POST",
+    }),
 
   /** Cierra solo la cuenta de un alias (el cliente paga su parte) */
-  pagarParticipante: (participanteId: number) =>
-    request(`/cuentas/participante/${participanteId}/pagar`, { method: "POST" }),
+  pagarParticipante: (participanteId: number, formaPago = "efectivo") =>
+    request(`/cuentas/participante/${participanteId}/pagar?forma_pago=${formaPago}`, {
+      method: "POST",
+    }),
+
+  // ---------- Corte de caja ----------
+  getTurnoActual: () => request("/caja/turno-actual"),
+
+  abrirTurno: (usuarioId = 1) =>
+    request(`/caja/abrir?usuario_id=${usuarioId}`, { method: "POST" }),
+
+  cerrarTurno: (observaciones?: string) =>
+    request("/caja/cerrar", {
+      method: "POST",
+      body: JSON.stringify({ observaciones: observaciones || null }),
+    }),
+
+  getTurnos: (limite = 20) => request(`/caja/turnos?limite=${limite}`),
+
+  getResumenCaja: (dias = 1) => request(`/caja/resumen?dias=${dias}`),
 };

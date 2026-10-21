@@ -6,6 +6,7 @@ import { api } from "../services/api";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
+import CobroModal from "../components/CobroModal";
 
 interface Mesa {
   id: number;
@@ -50,6 +51,7 @@ export default function PedidoMesaPage() {
   const [mostrarCuenta, setMostrarCuenta] = useState(false);
   const [mostrarDivision, setMostrarDivision] = useState(false);
   const [mostrarTransferir, setMostrarTransferir] = useState(false);
+  const [pedidoACobrar, setPedidoACobrar] = useState<Pedido | null>(null);
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -166,10 +168,11 @@ export default function PedidoMesaPage() {
     }
   };
 
-  const cerrarPedido = async (pedidoId: number) => {
+  const cerrarPedido = async (pedidoId: number, formaPago = "efectivo") => {
     try {
-      await api.closePedido(pedidoId);
-      setMensaje(`Pedido #${pedidoId} cerrado y cobrado`);
+      await api.closePedido(pedidoId, formaPago);
+      setPedidoACobrar(null);
+      setMensaje(`Pedido #${pedidoId} cerrado y cobrado (${formaPago})`);
       await Promise.all([
         cargarCatalogos(),
         mesaId ? cargarPedidos(Number(mesaId)) : Promise.resolve(),
@@ -324,7 +327,7 @@ export default function PedidoMesaPage() {
                     <td>
                       <button
                         className="btn-primary btn-small"
-                        onClick={() => cerrarPedido(p.id)}
+                        onClick={() => setPedidoACobrar(p)}
                       >
                         Cobrar / cerrar
                       </button>
@@ -336,6 +339,17 @@ export default function PedidoMesaPage() {
           </div>
         )}
       </section>
+
+      {/* Ventana de cobro de un pedido */}
+      {pedidoACobrar && (
+        <CobroModal
+          titulo={`Cobrar pedido #${pedidoACobrar.id}`}
+          total={pedidoACobrar.total}
+          error={error}
+          onClose={() => setPedidoACobrar(null)}
+          confirmar={(formaPago) => cerrarPedido(pedidoACobrar.id, formaPago)}
+        />
+      )}
 
       {/* Ventana de cuenta de la mesa */}
       {mostrarCuenta && mesaId !== "" && (

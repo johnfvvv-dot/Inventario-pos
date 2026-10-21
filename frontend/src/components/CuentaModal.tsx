@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api } from "../services/api";
+import { api, FORMAS_PAGO } from "../services/api";
 
 interface LineaItem {
   producto_id: number;
@@ -66,6 +66,7 @@ export default function CuentaModal({
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [confirmacion, setConfirmacion] = useState(false);
+  const [formaPago, setFormaPago] = useState("efectivo");
 
   const cargar = async () => {
     try {
@@ -85,7 +86,7 @@ export default function CuentaModal({
     setProcesando(true);
     try {
       // 1) Cobrar toda la cuenta (pedidos + divisiones)
-      await api.cerrarCuentaMesa(mesaId);
+      await api.cerrarCuentaMesa(mesaId, false, formaPago);
       // 2) Si se pidió liberar, el backend valida que no queden cuentas pendientes
       if (liberarMesa) {
         await api.liberarMesa(mesaId);
@@ -122,7 +123,7 @@ export default function CuentaModal({
   const cerrarAlias = async (participanteId: number, alias: string) => {
     setProcesando(true);
     try {
-      await api.pagarParticipante(participanteId);
+      await api.pagarParticipante(participanteId, formaPago);
       setMensaje(`"${alias}" pagó su parte. La cuenta sigue abierta para los demás.`);
       await cargar();
       onActualizado?.();
@@ -234,6 +235,23 @@ export default function CuentaModal({
               ))}
             </div>
 
+            <div className="form-group">
+              <label>Forma de pago</label>
+              <div className="formas-pago">
+                {FORMAS_PAGO.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`forma-pago ${formaPago === f.id ? "activa" : ""}`}
+                    onClick={() => setFormaPago(f.id)}
+                    disabled={procesando}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {confirmacion ? (
               <div className="confirm-panel">
                 <p className="confirm-pregunta">
@@ -263,8 +281,8 @@ export default function CuentaModal({
                   </button>
                 </div>
                 <p className="muted small">
-                  "Aceptar" cobra la cuenta y mantiene la mesa ocupada. "Liberar mesa"
-                  cobra y deja la mesa disponible.
+                  Cobro con <strong>{formaPago}</strong>. "Aceptar" cobra la cuenta y
+                  mantiene la mesa ocupada. "Liberar mesa" cobra y deja la mesa disponible.
                 </p>
               </div>
             ) : (

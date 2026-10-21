@@ -83,6 +83,51 @@ class TransferirCuentaOut(BaseModel):
     total_transferido: float
 
 
+# ---------- Formas de pago y corte de caja ----------
+
+FORMAS_PAGO = ["efectivo", "tarjeta", "transferencia"]
+
+
+class FormaPago(BaseModel):
+    forma_pago: str = Field(default="efectivo", max_length=20)
+
+
+class TotalesFormaPago(BaseModel):
+    efectivo: float = 0.0
+    tarjeta: float = 0.0
+    transferencia: float = 0.0
+    total: float = 0.0
+    operaciones: int = 0
+
+
+class TurnoCajaOut(BaseModel):
+    id: int
+    usuario_nombre: str
+    fecha_apertura: datetime
+    fecha_cierre: Optional[datetime] = None
+    observaciones: Optional[str] = None
+    estado: str
+    totales: TotalesFormaPago
+
+
+class AbrirTurnoOut(BaseModel):
+    mensaje: str
+    turno: TurnoCajaOut
+
+
+class CerrarTurnoIn(BaseModel):
+    observaciones: Optional[str] = Field(default=None, max_length=255)
+
+
+class ResumenCajaOut(BaseModel):
+    desde: Optional[datetime] = None
+    hasta: Optional[datetime] = None
+    totales: TotalesFormaPago
+    pedidos_cerrados: int
+    mesas_atendidas: int
+    por_forma_pago: dict = {}
+
+
 class EstadoUpdate(BaseModel):
     nuevo_estado: str = Field(..., max_length=20)
 

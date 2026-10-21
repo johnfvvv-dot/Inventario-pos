@@ -1,5 +1,6 @@
 """Endpoints de la cuenta de una mesa: consulta, cierre y división entre clientes."""
 
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +19,7 @@ from app.models import (
     Usuario,
 )
 from app.schemas import (
+    FORMAS_PAGO,
     CuentaMesaOut,
     DivisionCreate,
     DivisionOut,
@@ -180,7 +182,12 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/mesa/{mesa_id}/cerrar", response_model=CuentaMesaOut)
-def cerrar_cuenta(mesa_id: int, liberar_mesa: bool = False, db: Session = Depends(get_db)):
+def cerrar_cuenta(
+    mesa_id: int,
+    liberar_mesa: bool = False,
+    forma_pago: str = "efectivo",
+    db: Session = Depends(get_db),
+):
     """Cierra la cuenta completa de la mesa (pedidos + divisiones).
 
     Por defecto la mesa permanece OCUPADA (se puede abrir una nueva cuenta).
@@ -201,16 +208,27 @@ def cerrar_cuenta(mesa_id: int, liberar_mesa: bool = False, db: Session = Depend
         .filter(Pedido.mesa_id == mesa_id, Pedido.estado == "abierto")
         .all()
     )
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ahora = datetime.utcnow()
     for pedido in pedidos:
         pedido.estado = "cerrado"
+        pedido.forma_pago = forma_pago
+        pedido.fecha_cierre = ahora
 
     # Marcar como pagadas las divisiones pendientes
     divisiones = _cargar_divisiones(db, mesa_id)
     for division in divisiones:
         if division.estado == "pendiente":
             division.estado = "pagada"
+            division.forma_pago = forma_pago
             for participante in division.participantes:
                 participante.pagado = 1
+                participante.forma_pago = forma_pago
 
     # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
     mesa.estado = "disponible" if liberar_mesa else "ocupada"
@@ -469,7 +487,11 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/participante/{participante_id}/pagar", response_model=ParticipanteOut)
-def pagar_participante(participante_id: int, db: Session = Depends(get_db)):
+def pagar_participante(
+    participante_id: int,
+    forma_pago: str = "efectivo",
+    db: Session = Depends(get_db),
+):
     """Cierra la división de UN alias (el cliente paga su parte).
 
     La cuenta general de la mesa sigue abierta para los demás clientes.
@@ -487,8 +509,16 @@ def pagar_participante(participante_id: int, db: Session = Depends(get_db)):
     if not participante:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
     if not participante.pagado:
         participante.pagado = 1
+        participante.forma_pago = forma_pago
+        participante.division.forma_pago = forma_pago
 
     division = participante.division
     todos = (

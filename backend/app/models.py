@@ -48,7 +48,9 @@ class Pedido(Base):
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     fecha = Column(DateTime, default=datetime.utcnow)
     total = Column(Float, default=0.0)
-    estado = Column(String(20), default="abierto")  # abierto | cerrado
+    estado = Column(String(20), default="abierto")  # abierto | cerrado | dividido
+    forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
+    fecha_cierre = Column(DateTime, nullable=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")
@@ -82,6 +84,7 @@ class Division(Base):
     fecha = Column(DateTime, default=datetime.utcnow)
     total = Column(Float, default=0.0)
     estado = Column(String(20), default="pendiente")  # pendiente | pagada
+    forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
 
     mesa = relationship("Mesa")
     usuario = relationship("Usuario")
@@ -100,6 +103,7 @@ class Participante(Base):
     alias = Column(String(60), nullable=False)
     subtotal = Column(Float, default=0.0)
     pagado = Column(Integer, default=0)  # 0 = pendiente, 1 = pagado
+    forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
 
     division = relationship("Division", back_populates="participantes")
     items = relationship(
@@ -121,3 +125,18 @@ class ParticipanteItem(Base):
 
     participante = relationship("Participante", back_populates="items")
     producto = relationship("Producto")
+
+
+class TurnoCaja(Base):
+    """Turno de caja: periodo de trabajo con totales por forma de pago."""
+
+    __tablename__ = "turnos_caja"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    fecha_apertura = Column(DateTime, default=datetime.utcnow)
+    fecha_cierre = Column(DateTime, nullable=True)
+    observaciones = Column(String(255), nullable=True)
+    estado = Column(String(20), default="abierto")  # abierto | cerrado
+
+    usuario = relationship("Usuario")

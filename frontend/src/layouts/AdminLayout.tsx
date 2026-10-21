@@ -32,6 +32,7 @@ export default function AdminLayout() {
           <Link to="/admin/mesas">Mesas</Link>
           <Link to="/admin/pedidos">Pedidos</Link>
           <Link to="/admin/reportes">Reportes</Link>
+          <Link to="/admin/corte-caja">Corte de caja</Link>
         </nav>
 
         <main className="admin-content">

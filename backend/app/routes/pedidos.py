@@ -1,5 +1,6 @@
 """Endpoints para gestión de pedidos y ventas por mesa."""
 
+from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models import Division, Mesa, Pedido, PedidoItem, Producto, Usuario
 from app.schemas import (
+    FORMAS_PAGO,
     PedidoCreate,
     PedidoItemOut,
     PedidoOut,
@@ -150,15 +152,27 @@ def pedidos_por_mesa(mesa_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{pedido_id}/cerrar", response_model=PedidoOut)
-def cerrar_pedido(pedido_id: int, db: Session = Depends(get_db)):
-    """Cerrar un pedido (cobrar) y liberar la mesa si no quedan pedidos abiertos."""
+def cerrar_pedido(
+    pedido_id: int,
+    forma_pago: str = "efectivo",
+    db: Session = Depends(get_db),
+):
+    """Cerrar un pedido (cobrar) y liberar la mesa si no quedan cuentas pendientes."""
     pedido = db.query(Pedido).filter(Pedido.id == pedido_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
     if pedido.estado == "cerrado":
         raise HTTPException(status_code=400, detail="El pedido ya estaba cerrado")
 
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
     pedido.estado = "cerrado"
+    pedido.forma_pago = forma_pago
+    pedido.fecha_cierre = datetime.utcnow()
 
     # La mesa se libera solo si no quedan pedidos abiertos NI divisiones pendientes
     if pedido.mesa_id:
