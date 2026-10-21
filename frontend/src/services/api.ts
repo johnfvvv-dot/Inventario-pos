@@ -133,11 +133,11 @@ export const api = {
   deleteMesa: (mesaId: number) =>
     request(`/mesas/${mesaId}`, { method: "DELETE" }),
 
-  /** Crea una barra con varias cuentas independientes */
-  createBarra: (numero: number, capacidad: number, cuentas: number) =>
+  /** Crea una barra: una cuenta por cada plaza (cliente) */
+  createBarra: (numero: number, capacidad: number) =>
     request("/mesas/barra", {
       method: "POST",
-      body: JSON.stringify({ numero, capacidad, cuentas }),
+      body: JSON.stringify({ numero, capacidad }),
     }),
 
   // ---------- Cuentas de mesa ----------

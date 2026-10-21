@@ -1161,6 +1161,12 @@ select:focus {
   font-size: 0.95rem;
 }
 
+.barra-tag {
+  background: #eef2f5;
+  color: var(--muted);
+  margin-left: 0.3rem;
+}
+
 /* -------------------- EDITOR DE STOCK / ROLES -------------------- */
 
 .stock-editor {

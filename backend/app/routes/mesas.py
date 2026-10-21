@@ -72,12 +72,14 @@ def crear_mesa(datos: MesaCreate, db: Session = Depends(get_db)):
 
 @router.post("/barra", response_model=List[MesaOut], status_code=201)
 def crear_barra(datos: BarraCreate, db: Session = Depends(get_db)):
-    """Crea una barra con varias cuentas independientes (una por cliente).
+    """Crea una barra con una cuenta por cada posicion (cliente).
 
-    Ej: Barra 2 con 4 cuentas genera 4 mesas del grupo "Barra 2",
-    cada una con su propia cuenta.
+    Ej: Barra 2 con capacidad 3 genera 3 cuentas del grupo "Barra 2",
+    cada una con su propia cuenta, igual que las mesas.
     """
-    cuentas = max(1, min(datos.cuentas, 20))
+    # Por defecto, una posicion (cuenta) por cada plaza de la barra
+    cuentas = datos.cuentas if datos.cuentas else datos.capacidad
+    cuentas = max(1, min(cuentas, 20))
     numero_base = datos.numero * 100  # evita chocar con mesas numeradas
 
     existentes = (
@@ -95,7 +97,7 @@ def crear_barra(datos: BarraCreate, db: Session = Depends(get_db)):
     for posicion in range(1, cuentas + 1):
         mesa = Mesa(
             numero=numero_base + posicion,
-            capacidad=datos.capacidad,
+            capacidad=1,  # cada posicion es para un cliente
             estado="disponible",
             tipo="barra",
             grupo=grupo,

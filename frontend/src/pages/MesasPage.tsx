@@ -25,7 +25,7 @@ export default function MesasPage() {
   const navigate = useNavigate();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
-  const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "1", cuentas: "3" });
+  const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "2" });
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ mesaId: number; texto: string } | null>(null);
   const [porEliminar, setPorEliminar] = useState<Mesa | null>(null);
@@ -74,12 +74,11 @@ export default function MesasPage() {
     try {
       const res: any = await api.createBarra(
         Number(nuevaBarra.numero),
-        Number(nuevaBarra.capacidad),
-        Number(nuevaBarra.cuentas)
+        Number(nuevaBarra.capacidad)
       );
-      setNuevaBarra({ numero: "", capacidad: "1", cuentas: "3" });
+      setNuevaBarra({ numero: "", capacidad: "2" });
       setMensaje(
-        `${res.length} cuenta(s) creada(s) para la ${res[0]?.grupo || "Barra"}`
+        `${res[0]?.grupo || "Barra"} creada con ${res.length} cuenta(s) para clientes`
       );
       await cargarMesas();
     } catch (err: any) {
@@ -137,7 +136,7 @@ export default function MesasPage() {
 
   const etiquetaMesa = (mesa: Mesa) =>
     mesa.tipo === "barra"
-      ? `${mesa.grupo} - Cuenta ${mesa.posicion}`
+      ? `${mesa.grupo} · Cliente ${mesa.posicion}`
       : `Mesa ${mesa.numero}`;
 
   const cuentasBarra = (grupo: string) =>
@@ -229,30 +228,21 @@ export default function MesasPage() {
           />
         </div>
         <div className="form-group">
-          <label>Cuentas (clientes)</label>
+          <label>Capacidad (clientes)</label>
           <input
             type="number"
             min="1"
             max="20"
-            value={nuevaBarra.cuentas}
-            onChange={(e) => setNuevaBarra((b) => ({ ...b, cuentas: e.target.value }))}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Capacidad</label>
-          <input
-            type="number"
-            min="1"
             value={nuevaBarra.capacidad}
             onChange={(e) => setNuevaBarra((b) => ({ ...b, capacidad: e.target.value }))}
+            required
           />
         </div>
         <button type="submit" className="btn-primary">
           + Crear barra
         </button>
         <span className="muted small">
-          Cada cliente de la barra tiene su propia cuenta.
+          Cada plaza de la barra es una cuenta independiente.
         </span>
       </form>
 
@@ -264,10 +254,14 @@ export default function MesasPage() {
           >
             <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
             <div className="muted small">
-              {mesa.capacidad} plazas
-              {mesa.tipo === "barra" && ` · ${cuentasBarra(mesa.grupo || "")} cuentas en la barra`}
+              {mesa.tipo === "barra"
+                ? `Cliente ${mesa.posicion} de ${cuentasBarra(mesa.grupo || "")} · 1 plaza`
+                : `${mesa.capacidad} plazas`}
             </div>
             <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
+            {mesa.tipo === "barra" && (
+              <span className="badge badge-info barra-tag">Barra</span>
+            )}
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">

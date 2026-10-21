@@ -143,10 +143,15 @@ class MesaListadoOut(MesaBase):
 
 
 class BarraCreate(BaseModel):
-    """Crea una barra con varias cuentas independientes."""
+    """Crea una barra.
+
+    La capacidad define cuantos clientes (posiciones) puede tener la barra;
+    cada posicion es una cuenta independiente, igual que una mesa.
+    """
     numero: int = Field(..., gt=0)
     capacidad: int = Field(default=1, gt=0)
-    cuentas: int = Field(default=1, ge=1, le=20)
+    # Opcional: si se indica, sobrescribe el numero de posiciones
+    cuentas: Optional[int] = Field(default=None, ge=1, le=20)
 
 
 class TransferirCuentaOut(BaseModel):
