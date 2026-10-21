@@ -19,7 +19,7 @@ export default function AdminLayout() {
           <p className="muted">Panel de Administración</p>
         </div>
         <div className="user-info">
-          <span>{usuario.nombre || "Administrador"}</span>
+          <span>{usuario.alias || usuario.nombre || "Administrador"}</span>
           <button className="btn-logout" onClick={cerrarSesion}>
             Cerrar sesión
           </button>
@@ -34,6 +34,7 @@ export default function AdminLayout() {
           <Link to="/admin/reportes">Reportes</Link>
           <Link to="/admin/corte-caja">Corte de caja</Link>
           <Link to="/admin/historial">Historial</Link>
+          <Link to="/admin/usuarios">Usuarios</Link>
         </nav>
 
         <main className="admin-content">

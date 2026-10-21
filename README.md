@@ -154,6 +154,30 @@ adb install -r frontend\android\app\build\outputs\apk\debug\app-debug.apk
 - La misma APK sirve en tablet (el diseño es responsivo)
 - Para cambiar la IP de destino, edita `frontend/capacitor.config.json` y vuelve a compilar
 
+## Usuarios y roles
+
+No se usan correos: el acceso es por **alias** + **clave**.
+
+### Usuario inicial
+| Alias | Clave | Rol |
+|---|---|---|
+| `Admin` | `1234` | Administrador |
+
+> Cambia la clave desde **Usuarios → Cambiar clave** en cuanto arranques en producción.
+
+### Roles
+
+| Módulo | Administrador | Bartender |
+|---|---|---|
+| Inventario | Crear, editar, eliminar, stock | **Solo lectura** (sin columna de acciones) |
+| Mesas / Pedidos / Cuenta | ✅ | ✅ |
+| Corte de caja | ✅ | ✅ |
+| Reportes / Historial | ✅ | ❌ |
+| Usuarios (crear, roles, claves) | ✅ | ❌ |
+
+### Menú de Usuarios (solo Administrador)
+`/admin/usuarios` → crear usuarios con alias y rol, cambiar rol, activar/desactivar, cambiar clave y eliminar. Todos los usuarios nuevos nacen con la **clave inicial `1234`** (cambiable después).
+
 ## PWA (instalar desde el navegador)
 
 En el celular, abre `http://<IP_PC>:8000` en Chrome → menú **⋮** → **"Añadir a pantalla de inicio"**. Queda como una app instalada con icono propio.

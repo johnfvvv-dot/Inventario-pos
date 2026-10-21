@@ -8,23 +8,44 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # ---------- Usuarios ----------
 
+ROLES = ["admin", "bartender"]
+CLAVE_INICIAL = "1234"
+
+
 class UsuarioBase(BaseModel):
-    nombre: str = Field(..., max_length=100)
-    rol: str = Field(default="mesero", max_length=20)
-    email: str = Field(..., max_length=100)
+    alias: str = Field(..., min_length=2, max_length=60)
+    nombre: Optional[str] = Field(default=None, max_length=100)
+    rol: str = Field(default="bartender", max_length=20)
 
 
 class UsuarioCreate(UsuarioBase):
-    password: str = Field(..., min_length=4, max_length=100)
+    """Si no se envia password se usa la clave inicial (1234)."""
+    password: Optional[str] = Field(default=None, min_length=4, max_length=100)
 
 
 class UsuarioLogin(BaseModel):
-    email: str
+    alias: str
     password: str
 
 
-class UsuarioOut(UsuarioBase):
+class UsuarioUpdate(BaseModel):
+    alias: Optional[str] = Field(default=None, min_length=2, max_length=60)
+    nombre: Optional[str] = Field(default=None, max_length=100)
+    rol: Optional[str] = Field(default=None, max_length=20)
+    activo: Optional[bool] = None
+
+
+class CambiarClaveIn(BaseModel):
+    password: str = Field(..., min_length=4, max_length=100)
+
+
+class UsuarioOut(BaseModel):
     id: int
+    alias: str
+    nombre: Optional[str] = None
+    rol: str
+    activo: bool = True
+    creado_en: datetime
     model_config = ConfigDict(from_attributes=True)
 
 

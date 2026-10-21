@@ -21,7 +21,26 @@ interface Categoria {
 
 const POR_PAGINA = 20;
 
+/**
+ * Convierte lo que escribe el usuario a número.
+ * Acepta formato español: "2,50" -> 2.50  |  "2.500,00" -> 2500
+ * y formato inglés: "2.50" -> 2.50
+ */
+const parseNumero = (valor: string): number => {
+  if (!valor) return 0;
+  let texto = valor.trim().replace(/\s/g, "");
+  if (texto.includes(",")) {
+    texto = texto.replace(/\./g, "").replace(",", ".");
+  }
+  const numero = Number(texto);
+  return isNaN(numero) ? 0 : numero;
+};
+
 export default function InventarioPage() {
+  // El Bartender solo consulta: no puede crear, editar ni eliminar
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const soloLectura = usuario?.rol !== "admin";
+
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [total, setTotal] = useState(0);
@@ -90,8 +109,8 @@ export default function InventarioPage() {
       const datos = {
         nombre: nuevoProducto.nombre.trim(),
         descripcion: nuevoProducto.descripcion.trim() || undefined,
-        precio: Number(nuevoProducto.precio),
-        stock: Number(nuevoProducto.stock || 0),
+        precio: parseNumero(nuevoProducto.precio),
+        stock: parseNumero(nuevoProducto.stock || "0"),
         categoria_id: nuevoProducto.categoria_id || null,
       };
       if (editando) {
@@ -111,6 +130,7 @@ export default function InventarioPage() {
       setMostrarForm(false);
       setEditando(null);
       await Promise.all([cargar(), cargarCategorias()]);
+      setError(null);
     } catch (err: any) {
       setError(err.message);
     }
@@ -135,6 +155,17 @@ export default function InventarioPage() {
       await Promise.all([cargar(), cargarCategorias()]);
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  /** Guarda el stock ingresado manualmente en la casilla */
+  const guardarStock = async (id: number, stock: number) => {
+    try {
+      await api.updateProductoStock(id, stock);
+      await cargar();
+    } catch (err: any) {
+      setError(err.message);
+      await cargar();
     }
   };
 
@@ -177,9 +208,16 @@ export default function InventarioPage() {
       <div className="page-head">
         <h2>Inventario de productos</h2>
         <div className="filters">
-          <button className="btn-secondary" onClick={() => setMostrarCategorias(true)}>
-            Categorías ({categorias.length})
-          </button>
+          {!soloLectura && (
+            <button
+              className="btn-secondary"
+              onClick={() => setMostrarCategorias(true)}
+            >
+              Categorías ({categorias.length})
+            </button>
+          )}
+          {soloLectura && <span className="badge badge-warning">Solo lectura</span>}
+          {!soloLectura && (
           <button
             className="btn-primary"
             onClick={() => {
@@ -196,6 +234,7 @@ export default function InventarioPage() {
           >
             + Añadir producto
           </button>
+          )}
         </div>
       </div>
 
@@ -240,7 +279,7 @@ export default function InventarioPage() {
               <th>Categoría</th>
               <th>Precio</th>
               <th>Stock</th>
-              <th>Acciones</th>
+              {!soloLectura && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -254,53 +293,77 @@ export default function InventarioPage() {
                 <td className="muted small">{nombreCategoria(p.categoria_id)}</td>
                 <td>${p.precio.toFixed(2)}</td>
                 <td>
-                  <span
-                    className={
-                      p.stock === 0
-                        ? "badge badge-danger"
-                        : p.stock < 10
-                        ? "badge badge-warning"
-                        : "badge badge-success"
-                    }
-                  >
-                    {p.stock}
-                  </span>
+                  {soloLectura ? (
+                    <span
+                      className={
+                        p.stock === 0
+                          ? "badge badge-danger"
+                          : p.stock < 10
+                          ? "badge badge-warning"
+                          : "badge badge-success"
+                      }
+                    >
+                      {p.stock}
+                    </span>
+                  ) : (
+                    <div className="stock-editor">
+                      <input
+                        type="number"
+                        min="0"
+                        className="stock-input"
+                        defaultValue={p.stock}
+                        onBlur={(e) => {
+                          const valor = Math.max(0, parseNumero(e.target.value));
+                          if (valor !== p.stock) {
+                            guardarStock(p.id, valor);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                      />
+                      <div className="stock-acciones">
+                        <button
+                          className="btn-icon"
+                          title="Restar 1"
+                          onClick={() => ajustarStock(p.id, p.stock, -1)}
+                        >
+                          −
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="Sumar 1"
+                          onClick={() => ajustarStock(p.id, p.stock, +1)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </td>
-                <td className="actions">
-                  <button
-                    className="btn-icon"
-                    title="Restar 1"
-                    onClick={() => ajustarStock(p.id, p.stock, -1)}
-                  >
-                    −
-                  </button>
-                  <button
-                    className="btn-icon"
-                    title="Sumar 1"
-                    onClick={() => ajustarStock(p.id, p.stock, +1)}
-                  >
-                    +
-                  </button>
-                  <button
-                    className="btn-icon"
-                    title="Editar"
-                    onClick={() => abrirEdicion(p)}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className="btn-icon danger"
-                    title="Eliminar"
-                    onClick={() => eliminar(p.id)}
-                  >
-                    ×
-                  </button>
-                </td>
+                {!soloLectura && (
+                  <td className="actions">
+                    <button
+                      className="btn-icon"
+                      title="Editar"
+                      onClick={() => abrirEdicion(p)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="btn-icon danger"
+                      title="Eliminar"
+                      onClick={() => eliminar(p.id)}
+                    >
+                      ×
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {productos.length === 0 && (
               <tr>
-                <td colSpan={6} className="empty-state">
+                <td colSpan={soloLectura ? 5 : 6} className="empty-state">
                   {buscar || categoriaFiltro
                     ? "Sin resultados para el filtro aplicado."
                     : "No hay productos registrados."}

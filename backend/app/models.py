@@ -8,13 +8,17 @@ from app.database import Base
 
 
 class Usuario(Base):
+    """Usuario del sistema. Se identifica por alias (sin correo)."""
+
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(100), nullable=False)
-    rol = Column(String(20), nullable=False, default="mesero")  # "admin" o "mesero"
-    email = Column(String(100), unique=True, nullable=False, index=True)
+    alias = Column(String(60), unique=True, nullable=False, index=True)
+    nombre = Column(String(100), nullable=True)  # nombre visible (opcional)
+    rol = Column(String(20), nullable=False, default="bartender")  # admin | bartender
     password_hash = Column(String(128), nullable=False)
+    activo = Column(Integer, default=1)
+    creado_en = Column(DateTime, default=datetime.utcnow)
 
     pedidos = relationship("Pedido", back_populates="usuario")
 

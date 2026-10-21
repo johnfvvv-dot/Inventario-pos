@@ -73,24 +73,42 @@ export const api = {
   getConfig: () => request("/config"),
 
   // ---------- Usuarios ----------
-  login: (email: string, password: string) =>
+  login: (alias: string, password: string) =>
     request("/usuarios/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ alias, password }),
     }),
 
   getUsuarios: () => request("/usuarios/"),
 
   createUsuario: (datos: {
-    nombre: string;
-    email: string;
-    password: string;
+    alias: string;
+    nombre?: string;
+    password?: string;
     rol: string;
   }) =>
     request("/usuarios/", {
       method: "POST",
       body: JSON.stringify(datos),
     }),
+
+  updateUsuario: (
+    usuarioId: number,
+    datos: { alias?: string; nombre?: string; rol?: string; activo?: boolean }
+  ) =>
+    request(`/usuarios/${usuarioId}`, {
+      method: "PUT",
+      body: JSON.stringify(datos),
+    }),
+
+  cambiarClave: (usuarioId: number, password: string) =>
+    request(`/usuarios/${usuarioId}/clave`, {
+      method: "PUT",
+      body: JSON.stringify({ password }),
+    }),
+
+  deleteUsuario: (usuarioId: number) =>
+    request(`/usuarios/${usuarioId}`, { method: "DELETE" }),
 
   // ---------- Mesas ----------
   getMesas: () => request("/mesas/"),

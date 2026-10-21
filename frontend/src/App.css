@@ -1111,6 +1111,69 @@ select:focus {
   margin-right: 0;
 }
 
+/* -------------------- EDITOR DE STOCK / ROLES -------------------- */
+
+.stock-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.stock-input {
+  width: 68px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.stock-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+}
+
+.stock-acciones {
+  display: inline-flex;
+  gap: 0.2rem;
+}
+
+.stock-acciones .btn-icon {
+  width: 26px;
+  height: 26px;
+  font-size: 0.9rem;
+  margin-right: 0;
+}
+
+.select-rol {
+  min-width: 130px;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.permisos-bloque {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+
+.permisos-bloque h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--primary);
+}
+
+.permisos-bloque ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
 /* -------------------- GRÁFICOS -------------------- */
 
 .chart-wrap {

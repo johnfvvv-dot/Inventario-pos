@@ -20,6 +20,7 @@ from app.routes.inventario import router as inventario_router
 from app.routes.mesas import router as mesas_router
 from app.routes.pedidos import router as pedidos_router
 from app.routes.usuarios import router as usuarios_router
+from app.schemas import CLAVE_INICIAL
 
 VERSION = "1.1.0"
 
@@ -108,29 +109,98 @@ def _migrar_columnas_faltantes() -> None:
             print(f"[migracion] columna {tabla.name}.{columna.name} agregada")
 
 
+def _migrar_alias_usuarios() -> None:
+    """En bases antiguas el identificador era 'email'; ahora es 'alias'."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "usuarios" not in inspector.get_table_names():
+        return
+    columnas = {c["name"] for c in inspector.get_columns("usuarios")}
+    if "alias" not in columnas:
+        return
+
+    with engine.begin() as conexion:
+        # Detecta si la base es "legacy" (aún tiene la columna email con datos)
+        legacy = 0
+        if "email" in columnas:
+            legacy = (
+                conexion.execute(
+                    text(
+                        "SELECT COUNT(*) FROM usuarios "
+                        "WHERE email IS NOT NULL AND email != ''"
+                    )
+                ).scalar()
+                or 0
+            )
+
+        if "email" in columnas:
+            conexion.execute(
+                text(
+                    "UPDATE usuarios SET alias = email "
+                    "WHERE (alias IS NULL OR alias = '') AND email IS NOT NULL"
+                )
+            )
+        conexion.execute(
+            text("UPDATE usuarios SET alias = 'Admin' WHERE alias IS NULL OR alias = ''")
+        )
+        # El rol antiguo era 'mesero', ahora es 'bartender'
+        conexion.execute(
+            text("UPDATE usuarios SET rol = 'bartender' WHERE rol = 'mesero'")
+        )
+
+        if legacy:
+            # El admin migrado usa la clave inicial
+            conexion.execute(
+                text(
+                    "UPDATE usuarios SET password_hash = :hash "
+                    "WHERE rol = 'admin' AND (alias = 'Admin' OR alias LIKE '%@%')"
+                ),
+                {"hash": hash_password(CLAVE_INICIAL)},
+            )
+            # Solo se conserva el admin (el primero)
+            conexion.execute(
+                text(
+                    "UPDATE usuarios SET alias = 'Admin' "
+                    "WHERE alias LIKE '%@%' AND rol = 'admin' "
+                    "AND NOT EXISTS (SELECT 1 FROM usuarios u2 WHERE u2.alias = 'Admin')"
+                )
+            )
+            # Los bartenders de prueba quedan desactivados
+            conexion.execute(
+                text(
+                    "UPDATE usuarios SET activo = 0 "
+                    "WHERE alias LIKE '%@%' AND rol = 'bartender'"
+                )
+            )
+
+        # La columna 'email' ya no se usa: se elimina (SQLite 3.35+)
+        if "email" in columnas:
+            try:
+                conexion.execute(text("DROP INDEX IF EXISTS ix_usuarios_email"))
+                conexion.execute(text("ALTER TABLE usuarios DROP COLUMN email"))
+            except Exception as exc:  # pragma: no cover
+                print(f"[migracion] no se pudo eliminar usuarios.email: {exc}")
+
+
 def crear_datos_iniciales() -> None:
     """Crea tablas y siembra usuarios, productos y mesas de ejemplo."""
     Base.metadata.create_all(bind=engine)
     _migrar_columnas_faltantes()
+    _migrar_alias_usuarios()
 
     db = SessionLocal()
     try:
         if db.query(Usuario).count() == 0:
-            db.add_all(
-                [
-                    Usuario(
-                        nombre="Administrador",
-                        rol="admin",
-                        email="admin@localpos.com",
-                        password_hash=hash_password("admin123"),
-                    ),
-                    Usuario(
-                        nombre="Mesero Demo",
-                        rol="mesero",
-                        email="mesero@localpos.com",
-                        password_hash=hash_password("mesero123"),
-                    ),
-                ]
+            # Unico usuario inicial: alias "Admin" con la clave inicial
+            db.add(
+                Usuario(
+                    alias="Admin",
+                    nombre="Administrador",
+                    rol="admin",
+                    password_hash=hash_password(CLAVE_INICIAL),
+                    activo=1,
+                )
             )
 
         if db.query(Producto).count() == 0:

@@ -101,6 +101,7 @@ def actualizar_producto(
     producto.nombre = datos.nombre
     producto.descripcion = datos.descripcion
     producto.precio = datos.precio
+    producto.stock = datos.stock          # <- el stock SI se guarda (bug corregido)
     producto.categoria_id = datos.categoria_id
     db.commit()
     db.refresh(producto)
