@@ -14,7 +14,7 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 - **Inventario:** alta, edición, ajuste de stock (+/− y **ingreso manual del total**), eliminación con **ventana de confirmación**, **búsqueda**, **paginación** y filtro por categoría
 - **Categorías:** CRUD de categorías (Bebidas, Comidas...) con filtro rápido en el POS
 - **Mesas:** creación, **eliminación de mesas eventuales**, estado (disponible/ocupada), apertura directa del pedido con mesa preseleccionada, importe pendiente en vivo y refresco automático cada 15 s
-- **Barras:** creación de **Barra / Barra 2** con N cuentas independientes (una por cliente de la barra)
+- **Barras:** creación de **Barra / Barra 2** con **número y capacidad** (una cuenta por plaza, igual que una mesa)
 - **Pedidos:** carrito con control de stock, total automático, **edición de pedidos abiertos** (+/− por línea) y cobro con forma de pago
 - **Cuentas por mesa:** total en vivo, detalle por pedido y por división, cierre con confirmación (Aceptar / Liberar mesa) sin liberar la mesa por defecto
 - **División de cuenta:** reparto entre clientes con alias, cantidad exacta por producto, subtotales por cliente, resto de la cuenta conservado como bloque único y cobro individual de cada alias
@@ -29,8 +29,9 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 ```
 Panel Mesas
  ├─ [Crear mesa]      → mesa numerada (Mesa 1, Mesa 2, ...)
- ├─ [Crear barra]     → Barra N con N cuentas independientes
- │                      (Barra 2 - Cuenta 1, Barra 2 - Cuenta 2, ...)
+ ├─ [Crear barra]     → Barra N con capacidad C
+ │                      (cada plaza = 1 cliente con su propia cuenta:
+ │                       Barra 2 · Cliente 1, Barra 2 · Cliente 2, ...)
  ├─ [Pedido]  → pedidos con la mesa ya seleccionada
  │              └─ +/− por línea para corregir cantidades
  ├─ [Cuenta]  → ┌─ Dividir cuenta ────► alias con cantidades por producto
