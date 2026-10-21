@@ -11,9 +11,10 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 
 ### Módulos
 - **Login** con roles `admin` y `mesero` (hash SHA-256), redirección según rol
-- **Inventario:** alta, edición, ajuste de stock (+/−), eliminación, **búsqueda**, **paginación** y filtro por categoría
+- **Inventario:** alta, edición, ajuste de stock (+/− y **ingreso manual del total**), eliminación con **ventana de confirmación**, **búsqueda**, **paginación** y filtro por categoría
 - **Categorías:** CRUD de categorías (Bebidas, Comidas...) con filtro rápido en el POS
-- **Mesas:** creación, estado (disponible/ocupada), apertura directa del pedido con mesa preseleccionada, importe pendiente en vivo y refresco automático cada 15 s
+- **Mesas:** creación, **eliminación de mesas eventuales**, estado (disponible/ocupada), apertura directa del pedido con mesa preseleccionada, importe pendiente en vivo y refresco automático cada 15 s
+- **Barras:** creación de **Barra / Barra 2** con N cuentas independientes (una por cliente de la barra)
 - **Pedidos:** carrito con control de stock, total automático, **edición de pedidos abiertos** (+/− por línea) y cobro con forma de pago
 - **Cuentas por mesa:** total en vivo, detalle por pedido y por división, cierre con confirmación (Aceptar / Liberar mesa) sin liberar la mesa por defecto
 - **División de cuenta:** reparto entre clientes con alias, cantidad exacta por producto, subtotales por cliente, resto de la cuenta conservado como bloque único y cobro individual de cada alias
@@ -24,16 +25,20 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 - **Historial de ventas:** filtros por rango de fechas, mesa, producto y forma de pago, con paginación y exportación CSV
 - **PWA instalable:** "Añadir a pantalla de inicio" en Android (manifest + service worker)
 
-### Flujo de trabajo del mesero
+### Mesas y Barras
 ```
 Panel Mesas
+ ├─ [Crear mesa]      → mesa numerada (Mesa 1, Mesa 2, ...)
+ ├─ [Crear barra]     → Barra N con N cuentas independientes
+ │                      (Barra 2 - Cuenta 1, Barra 2 - Cuenta 2, ...)
  ├─ [Pedido]  → pedidos con la mesa ya seleccionada
  │              └─ +/− por línea para corregir cantidades
  ├─ [Cuenta]  → ┌─ Dividir cuenta ────► alias con cantidades por producto
  │              ├─ Cerrar división ───► cobra 1 cliente, los demás siguen
  │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa
  │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa] + forma de pago
- └─ [Liberar]  → si hay pendientes: aviso + "Ver el pedido abierto"
+ ├─ [Liberar]  → si hay pendientes: aviso + "Ver el pedido abierto"
+ └─ [×]         → eliminar mesa o cuenta de barra (solo si no hay cuenta pendiente)
 ```
 
 ### API (31 endpoints)
