@@ -140,8 +140,15 @@ export const api = {
       body: JSON.stringify({ numero, capacidad }),
     }),
 
+  /** Asigna un cliente a una mesa o a un puesto libre de la barra */
+  ocuparMesa: (mesaId: number) =>
+    request(`/mesas/${mesaId}/ocupar`, { method: "POST" }),
+
   // ---------- Cuentas de mesa ----------
   getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
+
+  /** Cuenta agregada de una barra (todos sus puestos) */
+  getCuentaBarra: (numeroBarra: number) => request(`/cuentas/barra/${numeroBarra}`),
 
   /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
   cerrarCuentaMesa: (mesaId: number, liberarMesa = false, formaPago = "efectivo") =>

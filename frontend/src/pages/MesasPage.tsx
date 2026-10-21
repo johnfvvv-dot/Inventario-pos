@@ -8,6 +8,12 @@ import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 
+interface Posicion {
+  id: number;
+  estado: string;
+  total_cuenta: number;
+}
+
 interface Mesa {
   id: number;
   numero: number;
@@ -19,6 +25,7 @@ interface Mesa {
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
   detalle_pendiente?: string;
+  posiciones?: Posicion[];
 }
 
 export default function MesasPage() {
@@ -34,6 +41,7 @@ export default function MesasPage() {
 
   // Modales
   const [mesaCuenta, setMesaCuenta] = useState<number | null>(null);
+  const [barraCuenta, setBarraCuenta] = useState<number | null>(null);
   const [mesaDivision, setMesaDivision] = useState<number | null>(null);
   const [mesaTransferir, setMesaTransferir] = useState<number | null>(null);
 
@@ -81,6 +89,21 @@ export default function MesasPage() {
         `${res[0]?.grupo || "Barra"} creada con ${res.length} cuenta(s) para clientes`
       );
       await cargarMesas();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  /** Asigna un cliente: en una mesa la ocupa, en una barra toma un puesto libre */
+  const ocupar = async (mesa: Mesa) => {
+    try {
+      if (mesa.tipo === "barra") {
+        const res: any = await api.ocuparMesa(mesa.id);
+        await cargarMesas();
+        navigate(`/admin/pedidos?mesa=${res.mesa_id}`);
+      } else {
+        await cambiarEstado(mesa, "ocupada");
+      }
     } catch (err: any) {
       setError(err.message);
     }
@@ -135,9 +158,7 @@ export default function MesasPage() {
       : "badge badge-danger";
 
   const etiquetaMesa = (mesa: Mesa) =>
-    mesa.tipo === "barra"
-      ? `${mesa.grupo} · Cliente ${mesa.posicion}`
-      : `Mesa ${mesa.numero}`;
+    mesa.tipo === "barra" ? `Barra ${mesa.numero}` : `Mesa ${mesa.numero}`;
 
   const cuentasBarra = (grupo: string) =>
     mesas.filter((m) => m.grupo === grupo).length;
@@ -253,15 +274,13 @@ export default function MesasPage() {
             className={`mesa-card mesa-${mesa.estado} ${mesa.tipo === "barra" ? "mesa-barra" : ""}`}
           >
             <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
-            <div className="muted small">
-              {mesa.tipo === "barra"
-                ? `Cliente ${mesa.posicion} de ${cuentasBarra(mesa.grupo || "")} · 1 plaza`
-                : `${mesa.capacidad} plazas`}
+            <div className="muted small">{mesa.capacidad} plazas</div>
+            <div className="mesa-estado-fila">
+              <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
+              {mesa.tipo === "barra" && (
+                <span className="badge barra-tag">Barra</span>
+              )}
             </div>
-            <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
-            {mesa.tipo === "barra" && (
-              <span className="badge badge-info barra-tag">Barra</span>
-            )}
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
@@ -273,7 +292,7 @@ export default function MesasPage() {
               {mesa.estado === "disponible" && (
                 <button
                   className="btn-secondary btn-small"
-                  onClick={() => cambiarEstado(mesa, "ocupada")}
+                  onClick={() => ocupar(mesa)}
                 >
                   Ocupar
                 </button>
@@ -295,7 +314,11 @@ export default function MesasPage() {
               </button>
               <button
                 className="btn-secondary btn-small"
-                onClick={() => setMesaCuenta(mesa.id)}
+                onClick={() =>
+                  mesa.tipo === "barra"
+                    ? setBarraCuenta(mesa.numero)
+                    : setMesaCuenta(mesa.id)
+                }
                 title={`Ver la cuenta de ${etiquetaMesa(mesa)}`}
               >
                 Cuenta
@@ -376,6 +399,19 @@ export default function MesasPage() {
           onTransferir={() => {
             setMesaCuenta(null);
             setMesaTransferir(mesaCuenta);
+          }}
+          onActualizado={() => cargarMesas()}
+        />
+      )}
+
+      {/* Ventana de cuenta agregada de la barra */}
+      {barraCuenta !== null && (
+        <CuentaModal
+          mesaId={barraCuenta}
+          barraNumero={barraCuenta}
+          onClose={() => setBarraCuenta(null)}
+          onDividir={() => {
+            setBarraCuenta(null);
           }}
           onActualizado={() => cargarMesas()}
         />

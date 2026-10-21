@@ -186,6 +186,86 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/barra/{numero_barra}", response_model=CuentaMesaOut)
+def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
+    """Cuenta agregada de una barra: todos sus puestos juntos."""
+    grupo = f"Barra {numero_barra}"
+    mesas = db.query(Mesa).filter(Mesa.grupo == grupo).order_by(Mesa.posicion).all()
+    if not mesas:
+        raise HTTPException(status_code=404, detail="Barra no encontrada")
+
+    ids = [m.id for m in mesas]
+
+    pedidos = (
+        db.query(Pedido)
+        .options(
+            joinedload(Pedido.mesa),
+            joinedload(Pedido.usuario),
+            joinedload(Pedido.items).joinedload(PedidoItem.producto),
+        )
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
+        .order_by(Pedido.id)
+        .all()
+    )
+
+    divisiones = [
+        d for d in _cargar_divisiones(db, mesas[0].id) if d.estado == "pendiente"
+    ]
+    for mesa in mesas[1:]:
+        divisiones += [
+            d for d in _cargar_divisiones(db, mesa.id) if d.estado == "pendiente"
+        ]
+
+    total = round(
+        sum(p.total for p in pedidos)
+        + sum(round(sum(pp.subtotal for pp in d.participantes if not pp.pagado), 2) for d in divisiones),
+        2,
+    )
+
+    return CuentaMesaOut(
+        mesa_id=mesas[0].id,
+        mesa_numero=numero_barra,
+        estado_mesa=("ocupada" if any(m.estado == "ocupada" for m in mesas) else "disponible"),
+        total=total,
+        pedidos=[_pedido_out(p) for p in pedidos],
+        divisiones=[
+            DivisionResumen(
+                id=d.id,
+                total=d.total,
+                total_pendiente=round(
+                    sum(pp.subtotal for pp in d.participantes if not pp.pagado), 2
+                ),
+                estado=d.estado,
+                fecha=d.fecha,
+                participantes=[
+                    ParticipanteResumen(
+                        id=pp.id,
+                        alias=pp.alias,
+                        subtotal=pp.subtotal,
+                        pagado=bool(pp.pagado),
+                        items=[
+                            LineaCuenta(
+                                producto_id=item.producto_id,
+                                producto_nombre=item.producto.nombre
+                                if item.producto
+                                else "Desconocido",
+                                cantidad=item.cantidad,
+                                precio_unitario=item.precio_unitario,
+                                subtotal=item.subtotal,
+                                alias=pp.alias,
+                                participante_id=pp.id,
+                            )
+                            for item in pp.items
+                        ],
+                    )
+                    for pp in d.participantes
+                ],
+            )
+            for d in divisiones
+        ],
+    )
+
+
 @router.post("/mesa/{mesa_id}/cerrar", response_model=CuentaMesaOut)
 def cerrar_cuenta(
     mesa_id: int,

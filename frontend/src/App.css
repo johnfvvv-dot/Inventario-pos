@@ -1162,9 +1162,16 @@ select:focus {
 }
 
 .barra-tag {
-  background: #eef2f5;
-  color: var(--muted);
-  margin-left: 0.3rem;
+  background: #e8ecef;
+  color: #5d6d7e;
+}
+
+/* Estado + etiqueta en la misma fila (mesas y barras) */
+.mesa-estado-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 /* -------------------- EDITOR DE STOCK / ROLES -------------------- */

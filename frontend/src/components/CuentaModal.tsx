@@ -48,6 +48,8 @@ interface Cuenta {
 
 interface Props {
   mesaId: number;
+  /** Si se indica, la cuenta es la agregada de la barra con ese numero */
+  barraNumero?: number | null;
   onClose: () => void;
   onDividir?: () => void;
   onTransferir?: () => void;
@@ -56,6 +58,7 @@ interface Props {
 
 export default function CuentaModal({
   mesaId,
+  barraNumero = null,
   onClose,
   onDividir,
   onTransferir,
@@ -70,7 +73,9 @@ export default function CuentaModal({
 
   const cargar = async () => {
     try {
-      const data: any = await api.getCuentaMesa(mesaId);
+      const data: any = barraNumero
+        ? await api.getCuentaBarra(barraNumero)
+        : await api.getCuentaMesa(mesaId);
       setCuenta(data);
       setError(null);
     } catch (err: any) {
@@ -79,8 +84,9 @@ export default function CuentaModal({
   };
 
   useEffect(() => {
-    cargar();
-  }, [mesaId]);
+    const timer = setTimeout(cargar, 0);
+    return () => clearTimeout(timer);
+  }, [mesaId, barraNumero]);
 
   const cerrarCuenta = async (liberarMesa = false) => {
     setProcesando(true);
@@ -139,7 +145,9 @@ export default function CuentaModal({
       <div className="modal-box modal-xl" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>
-            {cuenta ? `Cuenta Mesa ${cuenta.mesa_numero}` : "Cargando cuenta..."}
+            {cuenta
+              ? `Cuenta ${barraNumero ? "Barra" : "Mesa"} ${cuenta.mesa_numero}`
+              : "Cargando cuenta..."}
           </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
             ×

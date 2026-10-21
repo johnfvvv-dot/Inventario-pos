@@ -130,8 +130,15 @@ class MesaOut(MesaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PosicionBarra(BaseModel):
+    """Puesto (cliente) dentro de una barra."""
+    id: int
+    estado: str
+    total_cuenta: float = 0.0
+
+
 class MesaListadoOut(MesaBase):
-    """Mesa con el resumen de su cuenta pendiente (para el panel de mesas)."""
+    """Mesa (o barra agrupada) con el resumen de su cuenta pendiente."""
     id: int
     tipo: str = "mesa"
     grupo: Optional[str] = None
@@ -139,7 +146,17 @@ class MesaListadoOut(MesaBase):
     total_cuenta: float = 0.0
     tiene_cuenta_pendiente: bool = False
     detalle_pendiente: str = ""
+    posiciones: List[PosicionBarra] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+class OcuparMesaOut(BaseModel):
+    """Resultado de asignar un cliente a una mesa o barra."""
+    mesa_id: int
+    mesa_numero: int
+    tipo: str = "mesa"
+    mensaje: str
+    nueva: bool = False
 
 
 class BarraCreate(BaseModel):

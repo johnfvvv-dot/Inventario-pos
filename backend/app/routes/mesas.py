@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Division, Mesa, Pedido
-from app.schemas import BarraCreate, EstadoUpdate, MesaCreate, MesaListadoOut, MesaOut
+from app.schemas import (
+    BarraCreate,
+    EstadoUpdate,
+    MesaCreate,
+    MesaListadoOut,
+    MesaOut,
+    OcuparMesaOut,
+    PosicionBarra,
+)
 
 router = APIRouter(tags=["mesas"])
 
@@ -114,12 +122,67 @@ def crear_barra(datos: BarraCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[MesaListadoOut])
 def listar_mesas(db: Session = Depends(get_db)):
-    """Listar todas las mesas y puestos de barra con su cuenta pendiente."""
+    """Lista mesas y barras.
+
+    Las mesas se listan una por una. Las barras se agrupan en UNA tarjeta
+    por barra (titulo "Barra N", N plazas, estado y total agregados),
+    conservando internamente una posicion por cliente.
+    """
     mesas = db.query(Mesa).order_by(Mesa.tipo, Mesa.grupo, Mesa.numero).all()
     resumen = _resumen_cuenta(db, mesas)
 
+    # --- Barras agrupadas (una tarjeta por barra) ---
+    grupos: dict = {}
+    for mesa in mesas:
+        if (mesa.tipo or "mesa") != "barra" or not mesa.grupo:
+            continue
+        g = grupos.setdefault(mesa.grupo, [])
+        g.append(mesa)
+
+    resultado_barras = []
+    for grupo, posiciones in grupos.items():
+        posiciones.sort(key=lambda m: m.posicion or 0)
+        info_pos = [resumen.get(m.id, {"pedidos": 0, "divisiones": 0, "total": 0.0}) for m in posiciones]
+        total = round(sum(i["total"] for i in info_pos), 2)
+        ocupada = any(m.estado == "ocupada" for m in posiciones)
+        tiene = any(i["pedidos"] or i["divisiones"] for i in info_pos)
+
+        # posicion activa: la primera ocupada, si no la primera libre
+        activa = next((m for m in posiciones if m.estado == "ocupada"), posiciones[0])
+        numero_barra = posiciones[0].numero // 100
+
+        resultado_barras.append(
+            MesaListadoOut(
+                id=activa.id,
+                numero=numero_barra,
+                capacidad=len(posiciones),
+                estado="ocupada" if ocupada else "disponible",
+                tipo="barra",
+                grupo=grupo,
+                posicion=activa.posicion or 1,
+                total_cuenta=total,
+                tiene_cuenta_pendiente=tiene,
+                detalle_pendiente=(
+                    f"{sum(1 for m in posiciones if m.estado == 'ocupada')} cliente(s) en uso"
+                    if ocupada
+                    else ""
+                ),
+                posiciones=[
+                    PosicionBarra(
+                        id=m.id,
+                        estado=m.estado,
+                        total_cuenta=resumen.get(m.id, {}).get("total", 0.0),
+                    )
+                    for m in posiciones
+                ],
+            )
+        )
+
+    # --- Mesas normales ---
     resultado = []
     for mesa in mesas:
+        if (mesa.tipo or "mesa") == "barra":
+            continue
         info = resumen.get(mesa.id, {"pedidos": 0, "divisiones": 0, "total": 0.0})
         pendientes = []
         if info["pedidos"]:
@@ -146,7 +209,49 @@ def listar_mesas(db: Session = Depends(get_db)):
                 detalle_pendiente=" · ".join(pendientes),
             )
         )
-    return resultado
+    return resultado + resultado_barras
+
+
+@router.post("/{mesa_id}/ocupar", response_model=OcuparMesaOut)
+def ocupar_mesa(mesa_id: int, db: Session = Depends(get_db)):
+    """Asigna un cliente a una mesa o a un puesto libre de una barra."""
+    mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+
+    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
+        # primera posicion libre de la barra
+        posiciones = (
+            db.query(Mesa)
+            .filter(Mesa.grupo == mesa.grupo)
+            .order_by(Mesa.posicion)
+            .all()
+        )
+        libre = next((m for m in posiciones if m.estado != "ocupada"), None)
+        if not libre:
+            raise HTTPException(
+                status_code=400, detail="No hay puestos libres en esta barra"
+            )
+        libre.estado = "ocupada"
+        db.commit()
+        db.refresh(libre)
+        return OcuparMesaOut(
+            mesa_id=libre.id,
+            mesa_numero=libre.numero // 100,
+            tipo="barra",
+            mensaje=f"Cliente asignado en {libre.grupo}",
+            nueva=True,
+        )
+
+    mesa.estado = "ocupada"
+    db.commit()
+    db.refresh(mesa)
+    return OcuparMesaOut(
+        mesa_id=mesa.id,
+        mesa_numero=mesa.numero,
+        tipo="mesa",
+        mensaje=f"Mesa {mesa.numero} ocupada",
+    )
 
 
 @router.put("/{mesa_id}/estado", response_model=MesaOut)
