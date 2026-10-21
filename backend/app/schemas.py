@@ -102,3 +102,85 @@ class PedidoOut(BaseModel):
     total: float
     estado: str
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- Cuenta de la mesa ----------
+
+class LineaCuenta(BaseModel):
+    """Producto dentro de la cuenta, con el alias al que fue asignado."""
+    producto_id: int
+    producto_nombre: str
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+    alias: Optional[str] = None
+    participante_id: Optional[int] = None
+
+
+class ParticipanteResumen(BaseModel):
+    id: int
+    alias: str
+    subtotal: float
+    pagado: bool
+    items: List[LineaCuenta]
+
+
+class DivisionResumen(BaseModel):
+    id: int
+    total: float
+    estado: str
+    fecha: datetime
+    participantes: List[ParticipanteResumen]
+
+
+class CuentaMesaOut(BaseModel):
+    mesa_id: int
+    mesa_numero: int
+    estado_mesa: str
+    total: float
+    pedidos: List[PedidoOut]
+    divisiones: List[DivisionResumen]
+
+
+# ---------- División de cuenta ----------
+
+class ParticipanteItemCreate(BaseModel):
+    producto_id: int = Field(..., gt=0)
+    cantidad: int = Field(default=1, ge=1)
+
+
+class ParticipanteCreate(BaseModel):
+    alias: str = Field(..., min_length=1, max_length=60)
+    items: List[ParticipanteItemCreate] = []
+
+
+class DivisionCreate(BaseModel):
+    mesa_id: int = Field(..., gt=0)
+    usuario_id: int = Field(..., gt=0)
+    participantes: List[ParticipanteCreate]
+
+
+class ParticipanteItemOut(BaseModel):
+    id: int
+    producto_id: int
+    producto_nombre: str
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+
+
+class ParticipanteOut(BaseModel):
+    id: int
+    alias: str
+    subtotal: float
+    pagado: bool
+    items: List[ParticipanteItemOut]
+
+
+class DivisionOut(BaseModel):
+    id: int
+    mesa_id: int
+    total: float
+    estado: str
+    fecha: datetime
+    participantes: List[ParticipanteOut]

@@ -129,4 +129,27 @@ export const api = {
 
   closePedido: (pedidoId: number) =>
     request(`/pedidos/${pedidoId}/cerrar`, { method: "PUT" }),
+
+  // ---------- Cuentas de mesa ----------
+  getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
+
+  cerrarCuentaMesa: (mesaId: number) =>
+    request(`/cuentas/mesa/${mesaId}/cerrar`, { method: "POST" }),
+
+  // ---------- División de cuenta ----------
+  dividirCuenta: (datos: {
+    mesa_id: number;
+    usuario_id: number;
+    participantes: { alias: string; items: { producto_id: number; cantidad: number }[] }[];
+  }) =>
+    request("/cuentas/dividir", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  getDivisionesMesa: (mesaId: number) =>
+    request(`/cuentas/mesa/${mesaId}/divisiones`),
+
+  pagarDivision: (divisionId: number) =>
+    request(`/cuentas/division/${divisionId}/pagar`, { method: "POST" }),
 };

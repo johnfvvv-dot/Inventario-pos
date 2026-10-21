@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, SessionLocal, engine
 from app.models import Mesa, Producto, Usuario
+from app.routes.cuentas import router as cuentas_router
 from app.routes.inventario import router as inventario_router
 from app.routes.mesas import router as mesas_router
 from app.routes.pedidos import router as pedidos_router
@@ -32,6 +33,7 @@ app.include_router(usuarios_router, prefix="/api/usuarios", tags=["usuarios"])
 app.include_router(mesas_router, prefix="/api/mesas", tags=["mesas"])
 app.include_router(inventario_router, prefix="/api/inventario", tags=["inventario"])
 app.include_router(pedidos_router, prefix="/api/pedidos", tags=["pedidos"])
+app.include_router(cuentas_router, prefix="/api/cuentas", tags=["cuentas"])
 
 
 def hash_password(password: str) -> str:

@@ -69,3 +69,55 @@ class PedidoItem(Base):
 
     pedido = relationship("Pedido", back_populates="items")
     producto = relationship("Producto")
+
+
+class Division(Base):
+    """División de la cuenta de una mesa entre varios clientes."""
+
+    __tablename__ = "divisiones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=False)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    fecha = Column(DateTime, default=datetime.utcnow)
+    total = Column(Float, default=0.0)
+    estado = Column(String(20), default="pendiente")  # pendiente | pagada
+
+    mesa = relationship("Mesa")
+    usuario = relationship("Usuario")
+    participantes = relationship(
+        "Participante", back_populates="division", cascade="all, delete-orphan"
+    )
+
+
+class Participante(Base):
+    """Cliente (alias) dentro de una división de cuenta."""
+
+    __tablename__ = "participantes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    division_id = Column(Integer, ForeignKey("divisiones.id"), nullable=False)
+    alias = Column(String(60), nullable=False)
+    subtotal = Column(Float, default=0.0)
+    pagado = Column(Integer, default=0)  # 0 = pendiente, 1 = pagado
+
+    division = relationship("Division", back_populates="participantes")
+    items = relationship(
+        "ParticipanteItem", back_populates="participante", cascade="all, delete-orphan"
+    )
+
+
+class ParticipanteItem(Base):
+    """Producto asignado a un participante de la división."""
+
+    __tablename__ = "participante_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    participante_id = Column(Integer, ForeignKey("participantes.id"), nullable=False)
+    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
+    cantidad = Column(Integer, nullable=False, default=1)
+    precio_unitario = Column(Float, nullable=False)
+    subtotal = Column(Float, nullable=False)
+
+    participante = relationship("Participante", back_populates="items")
+    producto = relationship("Producto")

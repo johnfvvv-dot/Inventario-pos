@@ -1,8 +1,10 @@
 /** Pantalla de Gestión de Mesas - Administrador. */
 
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import CuentaModal from "../components/CuentaModal";
+import DivisionModal from "../components/DivisionModal";
 
 interface Mesa {
   id: number;
@@ -12,9 +14,14 @@ interface Mesa {
 }
 
 export default function MesasPage() {
+  const navigate = useNavigate();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
   const [error, setError] = useState<string | null>(null);
+
+  // Modales
+  const [mesaCuenta, setMesaCuenta] = useState<number | null>(null);
+  const [mesaDivision, setMesaDivision] = useState<number | null>(null);
 
   const cargarMesas = async () => {
     try {
@@ -48,6 +55,11 @@ export default function MesasPage() {
     } catch (err: any) {
       setError(err.message);
     }
+  };
+
+  /** Abre el pedido con la mesa ya seleccionada */
+  const abrirPedido = (mesa: Mesa) => {
+    navigate(`/admin/pedidos?mesa=${mesa.id}`);
   };
 
   const claseEstado = (estado: string) =>
@@ -118,14 +130,47 @@ export default function MesasPage() {
                   Liberar
                 </button>
               )}
-              <Link className="btn-primary btn-small" to="/admin/pedidos">
+              <button
+                className="btn-primary btn-small"
+                onClick={() => abrirPedido(mesa)}
+                title={`Abrir el pedido de la mesa ${mesa.numero}`}
+              >
                 Pedido
-              </Link>
+              </button>
+              <button
+                className="btn-secondary btn-small"
+                onClick={() => setMesaCuenta(mesa.id)}
+                title={`Ver la cuenta de la mesa ${mesa.numero}`}
+              >
+                Cuenta
+              </button>
             </div>
           </div>
         ))}
         {mesas.length === 0 && <p className="empty-state">No hay mesas registradas.</p>}
       </div>
+
+      {/* Ventana de cuenta */}
+      {mesaCuenta !== null && (
+        <CuentaModal
+          mesaId={mesaCuenta}
+          onClose={() => setMesaCuenta(null)}
+          onDividir={() => {
+            setMesaDivision(mesaCuenta);
+          }}
+        />
+      )}
+
+      {/* Ventana de división */}
+      {mesaDivision !== null && (
+        <DivisionModal
+          mesaId={mesaDivision}
+          onClose={() => setMesaDivision(null)}
+          onConfirmado={() => {
+            cargarMesas();
+          }}
+        />
+      )}
     </div>
   );
 }

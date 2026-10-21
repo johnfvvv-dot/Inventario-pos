@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Mesa, Pedido, PedidoItem, Producto, Usuario
+from app.models import Division, Mesa, Pedido, PedidoItem, Producto, Usuario
 from app.schemas import (
     PedidoCreate,
     PedidoItemOut,
@@ -160,7 +160,7 @@ def cerrar_pedido(pedido_id: int, db: Session = Depends(get_db)):
 
     pedido.estado = "cerrado"
 
-    # Si la mesa ya no tiene pedidos abiertos, vuelve a estar disponible
+    # La mesa se libera solo si no quedan pedidos abiertos NI divisiones pendientes
     if pedido.mesa_id:
         abiertos = (
             db.query(Pedido)
@@ -171,7 +171,12 @@ def cerrar_pedido(pedido_id: int, db: Session = Depends(get_db)):
             )
             .count()
         )
-        if abiertos == 0:
+        divisiones_pendientes = (
+            db.query(Division)
+            .filter(Division.mesa_id == pedido.mesa_id, Division.estado == "pendiente")
+            .count()
+        )
+        if abiertos == 0 and divisiones_pendientes == 0:
             mesa = db.query(Mesa).filter(Mesa.id == pedido.mesa_id).first()
             if mesa:
                 mesa.estado = "disponible"

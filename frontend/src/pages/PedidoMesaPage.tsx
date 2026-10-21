@@ -1,7 +1,10 @@
 /** Pantalla de Pedido por Mesa - POS para mesero/administrador. */
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
+import CuentaModal from "../components/CuentaModal";
+import DivisionModal from "../components/DivisionModal";
 
 interface Mesa {
   id: number;
@@ -33,6 +36,7 @@ interface Pedido {
 }
 
 export default function PedidoMesaPage() {
+  const [searchParams] = useSearchParams();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -40,6 +44,10 @@ export default function PedidoMesaPage() {
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
+
+  // Modales de cuenta y división
+  const [mostrarCuenta, setMostrarCuenta] = useState(false);
+  const [mostrarDivision, setMostrarDivision] = useState(false);
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -71,6 +79,17 @@ export default function PedidoMesaPage() {
   useEffect(() => {
     cargarCatalogos();
   }, []);
+
+  // Mesa seleccionada automáticamente al venir desde el panel de Mesas
+  useEffect(() => {
+    const mesaParam = searchParams.get("mesa");
+    if (mesaParam) {
+      setMesaId(Number(mesaParam));
+      setCarrito([]);
+      setMensaje(null);
+      setError(null);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (mesaId) cargarPedidos(Number(mesaId));
@@ -162,22 +181,32 @@ export default function PedidoMesaPage() {
     <div className="page">
       <div className="page-head">
         <h2>Pedido por mesa</h2>
-        <select
-          className="select-mesa"
-          value={mesaId}
-          onChange={(e) => {
-            setMesaId(e.target.value ? Number(e.target.value) : "");
-            setCarrito([]);
-            setMensaje(null);
-          }}
-        >
-          <option value="">— Seleccionar mesa —</option>
-          {mesas.map((m) => (
-            <option key={m.id} value={m.id}>
-              Mesa {m.numero} ({m.estado})
-            </option>
-          ))}
-        </select>
+        <div className="filters">
+          <select
+            className="select-mesa"
+            value={mesaId}
+            onChange={(e) => {
+              setMesaId(e.target.value ? Number(e.target.value) : "");
+              setCarrito([]);
+              setMensaje(null);
+            }}
+          >
+            <option value="">— Seleccionar mesa —</option>
+            {mesas.map((m) => (
+              <option key={m.id} value={m.id}>
+                Mesa {m.numero} ({m.estado})
+              </option>
+            ))}
+          </select>
+          {mesaId !== "" && (
+            <button
+              className="btn-secondary"
+              onClick={() => setMostrarCuenta(true)}
+            >
+              Ver cuenta
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="error-msg">{error}</p>}
@@ -305,6 +334,30 @@ export default function PedidoMesaPage() {
           </div>
         )}
       </section>
+
+      {/* Ventana de cuenta de la mesa */}
+      {mostrarCuenta && mesaId !== "" && (
+        <CuentaModal
+          mesaId={Number(mesaId)}
+          onClose={() => setMostrarCuenta(false)}
+          onDividir={() => {
+            setMostrarCuenta(false);
+            setMostrarDivision(true);
+          }}
+        />
+      )}
+
+      {/* Ventana de división de cuenta */}
+      {mostrarDivision && mesaId !== "" && (
+        <DivisionModal
+          mesaId={Number(mesaId)}
+          onClose={() => setMostrarDivision(false)}
+          onConfirmado={() => {
+            cargarPedidos(Number(mesaId));
+            cargarCatalogos();
+          }}
+        />
+      )}
     </div>
   );
 }

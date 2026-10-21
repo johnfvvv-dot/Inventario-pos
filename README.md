@@ -11,8 +11,10 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 
 - Login con roles **admin** y **mesero**
 - Inventario: alta, ajuste de stock y eliminación de productos
-- Mesas: creación, estado (disponible/ocupada) y acceso a pedidos
+- Mesas: creación, estado (disponible/ocupada), apertura directa del pedido y consulta de cuenta
 - Pedidos: selección de mesa, carrito, descuento automático de stock y cierre/cobro
+- **Cuenta por mesa:** total en vivo, cierre de cuenta sin liberar la mesa (permite abrir una nueva cuenta en la misma mesa)
+- **División de cuenta:** reparto entre clientes con alias (Cliente A, B, C...), subtotales por cliente y cobro individual
 - Reportes: ventas totales, mesas atendidas, unidades vendidas, top de productos y estado del inventario
 
 ## Requisitos
