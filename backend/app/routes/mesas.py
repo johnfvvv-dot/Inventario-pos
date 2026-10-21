@@ -257,8 +257,10 @@ def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
             detail="No se puede eliminar: la mesa tiene una cuenta pendiente.",
         )
 
-    # Historial: se conservan los pedidos cerrados, pero se desvinculan
-    db.query(Pedido).filter(Pedido.mesa_id == mesa.id).update({"mesa_id": None})
+    # Historial: se conservan los pedidos (cerrados) con el numero de mesa
+    db.query(Pedido).filter(Pedido.mesa_id == mesa.id).update(
+        {"mesa_id": None, "mesa_numero_historico": mesa.numero}
+    )
 
     numero = mesa.numero
     grupo = mesa.grupo

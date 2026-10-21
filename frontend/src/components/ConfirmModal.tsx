@@ -12,6 +12,7 @@ interface Props {
   onCancelar: () => void;
   procesando?: boolean;
   error?: string | null;
+  accionesExtra?: React.ReactNode;
 }
 
 export default function ConfirmModal({
@@ -23,6 +24,7 @@ export default function ConfirmModal({
   onCancelar,
   procesando = false,
   error = null,
+  accionesExtra = null,
 }: Props) {
   return (
     <div className="modal-overlay" onClick={onCancelar}>
@@ -39,6 +41,7 @@ export default function ConfirmModal({
         {error && <p className="error-msg">{error}</p>}
 
         <div className="modal-actions">
+          {accionesExtra}
           <button className="btn-secondary" onClick={onCancelar} disabled={procesando}>
             {cancelar}
           </button>

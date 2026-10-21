@@ -29,6 +29,7 @@ export default function MesasPage() {
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ mesaId: number; texto: string } | null>(null);
   const [porEliminar, setPorEliminar] = useState<Mesa | null>(null);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
   // Modales
@@ -111,14 +112,15 @@ export default function MesasPage() {
 
   const eliminarMesa = async () => {
     if (!porEliminar) return;
+    setErrorEliminar(null);
     try {
       const res: any = await api.deleteMesa(porEliminar.id);
       setMensaje(res.message || "Mesa eliminada");
       setPorEliminar(null);
       await cargarMesas();
     } catch (err: any) {
-      setError(err.message);
-      setPorEliminar(null);
+      // El modal permanece abierto con el motivo del rechazo
+      setErrorEliminar(err.message);
     }
   };
 
@@ -307,7 +309,10 @@ export default function MesasPage() {
               <button
                 className="btn-icon danger"
                 title="Eliminar mesa"
-                onClick={() => setPorEliminar(mesa)}
+                onClick={() => {
+                  setErrorEliminar(null);
+                  setPorEliminar(mesa);
+                }}
               >
                 ×
               </button>
@@ -329,8 +334,39 @@ export default function MesasPage() {
           aceptar="Aceptar"
           cancelar="Cancelar"
           onConfirmar={eliminarMesa}
-          onCancelar={() => setPorEliminar(null)}
-          error={error}
+          onCancelar={() => {
+            setPorEliminar(null);
+            setErrorEliminar(null);
+          }}
+          error={errorEliminar}
+          accionesExtra={
+            errorEliminar ? (
+              <>
+                <button
+                  className="btn-secondary btn-small"
+                  onClick={() => {
+                    const id = porEliminar.id;
+                    setPorEliminar(null);
+                    setErrorEliminar(null);
+                    setMesaCuenta(id);
+                  }}
+                >
+                  Ver la cuenta
+                </button>
+                <button
+                  className="btn-secondary btn-small"
+                  onClick={() => {
+                    const id = porEliminar.id;
+                    setPorEliminar(null);
+                    setErrorEliminar(null);
+                    navigate(`/admin/pedidos?mesa=${id}`);
+                  }}
+                >
+                  Ver el pedido abierto
+                </button>
+              </>
+            ) : null
+          }
         />
       )}
 

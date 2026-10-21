@@ -300,7 +300,11 @@ def historial_ventas(
                 "estado": pedido.estado,
                 "forma_pago": pedido.forma_pago or "efectivo",
                 "total": pedido.total,
-                "mesa_numero": mesa_obj.numero if mesa_obj else None,
+                "mesa_numero": (
+                    mesa_obj.numero
+                    if mesa_obj
+                    else pedido.mesa_numero_historico
+                ),
                 "usuario_nombre": usuario.nombre if usuario else "",
                 "productos": productos_txt,
             }

@@ -235,6 +235,7 @@ class PedidoItemAjuste(BaseModel):
 class PedidoOut(BaseModel):
     id: int
     mesa: Optional[MesaOut] = None
+    mesa_numero_historico: Optional[int] = None
     usuario: UsuarioOut
     items: List[PedidoItemOut]
     fecha: datetime

@@ -80,6 +80,8 @@ class Pedido(Base):
     estado = Column(String(20), default="abierto")  # abierto | cerrado | dividido
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
     fecha_cierre = Column(DateTime, nullable=True)
+    # Numero de mesa conservado cuando la mesa se elimina (historial)
+    mesa_numero_historico = Column(Integer, nullable=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")

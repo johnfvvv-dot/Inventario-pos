@@ -51,6 +51,11 @@ def _pedido_out(pedido: Pedido) -> PedidoOut:
     return PedidoOut(
         id=pedido.id,
         mesa=pedido.mesa,
+        mesa_numero_historico=(
+            pedido.mesa_numero_historico
+            if pedido.mesa is None
+            else (pedido.mesa.numero if pedido.mesa else None)
+        ),
         usuario=pedido.usuario,
         items=items,
         fecha=pedido.fecha,

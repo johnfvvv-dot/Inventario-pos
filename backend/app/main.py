@@ -174,6 +174,18 @@ def _migrar_alias_usuarios() -> None:
                 )
             )
 
+        # Pedidos Antiguos: guardar el numero de mesa historico
+        try:
+            conexion.execute(
+                text(
+                    "UPDATE pedidos SET mesa_numero_historico = "
+                    "(SELECT numero FROM mesas WHERE mesas.id = pedidos.mesa_id) "
+                    "WHERE mesa_id IS NOT NULL AND mesa_numero_historico IS NULL"
+                )
+            )
+        except Exception:
+            pass
+
         # Mesas antiguas: completar tipo/grupo/posicion
         try:
             conexion.execute(
