@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
+import ConfirmModal from "../components/ConfirmModal";
 
 interface Producto {
   id: number;
@@ -50,6 +51,7 @@ export default function InventarioPage() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [mostrarCategorias, setMostrarCategorias] = useState(false);
   const [editando, setEditando] = useState<Producto | null>(null);
+  const [porEliminar, setPorEliminar] = useState<Producto | null>(null);
   const [nuevoProducto, setNuevoProducto] = useState({
     nombre: "",
     descripcion: "",
@@ -148,10 +150,12 @@ export default function InventarioPage() {
     setMostrarForm(true);
   };
 
-  const eliminar = async (id: number) => {
-    if (!window.confirm("¿Eliminar este producto?")) return;
+  const eliminar = async () => {
+    if (!porEliminar) return;
     try {
-      await api.deleteProducto(id);
+      await api.deleteProducto(porEliminar.id);
+      setMensaje(`Producto "${porEliminar.nombre}" eliminado`);
+      setPorEliminar(null);
       await Promise.all([cargar(), cargarCategorias()]);
     } catch (err: any) {
       setError(err.message);
@@ -308,6 +312,7 @@ export default function InventarioPage() {
                   ) : (
                     <div className="stock-editor">
                       <input
+                        key={`${p.id}-${p.stock}`}
                         type="number"
                         min="0"
                         className="stock-input"
@@ -353,7 +358,7 @@ export default function InventarioPage() {
                     <button
                       className="btn-icon danger"
                       title="Eliminar"
-                      onClick={() => eliminar(p.id)}
+                      onClick={() => setPorEliminar(p)}
                     >
                       ×
                     </button>
@@ -397,10 +402,23 @@ export default function InventarioPage() {
         </div>
       )}
 
+      {/* Confirmación de borrado */}
+      {porEliminar && (
+        <ConfirmModal
+          titulo="Eliminar producto"
+          mensaje={`¿Eliminar este producto? (${porEliminar.nombre})`}
+          aceptar="Aceptar"
+          cancelar="Cancelar"
+          onConfirmar={eliminar}
+          onCancelar={() => setPorEliminar(null)}
+          error={error}
+        />
+      )}
+
       {/* Formulario */}
       {mostrarForm && (
         <div className="modal-overlay" onClick={() => setMostrarForm(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-box modal-producto" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>{editando ? `Editar: ${editando.nombre}` : "Nuevo producto"}</h3>
               <button className="btn-icon" onClick={() => setMostrarForm(false)}>
@@ -418,13 +436,14 @@ export default function InventarioPage() {
                   required
                 />
               </div>
-              <div className="form-row">
+              <div className="form-row form-row-3">
                 <div className="form-group">
                   <label>Precio *</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0.01"
+                    inputMode="decimal"
                     value={nuevoProducto.precio}
                     onChange={(e) =>
                       setNuevoProducto((p) => ({ ...p, precio: e.target.value }))
@@ -437,31 +456,33 @@ export default function InventarioPage() {
                   <input
                     type="number"
                     min="0"
+                    inputMode="numeric"
+                    className="input-stock"
                     value={nuevoProducto.stock}
                     onChange={(e) =>
                       setNuevoProducto((p) => ({ ...p, stock: e.target.value }))
                     }
                   />
                 </div>
-              </div>
-              <div className="form-group">
-                <label>Categoría</label>
-                <select
-                  value={nuevoProducto.categoria_id}
-                  onChange={(e) =>
-                    setNuevoProducto((p) => ({
-                      ...p,
-                      categoria_id: e.target.value ? Number(e.target.value) : "",
-                    }))
-                  }
-                >
-                  <option value="">Sin categoría</option>
-                  {categorias.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
+                <div className="form-group">
+                  <label>Categoría</label>
+                  <select
+                    value={nuevoProducto.categoria_id}
+                    onChange={(e) =>
+                      setNuevoProducto((p) => ({
+                        ...p,
+                        categoria_id: e.target.value ? Number(e.target.value) : "",
+                      }))
+                    }
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label>Descripción</label>

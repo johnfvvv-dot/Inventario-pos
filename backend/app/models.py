@@ -49,12 +49,22 @@ class Producto(Base):
 
 
 class Mesa(Base):
+    """Mesa o puesto de barra.
+
+    tipo:  "mesa"  -> mesa normal
+           "barra" -> puesto de barra (varias cuentas para la misma barra)
+    grupo: nombre compartido de la barra (ej: "Barra 1")
+    """
+
     __tablename__ = "mesas"
 
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(Integer, unique=True, nullable=False)
     capacidad = Column(Integer, nullable=False, default=4)
     estado = Column(String(20), default="disponible")  # disponible | ocupada | cerrada
+    tipo = Column(String(20), default="mesa")  # mesa | barra
+    grupo = Column(String(60), nullable=True)  # ej: "Barra 1"
+    posicion = Column(Integer, default=1)
 
     pedidos = relationship("Pedido", back_populates="mesa")
 

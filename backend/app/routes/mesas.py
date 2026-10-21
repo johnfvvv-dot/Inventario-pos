@@ -1,4 +1,4 @@
-"""Endpoints para gestión de mesas."""
+"""Endpoints para gestión de mesas y barras."""
 
 from typing import List
 
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Division, Mesa, Pedido
-from app.schemas import EstadoUpdate, MesaCreate, MesaListadoOut, MesaOut
+from app.schemas import BarraCreate, EstadoUpdate, MesaCreate, MesaListadoOut, MesaOut
 
 router = APIRouter(tags=["mesas"])
 
@@ -62,6 +62,7 @@ def crear_mesa(datos: MesaCreate, db: Session = Depends(get_db)):
         numero=datos.numero,
         capacidad=datos.capacidad,
         estado="disponible",
+        tipo="mesa",
     )
     db.add(nueva_mesa)
     db.commit()
@@ -69,10 +70,50 @@ def crear_mesa(datos: MesaCreate, db: Session = Depends(get_db)):
     return nueva_mesa
 
 
+@router.post("/barra", response_model=List[MesaOut], status_code=201)
+def crear_barra(datos: BarraCreate, db: Session = Depends(get_db)):
+    """Crea una barra con varias cuentas independientes (una por cliente).
+
+    Ej: Barra 2 con 4 cuentas genera 4 mesas del grupo "Barra 2",
+    cada una con su propia cuenta.
+    """
+    cuentas = max(1, min(datos.cuentas, 20))
+    numero_base = datos.numero * 100  # evita chocar con mesas numeradas
+
+    existentes = (
+        db.query(Mesa)
+        .filter(Mesa.grupo == f"Barra {datos.numero}")
+        .all()
+    )
+    if existentes:
+        raise HTTPException(
+            status_code=400, detail=f"La Barra {datos.numero} ya existe"
+        )
+
+    grupo = f"Barra {datos.numero}"
+    creadas = []
+    for posicion in range(1, cuentas + 1):
+        mesa = Mesa(
+            numero=numero_base + posicion,
+            capacidad=datos.capacidad,
+            estado="disponible",
+            tipo="barra",
+            grupo=grupo,
+            posicion=posicion,
+        )
+        db.add(mesa)
+        creadas.append(mesa)
+
+    db.commit()
+    for mesa in creadas:
+        db.refresh(mesa)
+    return creadas
+
+
 @router.get("/", response_model=List[MesaListadoOut])
 def listar_mesas(db: Session = Depends(get_db)):
-    """Listar todas las mesas con el resumen de su cuenta pendiente."""
-    mesas = db.query(Mesa).order_by(Mesa.numero).all()
+    """Listar todas las mesas y puestos de barra con su cuenta pendiente."""
+    mesas = db.query(Mesa).order_by(Mesa.tipo, Mesa.grupo, Mesa.numero).all()
     resumen = _resumen_cuenta(db, mesas)
 
     resultado = []
@@ -95,6 +136,9 @@ def listar_mesas(db: Session = Depends(get_db)):
                 numero=mesa.numero,
                 capacidad=mesa.capacidad,
                 estado=mesa.estado,
+                tipo=mesa.tipo or "mesa",
+                grupo=mesa.grupo,
+                posicion=mesa.posicion or 1,
                 total_cuenta=info["total"],
                 tiene_cuenta_pendiente=bool(pendientes),
                 detalle_pendiente=" · ".join(pendientes),
@@ -185,3 +229,47 @@ def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(mesa)
     return mesa
+
+
+@router.delete("/{mesa_id}")
+def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
+    """Elimina una mesa o puesto de barra (solo si no tiene cuentas pendientes)."""
+    mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+
+    db.flush()
+    pedidos_abiertos = (
+        db.query(func.count(Pedido.id))
+        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .scalar()
+        or 0
+    )
+    divisiones_pendientes = (
+        db.query(func.count(Division.id))
+        .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
+        .scalar()
+        or 0
+    )
+    if pedidos_abiertos or divisiones_pendientes:
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar: la mesa tiene una cuenta pendiente.",
+        )
+
+    # Historial: se conservan los pedidos cerrados, pero se desvinculan
+    db.query(Pedido).filter(Pedido.mesa_id == mesa.id).update({"mesa_id": None})
+
+    numero = mesa.numero
+    grupo = mesa.grupo
+    db.delete(mesa)
+    db.commit()
+
+    if grupo:
+        # Si era la última cuenta de la barra, se elimina el grupo completo
+        restantes = db.query(Mesa).filter(Mesa.grupo == grupo).count()
+        if restantes == 0:
+            return {"message": f"Barra '{grupo}' eliminada", "mesa": numero}
+        return {"message": f"Cuenta eliminada de '{grupo}'", "mesa": numero}
+
+    return {"message": f"Mesa {numero} eliminada", "mesa": numero}

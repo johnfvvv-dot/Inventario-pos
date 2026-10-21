@@ -45,7 +45,7 @@ class UsuarioOut(BaseModel):
     nombre: Optional[str] = None
     rol: str
     activo: bool = True
-    creado_en: datetime
+    creado_en: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -124,16 +124,29 @@ class MesaCreate(MesaBase):
 
 class MesaOut(MesaBase):
     id: int
+    tipo: str = "mesa"
+    grupo: Optional[str] = None
+    posicion: int = 1
     model_config = ConfigDict(from_attributes=True)
 
 
 class MesaListadoOut(MesaBase):
     """Mesa con el resumen de su cuenta pendiente (para el panel de mesas)."""
     id: int
+    tipo: str = "mesa"
+    grupo: Optional[str] = None
+    posicion: int = 1
     total_cuenta: float = 0.0
     tiene_cuenta_pendiente: bool = False
     detalle_pendiente: str = ""
     model_config = ConfigDict(from_attributes=True)
+
+
+class BarraCreate(BaseModel):
+    """Crea una barra con varias cuentas independientes."""
+    numero: int = Field(..., gt=0)
+    capacidad: int = Field(default=1, gt=0)
+    cuentas: int = Field(default=1, ge=1, le=20)
 
 
 class TransferirCuentaOut(BaseModel):

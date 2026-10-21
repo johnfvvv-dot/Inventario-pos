@@ -1111,6 +1111,56 @@ select:focus {
   margin-right: 0;
 }
 
+/* -------------------- MODALES DE CONFIRMACIÓN -------------------- */
+
+.modal-confirm {
+  max-width: 420px;
+}
+
+.confirm-mensaje {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 0.9rem;
+  color: var(--text);
+}
+
+/* Fila de 3 columnas para el formulario de producto */
+.form-row-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.input-stock {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Modal del formulario de producto: mas ancho para que todo se vea */
+.modal-producto {
+  max-width: 560px;
+  width: min(560px, 94vw);
+}
+
+.modal-producto .form-group {
+  min-width: 0;
+}
+
+.modal-producto input,
+.modal-producto select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Barra: acento visual distinto */
+.mesa-barra {
+  border-top-style: dashed;
+}
+
+.mesa-barra .mesa-numero {
+  font-size: 0.95rem;
+}
+
 /* -------------------- EDITOR DE STOCK / ROLES -------------------- */
 
 .stock-editor {

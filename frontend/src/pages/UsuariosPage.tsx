@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
+import CambiarClaveModal from "../components/CambiarClaveModal";
+import ConfirmModal from "../components/ConfirmModal";
 
 interface Usuario {
   id: number;
@@ -23,6 +25,8 @@ export default function UsuariosPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [cambiarClaveDe, setCambiarClaveDe] = useState<Usuario | null>(null);
+  const [porEliminar, setPorEliminar] = useState<Usuario | null>(null);
 
   const cargar = async () => {
     try {
@@ -80,26 +84,31 @@ export default function UsuariosPage() {
     }
   };
 
-  const cambiarClave = async (u: Usuario) => {
-    const clave = window.prompt(`Nueva clave para "${u.alias}" (mínimo 4 caracteres):`);
-    if (!clave) return;
+  const guardarClave = async (clave: string) => {
+    if (!cambiarClaveDe) return;
+    setCargando(true);
     try {
-      await api.cambiarClave(u.id, clave);
-      setMensaje(`Clave de "${u.alias}" actualizada`);
+      await api.cambiarClave(cambiarClaveDe.id, clave);
+      setMensaje(`Clave de "${cambiarClaveDe.alias}" actualizada`);
+      setCambiarClaveDe(null);
       await cargar();
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setCargando(false);
     }
   };
 
-  const eliminar = async (u: Usuario) => {
-    if (!window.confirm(`¿Eliminar el usuario "${u.alias}"?`)) return;
+  const eliminarUsuario = async () => {
+    if (!porEliminar) return;
     try {
-      await api.deleteUsuario(u.id);
-      setMensaje(`Usuario "${u.alias}" eliminado`);
+      await api.deleteUsuario(porEliminar.id);
+      setMensaje(`Usuario "${porEliminar.alias}" eliminado`);
+      setPorEliminar(null);
       await cargar();
     } catch (err: any) {
       setError(err.message);
+      setPorEliminar(null);
     }
   };
 
@@ -213,7 +222,7 @@ export default function UsuariosPage() {
                   <td className="actions">
                     <button
                       className="btn-secondary btn-small"
-                      onClick={() => cambiarClave(u)}
+                      onClick={() => setCambiarClaveDe(u)}
                     >
                       Cambiar clave
                     </button>
@@ -226,7 +235,7 @@ export default function UsuariosPage() {
                     <button
                       className="btn-icon danger"
                       title="Eliminar"
-                      onClick={() => eliminar(u)}
+                      onClick={() => setPorEliminar(u)}
                     >
                       ×
                     </button>
@@ -244,6 +253,30 @@ export default function UsuariosPage() {
           </table>
         </div>
       </section>
+
+      {/* Cambio de clave */}
+      {cambiarClaveDe && (
+        <CambiarClaveModal
+          alias={cambiarClaveDe.alias}
+          onConfirmar={guardarClave}
+          onCancelar={() => setCambiarClaveDe(null)}
+          procesando={cargando}
+          error={error}
+        />
+      )}
+
+      {/* Confirmación de borrado */}
+      {porEliminar && (
+        <ConfirmModal
+          titulo="Eliminar usuario"
+          mensaje={`¿Eliminar el usuario "${porEliminar.alias}"?`}
+          aceptar="Aceptar"
+          cancelar="Cancelar"
+          onConfirmar={eliminarUsuario}
+          onCancelar={() => setPorEliminar(null)}
+          error={error}
+        />
+      )}
 
       {/* Permisos por rol */}
       <section className="panel">

@@ -174,6 +174,28 @@ def _migrar_alias_usuarios() -> None:
                 )
             )
 
+        # Mesas antiguas: completar tipo/grupo/posicion
+        try:
+            conexion.execute(
+                text("UPDATE mesas SET tipo = 'mesa' WHERE tipo IS NULL OR tipo = ''")
+            )
+            conexion.execute(
+                text("UPDATE mesas SET posicion = 1 WHERE posicion IS NULL")
+            )
+        except Exception:
+            pass
+
+        # Usuarios antiguos sin fecha de creacion
+        try:
+            conexion.execute(
+                text(
+                    "UPDATE usuarios SET creado_en = datetime('now') "
+                    "WHERE creado_en IS NULL"
+                )
+            )
+        except Exception:
+            pass
+
         # La columna 'email' ya no se usa: se elimina (SQLite 3.35+)
         if "email" in columnas:
             try:

@@ -1,8 +1,9 @@
-/** Pantalla de Gestión de Mesas - Administrador. */
+/** Pantalla de Gestión de Mesas - Administrador. Mesas eventuales y barras. */
 
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import ConfirmModal from "../components/ConfirmModal";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
@@ -12,22 +13,23 @@ interface Mesa {
   numero: number;
   capacidad: number;
   estado: string;
+  tipo: string;
+  grupo: string | null;
+  posicion: number;
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
   detalle_pendiente?: string;
-}
-
-interface Aviso {
-  mesaId: number;
-  texto: string;
 }
 
 export default function MesasPage() {
   const navigate = useNavigate();
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
+  const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "1", cuentas: "3" });
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<Aviso | null>(null);
+  const [aviso, setAviso] = useState<{ mesaId: number; texto: string } | null>(null);
+  const [porEliminar, setPorEliminar] = useState<Mesa | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
 
   // Modales
   const [mesaCuenta, setMesaCuenta] = useState<number | null>(null);
@@ -48,8 +50,7 @@ export default function MesasPage() {
     cargarMesas();
   }, []);
 
-  /* Sincronización en vivo: refresca el estado de las mesas periódicamente
-     para que los cambios hechos desde la ventana de cuenta se reflejen solos */
+  /* Sincronización en vivo: refresca el estado de las mesas periódicamente */
   useEffect(() => {
     const intervalo = setInterval(cargarMesas, 15000);
     return () => clearInterval(intervalo);
@@ -60,6 +61,25 @@ export default function MesasPage() {
     try {
       await api.createMesa(Number(nuevaMesa.numero), Number(nuevaMesa.capacidad));
       setNuevaMesa({ numero: "", capacidad: "4" });
+      setMensaje("Mesa creada");
+      await cargarMesas();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const crearBarra = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const res: any = await api.createBarra(
+        Number(nuevaBarra.numero),
+        Number(nuevaBarra.capacidad),
+        Number(nuevaBarra.cuentas)
+      );
+      setNuevaBarra({ numero: "", capacidad: "1", cuentas: "3" });
+      setMensaje(
+        `${res.length} cuenta(s) creada(s) para la ${res[0]?.grupo || "Barra"}`
+      );
       await cargarMesas();
     } catch (err: any) {
       setError(err.message);
@@ -89,7 +109,19 @@ export default function MesasPage() {
     }
   };
 
-  /** Abre el pedido con la mesa ya seleccionada */
+  const eliminarMesa = async () => {
+    if (!porEliminar) return;
+    try {
+      const res: any = await api.deleteMesa(porEliminar.id);
+      setMensaje(res.message || "Mesa eliminada");
+      setPorEliminar(null);
+      await cargarMesas();
+    } catch (err: any) {
+      setError(err.message);
+      setPorEliminar(null);
+    }
+  };
+
   const abrirPedido = (mesa: Mesa) => {
     navigate(`/admin/pedidos?mesa=${mesa.id}`);
   };
@@ -101,6 +133,14 @@ export default function MesasPage() {
       ? "badge badge-warning"
       : "badge badge-danger";
 
+  const etiquetaMesa = (mesa: Mesa) =>
+    mesa.tipo === "barra"
+      ? `${mesa.grupo} - Cuenta ${mesa.posicion}`
+      : `Mesa ${mesa.numero}`;
+
+  const cuentasBarra = (grupo: string) =>
+    mesas.filter((m) => m.grupo === grupo).length;
+
   return (
     <div className="page">
       <div className="page-head">
@@ -111,6 +151,7 @@ export default function MesasPage() {
       </div>
 
       {error && <p className="error-msg">{error}</p>}
+      {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {/* Aviso de mesa con cuenta pendiente */}
       {aviso && (
@@ -145,6 +186,7 @@ export default function MesasPage() {
         </div>
       )}
 
+      {/* Crear mesa */}
       <form className="inline-form" onSubmit={crearMesa}>
         <div className="form-group">
           <label>Número de mesa</label>
@@ -171,11 +213,58 @@ export default function MesasPage() {
         </button>
       </form>
 
+      {/* Crear barra */}
+      <form className="inline-form" onSubmit={crearBarra}>
+        <div className="form-group">
+          <label>Número de barra</label>
+          <input
+            type="number"
+            min="1"
+            value={nuevaBarra.numero}
+            onChange={(e) => setNuevaBarra((b) => ({ ...b, numero: e.target.value }))}
+            placeholder="Ej: 2"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Cuentas (clientes)</label>
+          <input
+            type="number"
+            min="1"
+            max="20"
+            value={nuevaBarra.cuentas}
+            onChange={(e) => setNuevaBarra((b) => ({ ...b, cuentas: e.target.value }))}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Capacidad</label>
+          <input
+            type="number"
+            min="1"
+            value={nuevaBarra.capacidad}
+            onChange={(e) => setNuevaBarra((b) => ({ ...b, capacidad: e.target.value }))}
+          />
+        </div>
+        <button type="submit" className="btn-primary">
+          + Crear barra
+        </button>
+        <span className="muted small">
+          Cada cliente de la barra tiene su propia cuenta.
+        </span>
+      </form>
+
       <div className="mesas-grid">
         {mesas.map((mesa) => (
-          <div key={mesa.id} className={`mesa-card mesa-${mesa.estado}`}>
-            <div className="mesa-numero">Mesa {mesa.numero}</div>
-            <div className="muted small">{mesa.capacidad} plazas</div>
+          <div
+            key={mesa.id}
+            className={`mesa-card mesa-${mesa.estado} ${mesa.tipo === "barra" ? "mesa-barra" : ""}`}
+          >
+            <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
+            <div className="muted small">
+              {mesa.capacidad} plazas
+              {mesa.tipo === "barra" && ` · ${cuentasBarra(mesa.grupo || "")} cuentas en la barra`}
+            </div>
             <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
 
             {mesa.tiene_cuenta_pendiente && (
@@ -184,7 +273,7 @@ export default function MesasPage() {
               </div>
             )}
 
-            <div className="mesa-actions">
+            <div className="mesa-acciones">
               {mesa.estado === "disponible" && (
                 <button
                   className="btn-secondary btn-small"
@@ -204,22 +293,46 @@ export default function MesasPage() {
               <button
                 className="btn-primary btn-small"
                 onClick={() => abrirPedido(mesa)}
-                title={`Abrir el pedido de la mesa ${mesa.numero}`}
+                title={`Abrir el pedido de ${etiquetaMesa(mesa)}`}
               >
                 Pedido
               </button>
               <button
                 className="btn-secondary btn-small"
                 onClick={() => setMesaCuenta(mesa.id)}
-                title={`Ver la cuenta de la mesa ${mesa.numero}`}
+                title={`Ver la cuenta de ${etiquetaMesa(mesa)}`}
               >
                 Cuenta
+              </button>
+              <button
+                className="btn-icon danger"
+                title="Eliminar mesa"
+                onClick={() => setPorEliminar(mesa)}
+              >
+                ×
               </button>
             </div>
           </div>
         ))}
         {mesas.length === 0 && <p className="empty-state">No hay mesas registradas.</p>}
       </div>
+
+      {/* Confirmación de borrado */}
+      {porEliminar && (
+        <ConfirmModal
+          titulo="Eliminar mesa"
+          mensaje={
+            porEliminar.tipo === "barra"
+              ? `¿Eliminar la cuenta ${porEliminar.posicion} de ${porEliminar.grupo}?`
+              : `¿Eliminar la mesa ${porEliminar.numero}?`
+          }
+          aceptar="Aceptar"
+          cancelar="Cancelar"
+          onConfirmar={eliminarMesa}
+          onCancelar={() => setPorEliminar(null)}
+          error={error}
+        />
+      )}
 
       {/* Ventana de cuenta */}
       {mesaCuenta !== null && (
@@ -234,10 +347,7 @@ export default function MesasPage() {
             setMesaCuenta(null);
             setMesaTransferir(mesaCuenta);
           }}
-          onActualizado={() => {
-            // El cambio se refleja de inmediato en el panel de mesas
-            cargarMesas();
-          }}
+          onActualizado={() => cargarMesas()}
         />
       )}
 
@@ -246,9 +356,7 @@ export default function MesasPage() {
         <DivisionModal
           mesaId={mesaDivision}
           onClose={() => setMesaDivision(null)}
-          onConfirmado={() => {
-            cargarMesas();
-          }}
+          onConfirmado={() => cargarMesas()}
         />
       )}
 
