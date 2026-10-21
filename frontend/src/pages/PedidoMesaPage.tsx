@@ -350,6 +350,10 @@ export default function PedidoMesaPage() {
             setMostrarCuenta(false);
             setMostrarTransferir(true);
           }}
+          onActualizado={() => {
+            cargarPedidos(Number(mesaId));
+            cargarCatalogos();
+          }}
         />
       )}
 

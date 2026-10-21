@@ -51,9 +51,16 @@ interface Props {
   onClose: () => void;
   onDividir?: () => void;
   onTransferir?: () => void;
+  onActualizado?: () => void;
 }
 
-export default function CuentaModal({ mesaId, onClose, onDividir, onTransferir }: Props) {
+export default function CuentaModal({
+  mesaId,
+  onClose,
+  onDividir,
+  onTransferir,
+  onActualizado,
+}: Props) {
   const [cuenta, setCuenta] = useState<Cuenta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -77,7 +84,12 @@ export default function CuentaModal({ mesaId, onClose, onDividir, onTransferir }
   const cerrarCuenta = async (liberarMesa = false) => {
     setProcesando(true);
     try {
-      await api.cerrarCuentaMesa(mesaId, liberarMesa);
+      // 1) Cobrar toda la cuenta (pedidos + divisiones)
+      await api.cerrarCuentaMesa(mesaId);
+      // 2) Si se pidió liberar, el backend valida que no queden cuentas pendientes
+      if (liberarMesa) {
+        await api.liberarMesa(mesaId);
+      }
       setConfirmacion(false);
       setMensaje(
         liberarMesa
@@ -85,6 +97,7 @@ export default function CuentaModal({ mesaId, onClose, onDividir, onTransferir }
           : "Cuenta cerrada. La mesa permanece ocupada para una nueva cuenta."
       );
       await cargar();
+      onActualizado?.();
       onClose();
     } catch (err: any) {
       setError(err.message);
@@ -112,6 +125,7 @@ export default function CuentaModal({ mesaId, onClose, onDividir, onTransferir }
       await api.pagarParticipante(participanteId);
       setMensaje(`"${alias}" pagó su parte. La cuenta sigue abierta para los demás.`);
       await cargar();
+      onActualizado?.();
     } catch (err: any) {
       setError(err.message);
     } finally {

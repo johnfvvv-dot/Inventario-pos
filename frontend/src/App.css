@@ -973,21 +973,12 @@ select:focus {
 
 /* -------------------- MESA CON CUENTA PENDIENTE -------------------- */
 
-.mesa-pendiente {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  margin-top: 0.35rem;
-  padding: 0.4rem 0.55rem;
-  background: #fff8ec;
-  border: 1px solid #f0dcb4;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  color: #8a6a20;
-}
-
-.mesa-pendiente strong {
-  font-size: 0.95rem;
+.mesa-pendiente-valor {
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #b9770e;
+  letter-spacing: -0.01em;
 }
 
 /* -------------------- RESPONSIVE -------------------- */

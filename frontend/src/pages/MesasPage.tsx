@@ -48,6 +48,13 @@ export default function MesasPage() {
     cargarMesas();
   }, []);
 
+  /* Sincronización en vivo: refresca el estado de las mesas periódicamente
+     para que los cambios hechos desde la ventana de cuenta se reflejen solos */
+  useEffect(() => {
+    const intervalo = setInterval(cargarMesas, 15000);
+    return () => clearInterval(intervalo);
+  }, []);
+
   const crearMesa = async (e: FormEvent) => {
     e.preventDefault();
     try {
@@ -172,9 +179,8 @@ export default function MesasPage() {
             <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
 
             {mesa.tiene_cuenta_pendiente && (
-              <div className="mesa-pendiente">
-                <strong>${(mesa.total_cuenta || 0).toFixed(2)}</strong> pendiente
-                <span className="muted small">{mesa.detalle_pendiente}</span>
+              <div className="mesa-pendiente-valor">
+                ${(mesa.total_cuenta || 0).toFixed(2)}
               </div>
             )}
 
@@ -192,7 +198,7 @@ export default function MesasPage() {
                   className="btn-secondary btn-small"
                   onClick={() => liberarMesa(mesa)}
                 >
-                  Liberar mesa
+                  Liberar
                 </button>
               )}
               <button
@@ -209,15 +215,6 @@ export default function MesasPage() {
               >
                 Cuenta
               </button>
-              {mesa.tiene_cuenta_pendiente && (
-                <button
-                  className="btn-secondary btn-small"
-                  onClick={() => setMesaTransferir(mesa.id)}
-                  title="Mover la cuenta a otra mesa"
-                >
-                  Transferir
-                </button>
-              )}
             </div>
           </div>
         ))}
@@ -236,6 +233,10 @@ export default function MesasPage() {
           onTransferir={() => {
             setMesaCuenta(null);
             setMesaTransferir(mesaCuenta);
+          }}
+          onActualizado={() => {
+            // El cambio se refleja de inmediato en el panel de mesas
+            cargarMesas();
           }}
         />
       )}
