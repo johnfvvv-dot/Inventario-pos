@@ -9,13 +9,36 @@ Sistema web multiplataforma de inventario y punto de venta para pequeños negoci
 
 ## Funcionalidades (v1)
 
-- Login con roles **admin** y **mesero**
-- Inventario: alta, ajuste de stock y eliminación de productos
-- Mesas: creación, estado (disponible/ocupada), apertura directa del pedido y consulta de cuenta
-- Pedidos: selección de mesa, carrito, descuento automático de stock y cierre/cobro
-- **Cuenta por mesa:** total en vivo, cierre de cuenta sin liberar la mesa (permite abrir una nueva cuenta en la misma mesa)
-- **División de cuenta:** reparto entre clientes con alias (Cliente A, B, C...), subtotales por cliente y cobro individual
-- Reportes: ventas totales, mesas atendidas, unidades vendidas, top de productos y estado del inventario
+### Módulos
+- **Login** con roles `admin` y `mesero` (hash SHA-256), redirección según rol
+- **Inventario:** alta de productos, ajuste de stock (+/−), eliminación, badges de stock (OK / bajo / agotado)
+- **Mesas:** creación, estado (disponible/ocupada), apertura directa del pedido con mesa preseleccionada, importe pendiente en vivo y refresco automático cada 15 s
+- **Pedidos:** selección de mesa, carrito con control de stock, total automático, cobro por pedido
+- **Cuentas por mesa:** total en vivo, detalle por pedido y por división, cierre de cuenta con confirmación (Aceptar / Liberar mesa) sin liberar la mesa por defecto
+- **División de cuenta:** reparto entre clientes con alias, cantidad exacta por producto, subtotales por cliente, resto de la cuenta conservado como bloque único y cobro individual de cada alias
+- **Liberación controlada:** una mesa con cuentas pendientes no se puede liberar; se muestra el aviso *"La mesa aún tiene un pedido abierto."* con acceso directo al pedido abierto
+- **Transferencia de cuenta:** mueve el pedido abierto y las divisiones pendientes a otra mesa (cambio de mesa de los clientes)
+- **Reportes:** ventas totales, mesas atendidas, unidades vendidas, promedio por mesa, top de productos y estado del inventario
+
+### Flujo de trabajo del mesero
+```
+Panel Mesas
+ ├─ [Pedido]  → pedidos con la mesa ya seleccionada
+ ├─ [Cuenta]  → ┌─ Dividir cuenta ────► alias con cantidades por producto
+ │              ├─ Cerrar división ───► cobra 1 cliente, los demás siguen
+ │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa
+ │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa]
+ └─ [Liberar]  → si hay pendientes: aviso + "Ver el pedido abierto"
+```
+
+### API (17 endpoints)
+| Módulo | Endpoints |
+|---|---|
+| Usuarios | `POST /login`, `POST /`, `GET /` |
+| Mesas | `POST /`, `GET /`, `PUT /{id}/estado`, `POST /{id}/liberar` |
+| Inventario | `POST /`, `GET /`, `PUT /{id}/stock`, `DELETE /{id}` |
+| Pedidos | `POST /`, `GET /`, `GET /mesa/{id}`, `PUT /{id}/cerrar` |
+| Cuentas | `GET /mesa/{id}`, `POST /mesa/{id}/cerrar`, `POST /mesa/{id}/transferir`, `POST /dividir`, `POST /division/{id}/pagar`, `POST /participante/{id}/pagar`, `GET /mesa/{id}/divisiones` |
 
 ## Requisitos
 
@@ -105,6 +128,13 @@ git add .
 git commit -m "Descripción del cambio"
 git push -u origin feature/nueva-funcionalidad
 ```
+
+**Repositorio:** https://github.com/johnfvvv-dot/Inventario-pos
+
+### Historial de versiones
+| Tag | Commit | Contenido |
+|-----|--------|-----------|
+| `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 
 ## Escalado a la nube
 
