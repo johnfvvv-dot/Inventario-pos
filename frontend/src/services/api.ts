@@ -1,16 +1,43 @@
 /**
  * Servicios de conexión con el backend FastAPI.
  *
- * Para acceder desde otro dispositivo en la misma red WiFi,
- * cambia localhost por la IP de la PC (ej: http://192.168.1.20:8000/api).
+ * IMPORTANTE: en el celular NUNCA uses "localhost", porque ahí apunta al
+ * propio teléfono. Se usa la IP local de la PC (obténla con `ipconfig`).
+ * Puedes sobrescribirla con la variable de entorno REACT_APP_API_URL.
  */
-export const API_BASE = "http://localhost:8000/api";
+const PC_IP = "192.168.1.6"; // actualizar si cambia la IP de la PC
+
+export const API_BASE =
+  process.env.REACT_APP_API_URL || `http://${PC_IP}:8000/api`;
+
+/** Timeout de la petición: evita que la interfaz se quede cargando eternamente */
+const REQUEST_TIMEOUT_MS = 10000;
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${url}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${url}`, {
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(
+        `El backend no respondió en ${REQUEST_TIMEOUT_MS / 1000}s. ` +
+          `Verifica que esté corriendo en ${API_BASE}`
+      );
+    }
+    throw new Error(
+      `No se pudo conectar con el backend (${API_BASE}). ` +
+        `Revisa que el servidor esté levantado y que la IP ${PC_IP} sea correcta.`
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     let detail = `Error ${response.status}`;
