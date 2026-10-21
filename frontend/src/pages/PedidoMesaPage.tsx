@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
+import TransferirModal from "../components/TransferirModal";
 
 interface Mesa {
   id: number;
@@ -45,9 +46,10 @@ export default function PedidoMesaPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
-  // Modales de cuenta y división
+  // Modales de cuenta, división y transferencia
   const [mostrarCuenta, setMostrarCuenta] = useState(false);
   const [mostrarDivision, setMostrarDivision] = useState(false);
+  const [mostrarTransferir, setMostrarTransferir] = useState(false);
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -344,6 +346,10 @@ export default function PedidoMesaPage() {
             setMostrarCuenta(false);
             setMostrarDivision(true);
           }}
+          onTransferir={() => {
+            setMostrarCuenta(false);
+            setMostrarTransferir(true);
+          }}
         />
       )}
 
@@ -353,6 +359,19 @@ export default function PedidoMesaPage() {
           mesaId={Number(mesaId)}
           onClose={() => setMostrarDivision(false)}
           onConfirmado={() => {
+            cargarPedidos(Number(mesaId));
+            cargarCatalogos();
+          }}
+        />
+      )}
+
+      {/* Ventana de transferencia de cuenta */}
+      {mostrarTransferir && mesaId !== "" && (
+        <TransferirModal
+          mesaId={Number(mesaId)}
+          onClose={() => setMostrarTransferir(false)}
+          onTransferido={() => {
+            setMostrarTransferir(false);
             cargarPedidos(Number(mesaId));
             cargarCatalogos();
           }}

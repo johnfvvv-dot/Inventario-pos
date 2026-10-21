@@ -89,6 +89,10 @@ export const api = {
       body: JSON.stringify({ nuevo_estado }),
     }),
 
+  /** Libera la mesa solo si no tiene cuentas pendientes */
+  liberarMesa: (mesaId: number) =>
+    request(`/mesas/${mesaId}/liberar`, { method: "POST" }),
+
   // ---------- Inventario ----------
   getProductos: () => request("/inventario/"),
 
@@ -133,8 +137,18 @@ export const api = {
   // ---------- Cuentas de mesa ----------
   getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
 
-  cerrarCuentaMesa: (mesaId: number) =>
-    request(`/cuentas/mesa/${mesaId}/cerrar`, { method: "POST" }),
+  /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
+  cerrarCuentaMesa: (mesaId: number, liberarMesa = false) =>
+    request(
+      `/cuentas/mesa/${mesaId}/cerrar${liberarMesa ? "?liberar_mesa=true" : ""}`,
+      { method: "POST" }
+    ),
+
+  /** Transfiere la cuenta abierta a otra mesa */
+  transferirCuenta: (mesaId: number, destinoId: number) =>
+    request(`/cuentas/mesa/${mesaId}/transferir?destino_id=${destinoId}`, {
+      method: "POST",
+    }),
 
   // ---------- División de cuenta ----------
   dividirCuenta: (datos: {

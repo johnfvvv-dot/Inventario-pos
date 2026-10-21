@@ -67,6 +67,22 @@ class MesaOut(MesaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MesaListadoOut(MesaBase):
+    """Mesa con el resumen de su cuenta pendiente (para el panel de mesas)."""
+    id: int
+    total_cuenta: float = 0.0
+    tiene_cuenta_pendiente: bool = False
+    detalle_pendiente: str = ""
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TransferirCuentaOut(BaseModel):
+    mensaje: str
+    mesa_origen: int
+    mesa_destino: int
+    total_transferido: float
+
+
 class EstadoUpdate(BaseModel):
     nuevo_estado: str = Field(..., max_length=20)
 

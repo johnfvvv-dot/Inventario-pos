@@ -3,6 +3,7 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -27,6 +28,7 @@ from app.schemas import (
     ParticipanteOut,
     PedidoOut,
     PedidoItemOut,
+    TransferirCuentaOut,
 )
 
 router = APIRouter(tags=["cuentas"])
@@ -178,8 +180,12 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/mesa/{mesa_id}/cerrar", response_model=CuentaMesaOut)
-def cerrar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
-    """Cierra la cuenta completa de la mesa (pedidos + divisiones) SIN liberar la mesa."""
+def cerrar_cuenta(mesa_id: int, liberar_mesa: bool = False, db: Session = Depends(get_db)):
+    """Cierra la cuenta completa de la mesa (pedidos + divisiones).
+
+    Por defecto la mesa permanece OCUPADA (se puede abrir una nueva cuenta).
+    Con liberar_mesa=True la mesa queda DISPONIBLE al terminar.
+    """
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -207,12 +213,86 @@ def cerrar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
                 participante.pagado = 1
 
     # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
-    if mesa.estado != "ocupada":
-        mesa.estado = "ocupada"
+    mesa.estado = "disponible" if liberar_mesa else "ocupada"
 
     db.commit()
 
     return consultar_cuenta(mesa_id, db)
+
+
+@router.post("/mesa/{mesa_id}/transferir", response_model=TransferirCuentaOut)
+def transferir_cuenta(
+    mesa_id: int, destino_id: int, db: Session = Depends(get_db)
+):
+    """Transfiere la cuenta abierta de una mesa a otra mesa."""
+    origen = db.query(Mesa).filter(Mesa.id == mesa_id).first()
+    if not origen:
+        raise HTTPException(status_code=404, detail="Mesa de origen no encontrada")
+
+    destino = db.query(Mesa).filter(Mesa.id == destino_id).first()
+    if not destino:
+        raise HTTPException(status_code=404, detail="Mesa de destino no encontrada")
+
+    if origen.id == destino.id:
+        raise HTTPException(
+            status_code=400, detail="El destino debe ser otra mesa"
+        )
+
+    db.flush()
+
+    # La mesa destino no debe tener ya una cuenta abierta
+    pedidos_destino = (
+        db.query(func.count(Pedido.id))
+        .filter(Pedido.mesa_id == destino.id, Pedido.estado == "abierto")
+        .scalar()
+        or 0
+    )
+    divisiones_destino = (
+        db.query(func.count(Division.id))
+        .filter(Division.mesa_id == destino.id, Division.estado == "pendiente")
+        .scalar()
+        or 0
+    )
+    if pedidos_destino or divisiones_destino:
+        raise HTTPException(
+            status_code=400,
+            detail="La mesa destino ya tiene una cuenta abierta.",
+        )
+
+    # Mover pedidos abiertos
+    pedidos = (
+        db.query(Pedido)
+        .options(joinedload(Pedido.items))
+        .filter(Pedido.mesa_id == origen.id, Pedido.estado == "abierto")
+        .all()
+    )
+    total = 0.0
+    for pedido in pedidos:
+        pedido.mesa_id = destino.id
+        total += pedido.total or 0.0
+
+    # Mover divisiones pendientes
+    divisiones = _cargar_divisiones(db, origen.id)
+    for division in divisiones:
+        if division.estado == "pendiente":
+            division.mesa_id = destino.id
+            total += division.total or 0.0
+
+    # Estados de las mesas
+    origen.estado = "disponible"
+    destino.estado = "ocupada"
+
+    db.commit()
+
+    return TransferirCuentaOut(
+        mensaje=(
+            f"Cuenta transferida de la mesa {origen.numero} "
+            f"a la mesa {destino.numero}"
+        ),
+        mesa_origen=origen.id,
+        mesa_destino=destino.id,
+        total_transferido=round(total, 2),
+    )
 
 
 @router.post("/dividir", response_model=DivisionOut, status_code=201)

@@ -50,13 +50,15 @@ interface Props {
   mesaId: number;
   onClose: () => void;
   onDividir?: () => void;
+  onTransferir?: () => void;
 }
 
-export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
+export default function CuentaModal({ mesaId, onClose, onDividir, onTransferir }: Props) {
   const [cuenta, setCuenta] = useState<Cuenta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
+  const [confirmacion, setConfirmacion] = useState(false);
 
   const cargar = async () => {
     try {
@@ -72,18 +74,20 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
     cargar();
   }, [mesaId]);
 
-  const cerrarCuenta = async () => {
-    if (!window.confirm("¿Cerrar la cuenta de esta mesa? La mesa seguirá ocupada.")) {
-      return;
-    }
+  const cerrarCuenta = async (liberarMesa = false) => {
     setProcesando(true);
     try {
-      await api.cerrarCuentaMesa(mesaId);
-      setMensaje("Cuenta cerrada. La mesa permanece ocupada para una nueva cuenta.");
+      await api.cerrarCuentaMesa(mesaId, liberarMesa);
+      setConfirmacion(false);
+      setMensaje(
+        liberarMesa
+          ? "Cuenta cerrada y mesa liberada."
+          : "Cuenta cerrada. La mesa permanece ocupada para una nueva cuenta."
+      );
       await cargar();
+      onClose();
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setProcesando(false);
     }
   };
@@ -216,20 +220,60 @@ export default function CuentaModal({ mesaId, onClose, onDividir }: Props) {
               ))}
             </div>
 
-            <div className="modal-actions">
-              {onDividir && (
-                <button className="btn-secondary" onClick={onDividir} disabled={procesando}>
-                  Dividir cuenta
+            {confirmacion ? (
+              <div className="confirm-panel">
+                <p className="confirm-pregunta">
+                  ¿Cerrar la cuenta de esta mesa? La mesa seguirá ocupada.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setConfirmacion(false)}
+                    disabled={procesando}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={() => cerrarCuenta(false)}
+                    disabled={procesando}
+                  >
+                    {procesando ? "Procesando..." : "Aceptar"}
+                  </button>
+                  <button
+                    className="btn-warning"
+                    onClick={() => cerrarCuenta(true)}
+                    disabled={procesando}
+                  >
+                    Liberar mesa
+                  </button>
+                </div>
+                <p className="muted small">
+                  "Aceptar" cobra la cuenta y mantiene la mesa ocupada. "Liberar mesa"
+                  cobra y deja la mesa disponible.
+                </p>
+              </div>
+            ) : (
+              <div className="modal-actions">
+                {onDividir && (
+                  <button className="btn-secondary" onClick={onDividir} disabled={procesando}>
+                    Dividir cuenta
+                  </button>
+                )}
+                {onTransferir && (
+                  <button className="btn-secondary" onClick={onTransferir} disabled={procesando}>
+                    Transferir cuenta
+                  </button>
+                )}
+                <button
+                  className="btn-primary"
+                  onClick={() => setConfirmacion(true)}
+                  disabled={procesando || cuenta.total === 0}
+                >
+                  {procesando ? "Procesando..." : "Cerrar cuenta"}
                 </button>
-              )}
-              <button
-                className="btn-primary"
-                onClick={cerrarCuenta}
-                disabled={procesando || cuenta.total === 0}
-              >
-                {procesando ? "Procesando..." : "Cerrar cuenta"}
-              </button>
-            </div>
+              </div>
+            )}
             <p className="muted small">
               "Cerrar división" cobra la parte de un solo cliente y mantiene abierta la
               cuenta de los demás. "Cerrar cuenta" cobra todo y la mesa sigue ocupada.

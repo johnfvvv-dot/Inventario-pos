@@ -908,6 +908,88 @@ select:focus {
   padding: 0.25rem 0.5rem;
 }
 
+/* -------------------- CONFIRMACIÓN DE CIERRE -------------------- */
+
+.confirm-panel {
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin-top: 0.5rem;
+}
+
+.confirm-pregunta {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.85rem;
+  color: var(--text);
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-warning:hover {
+  background: #d9860b;
+}
+
+.btn-warning:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* -------------------- AVISO DE MESA CON CUENTA PENDIENTE -------------------- */
+
+.aviso-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: #fff8ec;
+  border: 1px solid #e8c98a;
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+}
+
+.aviso-texto {
+  font-size: 0.9rem;
+  color: #8a6a20;
+}
+
+.aviso-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* -------------------- MESA CON CUENTA PENDIENTE -------------------- */
+
+.mesa-pendiente {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.55rem;
+  background: #fff8ec;
+  border: 1px solid #f0dcb4;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #8a6a20;
+}
+
+.mesa-pendiente strong {
+  font-size: 0.95rem;
+}
+
 /* -------------------- RESPONSIVE -------------------- */
 
 @media (max-width: 960px) {

@@ -5,12 +5,21 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
+import TransferirModal from "../components/TransferirModal";
 
 interface Mesa {
   id: number;
   numero: number;
   capacidad: number;
   estado: string;
+  total_cuenta?: number;
+  tiene_cuenta_pendiente?: boolean;
+  detalle_pendiente?: string;
+}
+
+interface Aviso {
+  mesaId: number;
+  texto: string;
 }
 
 export default function MesasPage() {
@@ -18,10 +27,12 @@ export default function MesasPage() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<Aviso | null>(null);
 
   // Modales
   const [mesaCuenta, setMesaCuenta] = useState<number | null>(null);
   const [mesaDivision, setMesaDivision] = useState<number | null>(null);
+  const [mesaTransferir, setMesaTransferir] = useState<number | null>(null);
 
   const cargarMesas = async () => {
     try {
@@ -57,6 +68,20 @@ export default function MesasPage() {
     }
   };
 
+  /**
+   * Libera la mesa. Si tiene cuentas pendientes, el backend lo rechaza y
+   * se muestra el aviso con la opción de ver el pedido abierto.
+   */
+  const liberarMesa = async (mesa: Mesa) => {
+    setAviso(null);
+    try {
+      await api.liberarMesa(mesa.id);
+      await cargarMesas();
+    } catch (err: any) {
+      setAviso({ mesaId: mesa.id, texto: err.message });
+    }
+  };
+
   /** Abre el pedido con la mesa ya seleccionada */
   const abrirPedido = (mesa: Mesa) => {
     navigate(`/admin/pedidos?mesa=${mesa.id}`);
@@ -79,6 +104,39 @@ export default function MesasPage() {
       </div>
 
       {error && <p className="error-msg">{error}</p>}
+
+      {/* Aviso de mesa con cuenta pendiente */}
+      {aviso && (
+        <div className="aviso-panel">
+          <div className="aviso-texto">
+            <strong>Aviso:</strong> {aviso.texto}
+          </div>
+          <div className="aviso-acciones">
+            <button
+              className="btn-secondary btn-small"
+              onClick={() => {
+                const mesa = mesas.find((m) => m.id === aviso.mesaId);
+                setAviso(null);
+                if (mesa) abrirPedido(mesa);
+              }}
+            >
+              Ver el pedido abierto
+            </button>
+            <button
+              className="btn-secondary btn-small"
+              onClick={() => {
+                setAviso(null);
+                setMesaCuenta(aviso.mesaId);
+              }}
+            >
+              Ver la cuenta
+            </button>
+            <button className="btn-icon" onClick={() => setAviso(null)} title="Cerrar aviso">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       <form className="inline-form" onSubmit={crearMesa}>
         <div className="form-group">
@@ -113,6 +171,13 @@ export default function MesasPage() {
             <div className="muted small">{mesa.capacidad} plazas</div>
             <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
 
+            {mesa.tiene_cuenta_pendiente && (
+              <div className="mesa-pendiente">
+                <strong>${(mesa.total_cuenta || 0).toFixed(2)}</strong> pendiente
+                <span className="muted small">{mesa.detalle_pendiente}</span>
+              </div>
+            )}
+
             <div className="mesa-actions">
               {mesa.estado === "disponible" && (
                 <button
@@ -125,9 +190,9 @@ export default function MesasPage() {
               {mesa.estado === "ocupada" && (
                 <button
                   className="btn-secondary btn-small"
-                  onClick={() => cambiarEstado(mesa, "disponible")}
+                  onClick={() => liberarMesa(mesa)}
                 >
-                  Liberar
+                  Liberar mesa
                 </button>
               )}
               <button
@@ -144,6 +209,15 @@ export default function MesasPage() {
               >
                 Cuenta
               </button>
+              {mesa.tiene_cuenta_pendiente && (
+                <button
+                  className="btn-secondary btn-small"
+                  onClick={() => setMesaTransferir(mesa.id)}
+                  title="Mover la cuenta a otra mesa"
+                >
+                  Transferir
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -156,9 +230,12 @@ export default function MesasPage() {
           mesaId={mesaCuenta}
           onClose={() => setMesaCuenta(null)}
           onDividir={() => {
-            // Cerrar la ventana de cuenta antes de abrir la de división
             setMesaCuenta(null);
             setMesaDivision(mesaCuenta);
+          }}
+          onTransferir={() => {
+            setMesaCuenta(null);
+            setMesaTransferir(mesaCuenta);
           }}
         />
       )}
@@ -169,6 +246,18 @@ export default function MesasPage() {
           mesaId={mesaDivision}
           onClose={() => setMesaDivision(null)}
           onConfirmado={() => {
+            cargarMesas();
+          }}
+        />
+      )}
+
+      {/* Ventana de transferencia */}
+      {mesaTransferir !== null && (
+        <TransferirModal
+          mesaId={mesaTransferir}
+          onClose={() => setMesaTransferir(null)}
+          onTransferido={() => {
+            setMesaTransferir(null);
             cargarMesas();
           }}
         />
