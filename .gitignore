@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+*.db
+data/
+*.db-journal
+
+# Node.js
+node_modules/
+build/
+.env.local
+
+# PyInstaller (ejecutable generado)
+dist/
+*.manifest
+
+# Android / Capacitor (artefactos de compilación)
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/app/src/main/assets/public/
+frontend/android/app/src/main/assets/capacitor.config.json
+frontend/android/capacitor-cordova-android-plugins/
+frontend/android/app/release/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

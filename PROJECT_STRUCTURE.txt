@@ -1,0 +1,17 @@
+.
+./PROJECT_STRUCTURE.txt
+./README.md
+./README.txt
+./backend
+./backend/app
+./backend/app/main.py
+./backend/app/models.py
+./backend/app/routes
+./build
+./dist
+./docs
+./frontend
+./requirements.txt
+./routes
+./scripts
+./src
