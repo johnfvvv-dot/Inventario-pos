@@ -1,0 +1,25 @@
+{
+  "short_name": "Inventario POS",
+  "name": "Sistema de Inventario y Punto de Venta",
+  "description": "Control de inventario, mesas, pedidos y corte de caja para pequeños negocios",
+  "icons": [
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f6f8",
+  "theme_color": "#2c3e50",
+  "lang": "es",
+  "categories": ["business", "productivity"]
+}
