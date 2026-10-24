@@ -1,26 +1,52 @@
 /**
- * Ventana para transferir la cuenta abierta de una mesa a otra mesa.
- * Útil cuando los clientes cambian de mesa durante el servicio.
+ * Ventana para transferir una cuenta abierta entre mesas y plazas de barra.
+ * La cuenta puede originarse en una mesa o en una plaza de barra.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
+
+interface PosicionBarra {
+  id: number;
+  posicion: number;
+  estado: string;
+  total_cuenta: number;
+}
 
 interface Mesa {
   id: number;
   numero: number;
   estado: string;
+  tipo: string;
+  grupo: string | null;
+  posicion: number;
   tiene_cuenta_pendiente?: boolean;
+  posiciones?: PosicionBarra[];
+}
+
+interface Destino {
+  id: number;
+  label: string;
+  tipo: "mesa" | "barra";
 }
 
 interface Props {
-  mesaId: number;
+  /** Cuenta de mesa o plaza de barra que se transfiere. */
+  mesaId?: number;
+  /** Numero de barra: permite elegir entre sus cuentas abiertas. */
+  barraNumero?: number;
   onClose: () => void;
   onTransferido?: () => void;
 }
 
-export default function TransferirModal({ mesaId, onClose, onTransferido }: Props) {
+export default function TransferirModal({
+  mesaId,
+  barraNumero,
+  onClose,
+  onTransferido,
+}: Props) {
   const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [origen, setOrigen] = useState<number | "">(mesaId ?? "");
   const [destino, setDestino] = useState<number | "">("");
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -37,27 +63,125 @@ export default function TransferirModal({ mesaId, onClose, onTransferido }: Prop
     cargar();
   }, []);
 
-  const origen = mesas.find((m) => m.id === mesaId);
+  /** Cuentas abiertas de la barra cuando el origen es una barra completa. */
+  const cuentasOrigen = useMemo(() => {
+    if (barraNumero == null) return [];
+    const barra = mesas.find(
+      (m) => m.tipo === "barra" && m.numero === barraNumero
+    );
+    if (!barra?.posiciones) return [];
+    return barra.posiciones
+      .filter((p) => p.total_cuenta > 0)
+      .map((p) => ({
+        id: p.id,
+        posicion: p.posicion,
+        total: p.total_cuenta,
+      }));
+  }, [mesas, barraNumero]);
+
+  useEffect(() => {
+    if (mesaId != null) {
+      setOrigen(mesaId);
+    } else if (cuentasOrigen.length > 0) {
+      setOrigen(cuentasOrigen[0].id);
+    }
+  }, [mesaId, cuentasOrigen]);
+
+  const origenInfo = useMemo(() => {
+    if (origen === "") return null;
+    const id = Number(origen);
+    for (const mesa of mesas) {
+      if (mesa.tipo === "barra") {
+        const posicion = mesa.posiciones?.find((p) => p.id === id);
+        if (posicion) return { mesa, posicion };
+      } else if (mesa.id === id) {
+        return { mesa, posicion: null };
+      }
+    }
+    return null;
+  }, [mesas, origen]);
+
+  const etiquetaOrigen = origenInfo
+    ? origenInfo.posicion
+      ? `Barra ${origenInfo.mesa.numero} · Plaza ${origenInfo.posicion.posicion}`
+      : `Mesa ${origenInfo.mesa.numero}`
+    : "la cuenta seleccionada";
+
+  /** Mesas y plazas de barra libres para recibir la cuenta. */
+  const destinos = useMemo(() => {
+    const libres: Destino[] = [];
+    for (const mesa of mesas) {
+      if (mesa.tipo === "barra") {
+        const posiciones = mesa.posiciones || [];
+
+        // La barra de origen nunca se ofrece como destino (ni sus otras plazas).
+        if (barraNumero != null && mesa.numero === barraNumero) {
+          continue;
+        }
+
+        // Si la barra está ocupada (aunque sea en otra plaza) no se ofrece
+        // como destino: evita sumar dos cuentas en la misma barra.
+        if (
+          mesa.estado !== "disponible" ||
+          mesa.tiene_cuenta_pendiente ||
+          posiciones.some((p) => p.estado === "ocupada" || p.total_cuenta > 0)
+        ) {
+          continue;
+        }
+
+        // Tampoco se ofrece otra plaza de la misma barra de origen.
+        if (posiciones.some((p) => p.id === Number(origen))) {
+          continue;
+        }
+
+        posiciones.forEach((p, indice) => {
+          if (p.estado === "ocupada" || p.total_cuenta > 0) return;
+          libres.push({
+            id: p.id,
+            label: `Barra ${mesa.numero} · Plaza ${p.posicion ?? indice + 1}`,
+            tipo: "barra",
+          });
+        });
+        continue;
+      }
+      if (Number(origen) === mesa.id) continue;
+      if (mesa.tiene_cuenta_pendiente) continue;
+      libres.push({
+        id: mesa.id,
+        label: `Mesa ${mesa.numero}`,
+        tipo: "mesa",
+      });
+    }
+    return libres;
+  }, [mesas, origen]);
+
+  const etiquetaDestino =
+    destinos.find((d) => d.id === Number(destino))?.label ||
+    "la cuenta de destino";
 
   const transferir = async () => {
+    if (!origen) {
+      setError("Selecciona la cuenta de origen");
+      return;
+    }
     if (!destino) {
-      setError("Selecciona la mesa de destino");
+      setError("Selecciona la cuenta de destino");
       return;
     }
     setProcesando(true);
     try {
-      const res: any = await api.transferirCuenta(mesaId, Number(destino));
+      await api.transferirCuenta(Number(origen), Number(destino));
       setError(null);
       onTransferido?.();
       onClose();
-      if (res?.mensaje) {
-        // mensaje devuelto por la API
-      }
     } catch (err: any) {
       setError(err.message);
       setProcesando(false);
     }
   };
+
+  const sinCuentasOrigen =
+    barraNumero != null && cuentasOrigen.length === 0;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -71,28 +195,73 @@ export default function TransferirModal({ mesaId, onClose, onTransferido }: Prop
 
         {error && <p className="error-msg">{error}</p>}
 
+        {barraNumero != null && cuentasOrigen.length > 1 && (
+          <div className="form-group">
+            <label>Cuenta de la barra a transferir</label>
+            <select
+              value={origen}
+              onChange={(e) =>
+                setOrigen(e.target.value ? Number(e.target.value) : "")
+              }
+            >
+              {cuentasOrigen.map((c) => (
+                <option key={c.id} value={c.id}>
+                  Plaza {c.posicion} — ${c.total.toFixed(2)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {sinCuentasOrigen && (
+          <p className="muted small">
+            Esta barra no tiene cuentas abiertas para transferir.
+          </p>
+        )}
+
         <p className="muted small">
-          Se moverán el pedido abierto y las divisiones pendientes de la mesa{" "}
-          <strong>Mesa {origen?.numero ?? "?"}</strong> a la mesa de destino.
+          Se moverán el pedido abierto y las divisiones pendientes de{" "}
+          <strong>{etiquetaOrigen}</strong> a <strong>{etiquetaDestino}</strong>.
         </p>
 
         <div className="form-group">
-          <label>Mesa de destino</label>
-          <select value={destino} onChange={(e) => setDestino(e.target.value ? Number(e.target.value) : "")}>
-            <option value="">— Seleccionar mesa —</option>
-            {mesas
-              .filter((m) => m.id !== mesaId && !m.tiene_cuenta_pendiente)
-              .map((m) => (
-                <option key={m.id} value={m.id}>
-                  Mesa {m.numero} ({m.estado})
-                </option>
-              ))}
+          <label>Cuenta de destino</label>
+          <select
+            value={destino}
+            onChange={(e) =>
+              setDestino(e.target.value ? Number(e.target.value) : "")
+            }
+            disabled={sinCuentasOrigen}
+          >
+            <option value="">— Seleccionar mesa o barra —</option>
+            {destinos.some((d) => d.tipo === "mesa") && (
+              <optgroup label="Mesas">
+                {destinos
+                  .filter((d) => d.tipo === "mesa")
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            {destinos.some((d) => d.tipo === "barra") && (
+              <optgroup label="Barras (plazas libres)">
+                {destinos
+                  .filter((d) => d.tipo === "barra")
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
           </select>
         </div>
 
-        {mesas.filter((m) => m.id !== mesaId && m.tiene_cuenta_pendiente).length > 0 && (
+        {destinos.length === 0 && !sinCuentasOrigen && (
           <p className="muted small">
-            Las mesas con cuenta abierta no aparecen como destino.
+            No hay mesas ni plazas de barra libres para recibir la cuenta.
           </p>
         )}
 
@@ -103,7 +272,7 @@ export default function TransferirModal({ mesaId, onClose, onTransferido }: Prop
           <button
             className="btn-primary"
             onClick={transferir}
-            disabled={procesando || !destino}
+            disabled={procesando || !origen || !destino || sinCuentasOrigen}
           >
             {procesando ? "Transfiriendo..." : "Transferir cuenta"}
           </button>

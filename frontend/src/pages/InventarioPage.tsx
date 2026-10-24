@@ -60,6 +60,7 @@ export default function InventarioPage() {
     categoria_id: "" as number | "",
   });
   const [nuevaCategoria, setNuevaCategoria] = useState("");
+  const [ingresos, setIngresos] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -162,14 +163,32 @@ export default function InventarioPage() {
     }
   };
 
-  /** Guarda el stock ingresado manualmente en la casilla */
-  const guardarStock = async (id: number, stock: number) => {
+  /** Solo admite digitos en el cuadro de ingreso de stock. */
+  const actualizarIngreso = (productoId: number, valor: string) => {
+    const soloNumeros = valor.replace(/\D/g, "");
+    setIngresos((actual) => ({ ...actual, [productoId]: soloNumeros }));
+  };
+
+  /** Suma al stock existente la cantidad escrita por el usuario. */
+  const agregarStock = async (producto: Producto) => {
+    const cantidad = Number(ingresos[producto.id] || 0);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      setMensaje(null);
+      setError("Ingresá una cantidad válida mayor a cero");
+      return;
+    }
     try {
-      await api.updateProductoStock(id, stock);
+      await api.updateProductoStock(producto.id, producto.stock + cantidad);
+      setIngresos((actual) => ({ ...actual, [producto.id]: "" }));
+      setError(null);
+      setMensaje(
+        `Ingreso registrado: +${cantidad} ${
+          cantidad === 1 ? "unidad" : "unidades"
+        } de "${producto.nombre}"`
+      );
       await cargar();
     } catch (err: any) {
       setError(err.message);
-      await cargar();
     }
   };
 
@@ -283,6 +302,7 @@ export default function InventarioPage() {
               <th>Categoría</th>
               <th>Precio</th>
               <th>Stock</th>
+              {!soloLectura && <th>Ingreso de stock</th>}
               {!soloLectura && <th>Acciones</th>}
             </tr>
           </thead>
@@ -297,36 +317,46 @@ export default function InventarioPage() {
                 <td className="muted small">{nombreCategoria(p.categoria_id)}</td>
                 <td>${p.precio.toFixed(2)}</td>
                 <td>
-                  {soloLectura ? (
-                    <span
-                      className={
-                        p.stock === 0
-                          ? "badge badge-danger"
-                          : p.stock < 10
-                          ? "badge badge-warning"
-                          : "badge badge-success"
-                      }
-                    >
-                      {p.stock}
-                    </span>
-                  ) : (
+                  <span
+                    className={
+                      p.stock === 0
+                        ? "badge badge-danger"
+                        : p.stock < 10
+                        ? "badge badge-warning"
+                        : "badge badge-success"
+                    }
+                  >
+                    {p.stock}
+                  </span>
+                </td>
+                {!soloLectura && (
+                  <td>
                     <div className="stock-editor">
                       <input
-                        key={`${p.id}-${p.stock}`}
-                        type="number"
-                        min="0"
-                        className="stock-input"
-                        defaultValue={p.stock}
-                        onBlur={(e) => {
-                          const valor = Math.max(0, parseNumero(e.target.value));
-                          if (valor !== p.stock) {
-                            guardarStock(p.id, valor);
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        className="ingreso-input"
+                        placeholder="Cant."
+                        aria-label={`Cantidad que ingresa de ${p.nombre}`}
+                        value={ingresos[p.id] ?? ""}
+                        onChange={(e) =>
+                          actualizarIngreso(p.id, e.target.value)
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            agregarStock(p);
                           }
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                        }}
                       />
+                      <button
+                        className="btn-success btn-small"
+                        title={`Sumar la cantidad indicada a ${p.nombre}`}
+                        onClick={() => agregarStock(p)}
+                      >
+                        Agregar
+                      </button>
                       <div className="stock-acciones">
                         <button
                           className="btn-icon"
@@ -344,8 +374,8 @@ export default function InventarioPage() {
                         </button>
                       </div>
                     </div>
-                  )}
-                </td>
+                  </td>
+                )}
                 {!soloLectura && (
                   <td className="actions">
                     <button
@@ -368,7 +398,7 @@ export default function InventarioPage() {
             ))}
             {productos.length === 0 && (
               <tr>
-                <td colSpan={soloLectura ? 5 : 6} className="empty-state">
+                <td colSpan={soloLectura ? 5 : 7} className="empty-state">
                   {buscar || categoriaFiltro
                     ? "Sin resultados para el filtro aplicado."
                     : "No hay productos registrados."}

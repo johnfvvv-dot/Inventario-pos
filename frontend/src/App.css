@@ -126,6 +126,7 @@ a {
 
 .btn-primary,
 .btn-secondary,
+.btn-success,
 .btn-logout {
   border: none;
   border-radius: 8px;
@@ -146,6 +147,20 @@ a {
 }
 
 .btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-success {
+  background: var(--success);
+  color: #fff;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #1e8449;
+}
+
+.btn-success:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -558,6 +573,54 @@ select:focus {
   display: grid;
   grid-template-columns: 1.1fr 1fr;
   gap: 1.25rem;
+}
+
+/* Lista de productos: 8 filas visibles y scroll para el resto */
+.productos-scroll {
+  max-height: 22.75rem;
+  overflow-y: auto;
+}
+
+.productos-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.productos-scroll td {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.producto-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.producto-acciones .btn-small {
+  padding: 0.3rem 0.55rem;
+}
+
+.cantidad-input {
+  width: 64px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  text-align: center;
+  outline: none;
+}
+
+.cantidad-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+}
+
+.cantidad-input:disabled {
+  background: #f4f6f8;
+  cursor: not-allowed;
 }
 
 .total-row {
@@ -977,7 +1040,7 @@ select:focus {
   margin-top: 0.2rem;
   font-size: 1.05rem;
   font-weight: 700;
-  color: #b9770e;
+  color: var(--success);
   letter-spacing: -0.01em;
 }
 
@@ -1182,18 +1245,18 @@ select:focus {
   gap: 0.35rem;
 }
 
-.stock-input {
-  width: 68px;
+.ingreso-input {
+  width: 64px;
   padding: 0.3rem 0.4rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.9rem;
   font-weight: 600;
   text-align: center;
+  outline: none;
 }
 
-.stock-input:focus {
-  outline: none;
+.ingreso-input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
 }

@@ -28,6 +28,13 @@ interface Mesa {
   posiciones?: Posicion[];
 }
 
+/** Formatea el total con separador de miles y sin decimales .00. */
+const formatearTotal = (total: number): string =>
+  total.toLocaleString("es-CO", {
+    minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
+  });
+
 export default function MesasPage() {
   const navigate = useNavigate();
   const [mesas, setMesas] = useState<Mesa[]>([]);
@@ -43,7 +50,9 @@ export default function MesasPage() {
   const [mesaCuenta, setMesaCuenta] = useState<number | null>(null);
   const [barraCuenta, setBarraCuenta] = useState<number | null>(null);
   const [mesaDivision, setMesaDivision] = useState<number | null>(null);
+  const [barraDivision, setBarraDivision] = useState<number | null>(null);
   const [mesaTransferir, setMesaTransferir] = useState<number | null>(null);
+  const [barraTransferir, setBarraTransferir] = useState<number | null>(null);
 
   const cargarMesas = async () => {
     try {
@@ -162,6 +171,14 @@ export default function MesasPage() {
 
   const cuentasBarra = (grupo: string) =>
     mesas.filter((m) => m.grupo === grupo).length;
+
+  const barraTieneCuenta = (numero: number) =>
+    mesas.some(
+      (m) =>
+        m.tipo === "barra" &&
+        m.numero === numero &&
+        m.tiene_cuenta_pendiente
+    );
 
   return (
     <div className="page">
@@ -284,7 +301,7 @@ export default function MesasPage() {
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
-                ${(mesa.total_cuenta || 0).toFixed(2)}
+                ${formatearTotal(mesa.total_cuenta || 0)}
               </div>
             )}
 
@@ -325,7 +342,11 @@ export default function MesasPage() {
               </button>
               <button
                 className="btn-icon danger"
-                title="Eliminar mesa"
+                title={
+                  mesa.tipo === "barra"
+                    ? "Eliminar barra completa"
+                    : "Eliminar mesa"
+                }
                 onClick={() => {
                   setErrorEliminar(null);
                   setPorEliminar(mesa);
@@ -342,10 +363,14 @@ export default function MesasPage() {
       {/* Confirmación de borrado */}
       {porEliminar && (
         <ConfirmModal
-          titulo="Eliminar mesa"
+          titulo={
+            porEliminar.tipo === "barra"
+              ? "Eliminar barra"
+              : "Eliminar mesa"
+          }
           mensaje={
             porEliminar.tipo === "barra"
-              ? `¿Eliminar la cuenta ${porEliminar.posicion} de ${porEliminar.grupo}?`
+              ? `¿Eliminar la barra ${porEliminar.numero}?`
               : `¿Eliminar la mesa ${porEliminar.numero}?`
           }
           aceptar="Aceptar"
@@ -363,9 +388,15 @@ export default function MesasPage() {
                   className="btn-secondary btn-small"
                   onClick={() => {
                     const id = porEliminar.id;
+                    const numero = porEliminar.numero;
+                    const esBarra = porEliminar.tipo === "barra";
                     setPorEliminar(null);
                     setErrorEliminar(null);
-                    setMesaCuenta(id);
+                    if (esBarra) {
+                      setBarraCuenta(numero);
+                    } else {
+                      setMesaCuenta(id);
+                    }
                   }}
                 >
                   Ver la cuenta
@@ -373,7 +404,12 @@ export default function MesasPage() {
                 <button
                   className="btn-secondary btn-small"
                   onClick={() => {
-                    const id = porEliminar.id;
+                    const id =
+                      porEliminar.tipo === "barra"
+                        ? (porEliminar.posiciones?.find(
+                            (p) => p.total_cuenta > 0
+                          )?.id ?? porEliminar.id)
+                        : porEliminar.id;
                     setPorEliminar(null);
                     setErrorEliminar(null);
                     navigate(`/admin/pedidos?mesa=${id}`);
@@ -412,7 +448,16 @@ export default function MesasPage() {
           onClose={() => setBarraCuenta(null)}
           onDividir={() => {
             setBarraCuenta(null);
+            setBarraDivision(barraCuenta);
           }}
+          onTransferir={
+            barraTieneCuenta(barraCuenta)
+              ? () => {
+                  setBarraCuenta(null);
+                  setBarraTransferir(barraCuenta);
+                }
+              : undefined
+          }
           onActualizado={() => cargarMesas()}
         />
       )}
@@ -426,6 +471,15 @@ export default function MesasPage() {
         />
       )}
 
+      {/* Ventana de división de una barra completa */}
+      {barraDivision !== null && (
+        <DivisionModal
+          barraNumero={barraDivision}
+          onClose={() => setBarraDivision(null)}
+          onConfirmado={() => cargarMesas()}
+        />
+      )}
+
       {/* Ventana de transferencia */}
       {mesaTransferir !== null && (
         <TransferirModal
@@ -433,6 +487,18 @@ export default function MesasPage() {
           onClose={() => setMesaTransferir(null)}
           onTransferido={() => {
             setMesaTransferir(null);
+            cargarMesas();
+          }}
+        />
+      )}
+
+      {/* Ventana de transferencia desde una barra */}
+      {barraTransferir !== null && (
+        <TransferirModal
+          barraNumero={barraTransferir}
+          onClose={() => setBarraTransferir(null)}
+          onTransferido={() => {
+            setBarraTransferir(null);
             cargarMesas();
           }}
         />

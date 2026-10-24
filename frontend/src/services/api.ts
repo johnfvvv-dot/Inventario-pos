@@ -22,6 +22,24 @@ export const API_BASE = detectApiBase();
 /** Timeout de la petición: evita que la interfaz se quede cargando eternamente */
 const REQUEST_TIMEOUT_MS = 10000;
 
+/** Convierte los errores de validación de FastAPI en un texto legible. */
+function detalleError(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: any) => {
+        const campo = Array.isArray(item?.loc)
+          ? item.loc[item.loc.length - 1]
+          : "";
+        const mensaje = item?.msg || "Dato inválido";
+        return campo ? `${campo}: ${mensaje}` : mensaje;
+      })
+      .join(" · ");
+  }
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return "";
+}
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -52,7 +70,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     let detail = `Error ${response.status}`;
     try {
       const body = await response.json();
-      detail = body.detail || detail;
+      detail = detalleError(body.detail) || detail;
     } catch {
       /* respuesta sin JSON */
     }
@@ -129,7 +147,7 @@ export const api = {
   liberarMesa: (mesaId: number) =>
     request(`/mesas/${mesaId}/liberar`, { method: "POST" }),
 
-  /** Elimina una mesa o puesto de barra (mesas eventuales) */
+  /** Elimina una mesa o una barra completa (incluidas todas sus plazas) */
   deleteMesa: (mesaId: number) =>
     request(`/mesas/${mesaId}`, { method: "DELETE" }),
 
@@ -154,6 +172,17 @@ export const api = {
   cerrarCuentaMesa: (mesaId: number, liberarMesa = false, formaPago = "efectivo") =>
     request(
       `/cuentas/mesa/${mesaId}/cerrar?liberar_mesa=${liberarMesa}&forma_pago=${formaPago}`,
+      { method: "POST" }
+    ),
+
+  /** Cierra la cuenta agregada de una barra; con liberarBarra=true queda disponible */
+  cerrarCuentaBarra: (
+    numeroBarra: number,
+    liberarBarra = false,
+    formaPago = "efectivo"
+  ) =>
+    request(
+      `/cuentas/barra/${numeroBarra}/cerrar?liberar_barra=${liberarBarra}&forma_pago=${formaPago}`,
       { method: "POST" }
     ),
 
@@ -258,7 +287,8 @@ export const api = {
 
   // ---------- División de cuenta ----------
   dividirCuenta: (datos: {
-    mesa_id: number;
+    mesa_id?: number;
+    barra_numero?: number;
     usuario_id: number;
     participantes: { alias: string; items: { producto_id: number; cantidad: number }[] }[];
   }) =>

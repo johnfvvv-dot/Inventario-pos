@@ -71,6 +71,9 @@ export default function CuentaModal({
   const [confirmacion, setConfirmacion] = useState(false);
   const [formaPago, setFormaPago] = useState("efectivo");
 
+  const esBarra = barraNumero !== null;
+  const etiqueta = esBarra ? "barra" : "mesa";
+
   const cargar = async () => {
     try {
       const data: any = barraNumero
@@ -88,20 +91,25 @@ export default function CuentaModal({
     return () => clearTimeout(timer);
   }, [mesaId, barraNumero]);
 
-  const cerrarCuenta = async (liberarMesa = false) => {
+  const cerrarCuenta = async (liberar = false) => {
     setProcesando(true);
     try {
-      // 1) Cobrar toda la cuenta (pedidos + divisiones)
-      await api.cerrarCuentaMesa(mesaId, false, formaPago);
-      // 2) Si se pidió liberar, el backend valida que no queden cuentas pendientes
-      if (liberarMesa) {
-        await api.liberarMesa(mesaId);
+      if (barraNumero !== null) {
+        // Cobra la cuenta agregada de la barra y libera todas sus plazas si se pidió
+        await api.cerrarCuentaBarra(barraNumero, liberar, formaPago);
+      } else {
+        // 1) Cobrar toda la cuenta (pedidos + divisiones)
+        await api.cerrarCuentaMesa(mesaId, false, formaPago);
+        // 2) Si se pidió liberar, el backend valida que no queden cuentas pendientes
+        if (liberar) {
+          await api.liberarMesa(mesaId);
+        }
       }
       setConfirmacion(false);
       setMensaje(
-        liberarMesa
-          ? "Cuenta cerrada y mesa liberada."
-          : "Cuenta cerrada. La mesa permanece ocupada para una nueva cuenta."
+        liberar
+          ? `Cuenta cerrada y ${etiqueta} liberada.`
+          : `Cuenta cerrada. La ${etiqueta} permanece ocupada para una nueva cuenta.`
       );
       await cargar();
       onActualizado?.();
@@ -263,7 +271,7 @@ export default function CuentaModal({
             {confirmacion ? (
               <div className="confirm-panel">
                 <p className="confirm-pregunta">
-                  ¿Cerrar la cuenta de esta mesa? La mesa seguirá ocupada.
+                  ¿Cerrar la cuenta de esta {etiqueta}? La {etiqueta} seguirá ocupada.
                 </p>
                 <div className="modal-actions">
                   <button
@@ -285,12 +293,13 @@ export default function CuentaModal({
                     onClick={() => cerrarCuenta(true)}
                     disabled={procesando}
                   >
-                    Liberar mesa
+                    Liberar {etiqueta}
                   </button>
                 </div>
                 <p className="muted small">
                   Cobro con <strong>{formaPago}</strong>. "Aceptar" cobra la cuenta y
-                  mantiene la mesa ocupada. "Liberar mesa" cobra y deja la mesa disponible.
+                  mantiene la {etiqueta} ocupada. "Liberar {etiqueta}" cobra y deja la{" "}
+                  {etiqueta} disponible.
                 </p>
               </div>
             ) : (
@@ -316,7 +325,8 @@ export default function CuentaModal({
             )}
             <p className="muted small">
               "Cerrar división" cobra la parte de un solo cliente y mantiene abierta la
-              cuenta de los demás. "Cerrar cuenta" cobra todo y la mesa sigue ocupada.
+              cuenta de los demás. "Cerrar cuenta" cobra todo; "Aceptar" mantiene la{" "}
+              {etiqueta} ocupada y "Liberar {etiqueta}" la deja disponible.
             </p>
           </>
         )}

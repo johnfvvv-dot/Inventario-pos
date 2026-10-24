@@ -10,6 +10,7 @@ interface PedidoHistorial {
   forma_pago: string;
   total: number;
   mesa_numero: number | null;
+  mesa_etiqueta: string | null;
   usuario_nombre: string;
   productos: string[];
 }
@@ -22,9 +23,14 @@ interface Producto {
 interface Mesa {
   id: number;
   numero: number;
+  tipo?: string;
+  grupo?: string | null;
 }
 
 const POR_PAGINA = 25;
+
+const etiquetaMesa = (m: Mesa) =>
+  m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
 export default function HistorialPage() {
   const [items, setItems] = useState<PedidoHistorial[]>([]);
@@ -92,11 +98,11 @@ export default function HistorialPage() {
   const exportarCSV = () => {
     const filas: string[][] = [
       ["HISTORIAL DE VENTAS"],
-      ["Pedido", "Fecha", "Mesa", "Usuario", "Forma de pago", "Total", "Productos"],
+      ["Pedido", "Fecha", "Mesa / Barra", "Usuario", "Forma de pago", "Total", "Productos"],
       ...items.map((p) => [
         String(p.id),
         p.fecha || "",
-        p.mesa_numero ? String(p.mesa_numero) : "-",
+        p.mesa_etiqueta || "-",
         p.usuario_nombre,
         p.forma_pago,
         String(p.total),
@@ -155,7 +161,7 @@ export default function HistorialPage() {
           />
         </div>
         <div className="form-group">
-          <label>Mesa</label>
+          <label>Mesa / Barra</label>
           <select
             value={filtros.mesa}
             onChange={(e) =>
@@ -165,7 +171,7 @@ export default function HistorialPage() {
             <option value="">Todas</option>
             {mesas.map((m) => (
               <option key={m.id} value={m.id}>
-                Mesa {m.numero}
+                {etiquetaMesa(m)}
               </option>
             ))}
           </select>
@@ -209,7 +215,7 @@ export default function HistorialPage() {
             <tr>
               <th>#</th>
               <th>Fecha</th>
-              <th>Mesa</th>
+              <th>Mesa / Barra</th>
               <th>Usuario</th>
               <th>Forma de pago</th>
               <th>Productos</th>
@@ -221,7 +227,7 @@ export default function HistorialPage() {
               <tr key={p.id}>
                 <td>{p.id}</td>
                 <td>{p.fecha ? new Date(p.fecha).toLocaleString("es") : "-"}</td>
-                <td>{p.mesa_numero ? `Mesa ${p.mesa_numero}` : "-"}</td>
+                <td>{p.mesa_etiqueta || "-"}</td>
                 <td>{p.usuario_nombre}</td>
                 <td>
                   <span className="badge badge-success">{p.forma_pago}</span>

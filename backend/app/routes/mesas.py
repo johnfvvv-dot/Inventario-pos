@@ -170,6 +170,7 @@ def listar_mesas(db: Session = Depends(get_db)):
                 posiciones=[
                     PosicionBarra(
                         id=m.id,
+                        posicion=m.posicion or 1,
                         estado=m.estado,
                         total_cuenta=resumen.get(m.id, {}).get("total", 0.0),
                     )
@@ -302,21 +303,29 @@ def actualizar_estado_mesa(
 
 @router.post("/{mesa_id}/liberar", response_model=MesaOut)
 def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
-    """Libera la mesa SOLO si no tiene cuentas pendientes."""
+    """Libera una mesa o una barra completa si no tiene cuentas pendientes."""
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
+    es_barra = (mesa.tipo or "mesa") == "barra" and bool(mesa.grupo)
+    mesas = (
+        db.query(Mesa).filter(Mesa.grupo == mesa.grupo).all()
+        if es_barra
+        else [mesa]
+    )
+    ids = [m.id for m in mesas]
+
     db.flush()
     pedidos_abiertos = (
         db.query(func.count(Pedido.id))
-        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
         .scalar()
         or 0
     )
     divisiones_pendientes = (
         db.query(func.count(Division.id))
-        .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
+        .filter(Division.mesa_id.in_(ids), Division.estado == "pendiente")
         .scalar()
         or 0
     )
@@ -324,15 +333,24 @@ def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
     if pedidos_abiertos:
         raise HTTPException(
             status_code=400,
-            detail="La mesa aún tiene un pedido abierto.",
+            detail=(
+                "La barra aún tiene un pedido abierto."
+                if es_barra
+                else "La mesa aún tiene un pedido abierto."
+            ),
         )
     if divisiones_pendientes:
         raise HTTPException(
             status_code=400,
-            detail="La mesa aún tiene una división de cuenta pendiente.",
+            detail=(
+                "La barra aún tiene una división de cuenta pendiente."
+                if es_barra
+                else "La mesa aún tiene una división de cuenta pendiente."
+            ),
         )
 
-    mesa.estado = "disponible"
+    for m in mesas:
+        m.estado = "disponible"
     db.commit()
     db.refresh(mesa)
     return mesa
@@ -340,45 +358,65 @@ def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
 
 @router.delete("/{mesa_id}")
 def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
-    """Elimina una mesa o puesto de barra (solo si no tiene cuentas pendientes)."""
+    """Elimina una mesa completa o una barra completa.
+
+    La tarjeta de una barra representa el grupo entero: al eliminarla se
+    borran todas sus plazas, igual que una mesa se elimina sin importar su
+    capacidad. Solo se conserva el historial de pedidos cerrados.
+    """
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
+    es_barra = (mesa.tipo or "mesa") == "barra" and bool(mesa.grupo)
+    mesas = (
+        db.query(Mesa).filter(Mesa.grupo == mesa.grupo).all()
+        if es_barra
+        else [mesa]
+    )
+    ids = [m.id for m in mesas]
+
     db.flush()
     pedidos_abiertos = (
         db.query(func.count(Pedido.id))
-        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
         .scalar()
         or 0
     )
     divisiones_pendientes = (
         db.query(func.count(Division.id))
-        .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
+        .filter(Division.mesa_id.in_(ids), Division.estado == "pendiente")
         .scalar()
         or 0
     )
     if pedidos_abiertos or divisiones_pendientes:
+        detalle = (
+            "la barra tiene cuentas pendientes"
+            if es_barra
+            else "la mesa tiene una cuenta pendiente"
+        )
         raise HTTPException(
             status_code=400,
-            detail="No se puede eliminar: la mesa tiene una cuenta pendiente.",
+            detail=f"No se puede eliminar: {detalle}.",
         )
 
-    # Historial: se conservan los pedidos (cerrados) con el numero de mesa
-    db.query(Pedido).filter(Pedido.mesa_id == mesa.id).update(
-        {"mesa_id": None, "mesa_numero_historico": mesa.numero}
-    )
+    # Historial: cada pedido conserva el numero y la etiqueta del puesto
+    numeros = {m.id: m.numero for m in mesas}
+    etiquetas = {m.id: m.etiqueta_historial() for m in mesas}
+    pedidos = db.query(Pedido).filter(Pedido.mesa_id.in_(ids)).all()
+    for pedido in pedidos:
+        pedido.mesa_numero_historico = numeros.get(pedido.mesa_id)
+        pedido.mesa_etiqueta_historica = etiquetas.get(pedido.mesa_id)
+        pedido.mesa_id = None
+
+    if es_barra:
+        numero_barra = mesas[0].numero // 100
+        grupo = mesa.grupo
+        db.query(Mesa).filter(Mesa.id.in_(ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"message": f"Barra '{grupo}' eliminada", "mesa": numero_barra}
 
     numero = mesa.numero
-    grupo = mesa.grupo
     db.delete(mesa)
     db.commit()
-
-    if grupo:
-        # Si era la última cuenta de la barra, se elimina el grupo completo
-        restantes = db.query(Mesa).filter(Mesa.grupo == grupo).count()
-        if restantes == 0:
-            return {"message": f"Barra '{grupo}' eliminada", "mesa": numero}
-        return {"message": f"Cuenta eliminada de '{grupo}'", "mesa": numero}
-
     return {"message": f"Mesa {numero} eliminada", "mesa": numero}

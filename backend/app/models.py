@@ -7,6 +7,17 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+def etiqueta_desde_numero_historico(numero: int) -> str:
+    """Etiqueta para pedidos antiguos que solo conservan el numero.
+
+    Las plazas de barra usan la numeracion N*100 + posicion (101 -> Barra 1),
+    por lo que se puede reconstruir la barra cuando ya no existe la mesa.
+    """
+    if numero >= 100 and 1 <= numero % 100 <= 20:
+        return f"Barra {numero // 100}"
+    return f"Mesa {numero}"
+
+
 class Usuario(Base):
     """Usuario del sistema. Se identifica por alias (sin correo)."""
 
@@ -68,6 +79,12 @@ class Mesa(Base):
 
     pedidos = relationship("Pedido", back_populates="mesa")
 
+    def etiqueta_historial(self) -> str:
+        """Nombre visible para el historial: "Mesa N" o "Barra N"."""
+        if (self.tipo or "mesa") == "barra":
+            return self.grupo or f"Barra {self.numero // 100}"
+        return f"Mesa {self.numero}"
+
 
 class Pedido(Base):
     __tablename__ = "pedidos"
@@ -82,6 +99,8 @@ class Pedido(Base):
     fecha_cierre = Column(DateTime, nullable=True)
     # Numero de mesa conservado cuando la mesa se elimina (historial)
     mesa_numero_historico = Column(Integer, nullable=True)
+    # Etiqueta conservada para el historial ("Mesa N" o "Barra N")
+    mesa_etiqueta_historica = Column(String(60), nullable=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")

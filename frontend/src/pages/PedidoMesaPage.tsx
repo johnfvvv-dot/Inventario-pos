@@ -13,6 +13,8 @@ interface Mesa {
   numero: number;
   capacidad: number;
   estado: string;
+  tipo?: string;
+  grupo?: string | null;
 }
 
 interface Producto {
@@ -57,6 +59,7 @@ export default function PedidoMesaPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [mesaId, setMesaId] = useState<number | "">("");
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [cantidades, setCantidades] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -75,6 +78,9 @@ export default function PedidoMesaPage() {
     () => carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
     [carrito]
   );
+
+  const etiquetaMesa = (m: Mesa) =>
+    m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
   const cargarCatalogos = async () => {
     try {
@@ -110,6 +116,7 @@ export default function PedidoMesaPage() {
     if (mesaParam) {
       setMesaId(Number(mesaParam));
       setCarrito([]);
+      setCantidades({});
       setMensaje(null);
       setError(null);
     }
@@ -124,22 +131,32 @@ export default function PedidoMesaPage() {
     cargarCatalogos();
   }, [categoriaFiltro]);
 
-  const agregar = (producto: Producto) => {
+  const agregarCantidad = (producto: Producto, cantidad: number): boolean => {
     setError(null);
     setMensaje(null);
 
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      setError("Ingresá una cantidad válida mayor a cero");
+      return false;
+    }
+
     const enCarrito =
       carrito.find((i) => i.producto_id === producto.id)?.cantidad || 0;
-    if (enCarrito + 1 > producto.stock) {
-      setError(`No hay más stock disponible de ${producto.nombre}`);
-      return;
+    if (enCarrito + cantidad > producto.stock) {
+      const disponible = Math.max(producto.stock - enCarrito, 0);
+      setError(
+        `Stock insuficiente de ${producto.nombre}. Disponible: ${disponible}`
+      );
+      return false;
     }
 
     setCarrito((actual) => {
       const existe = actual.find((i) => i.producto_id === producto.id);
       if (existe) {
         return actual.map((i) =>
-          i.producto_id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i
+          i.producto_id === producto.id
+            ? { ...i, cantidad: i.cantidad + cantidad }
+            : i
         );
       }
       return [
@@ -148,10 +165,28 @@ export default function PedidoMesaPage() {
           producto_id: producto.id,
           nombre: producto.nombre,
           precio: producto.precio,
-          cantidad: 1,
+          cantidad,
         },
       ];
     });
+    return true;
+  };
+
+  const agregar = (producto: Producto) => {
+    agregarCantidad(producto, 1);
+  };
+
+  /** Solo admite digitos en el cuadro de cantidad. */
+  const actualizarCantidad = (productoId: number, valor: string) => {
+    const soloNumeros = valor.replace(/\D/g, "");
+    setCantidades((actual) => ({ ...actual, [productoId]: soloNumeros }));
+  };
+
+  const agregarDesdeInput = (producto: Producto) => {
+    const cantidad = Number(cantidades[producto.id] || 0);
+    if (agregarCantidad(producto, cantidad)) {
+      setCantidades((actual) => ({ ...actual, [producto.id]: "" }));
+    }
   };
 
   const quitar = (productoId: number) => {
@@ -184,6 +219,7 @@ export default function PedidoMesaPage() {
         })),
       });
       setCarrito([]);
+      setCantidades({});
       setMensaje("Pedido registrado correctamente");
       setError(null);
       await Promise.all([cargarCatalogos(), cargarPedidos(Number(mesaId))]);
@@ -227,13 +263,14 @@ export default function PedidoMesaPage() {
             onChange={(e) => {
               setMesaId(e.target.value ? Number(e.target.value) : "");
               setCarrito([]);
+              setCantidades({});
               setMensaje(null);
             }}
           >
-            <option value="">— Seleccionar mesa —</option>
+            <option value="">— Seleccionar mesa o barra —</option>
             {mesas.map((m) => (
               <option key={m.id} value={m.id}>
-                Mesa {m.numero} ({m.estado})
+                {etiquetaMesa(m)} ({m.estado})
               </option>
             ))}
           </select>
@@ -268,14 +305,14 @@ export default function PedidoMesaPage() {
       <div className="pos-grid">
         <section className="panel">
           <h3>Productos disponibles</h3>
-          <div className="table-wrap">
+          <div className="table-wrap productos-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Producto</th>
                   <th>Precio</th>
                   <th>Stock</th>
-                  <th></th>
+                  <th>Agregar</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,13 +322,43 @@ export default function PedidoMesaPage() {
                     <td>${p.precio.toFixed(2)}</td>
                     <td>{p.stock}</td>
                     <td>
-                      <button
-                        className="btn-primary btn-small"
-                        disabled={p.stock === 0}
-                        onClick={() => agregar(p)}
-                      >
-                        +
-                      </button>
+                      <div className="producto-acciones">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          className="cantidad-input"
+                          placeholder="Cant."
+                          aria-label={`Cantidad de ${p.nombre}`}
+                          value={cantidades[p.id] ?? ""}
+                          onChange={(e) =>
+                            actualizarCantidad(p.id, e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              agregarDesdeInput(p);
+                            }
+                          }}
+                          disabled={p.stock === 0}
+                        />
+                        <button
+                          className="btn-success btn-small"
+                          disabled={p.stock === 0}
+                          onClick={() => agregarDesdeInput(p)}
+                          title={`Agregar la cantidad indicada de ${p.nombre}`}
+                        >
+                          Agregar
+                        </button>
+                        <button
+                          className="btn-primary btn-small"
+                          disabled={p.stock === 0}
+                          onClick={() => agregar(p)}
+                          title={`Agregar una unidad de ${p.nombre}`}
+                        >
+                          +
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

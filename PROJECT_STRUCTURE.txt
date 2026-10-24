@@ -1,0 +1,102 @@
+INVENTARIO POS - ESTRUCTURA DEL PROYECTO
+========================================
+Versión 1.1.0 - Actualizado: 23/10/2026
+
+inventario-pos/
+│
+├── CONTEXT.md                     Contexto funcional, estado y pendientes
+├── README.md                      Documentación completa (instalación, uso, API)
+├── README.txt                     Guía rápida en texto plano
+├── PROJECT_STRUCTURE.txt          Este archivo
+├── EXECUTION_GUIDE.md             Guía de ejecución y empaquetado
+├── requirements.txt               Dependencias Python (raíz)
+├── build_exe.spec                 Configuración de PyInstaller
+├── start_dev.sh                   Script de desarrollo para Linux/macOS
+│
+├── backend/
+│   ├── run.py                     Entrada del ejecutable: uvicorn + navegador
+│   ├── requirements.txt           Dependencias Python del backend
+│   ├── data/                      Generado: inventario.db (ignorado por git)
+│   └── app/
+│       ├── main.py                FastAPI, CORS, SPA, /health, /api/config,
+│       │                          migraciones ligeras y datos iniciales
+│       ├── database.py            Conexión SQLite/PostgreSQL (DATABASE_URL)
+│       ├── models.py              Usuario, Categoria, Producto, Mesa, Pedido,
+│       │                          PedidoItem, Division, Participante,
+│       │                          ParticipanteItem, TurnoCaja
+│       ├── schemas.py             Validaciones Pydantic y modelos de salida
+│       └── routes/
+│           ├── usuarios.py        Login, CRUD de usuarios, cambio de clave
+│           ├── mesas.py           Mesas y barras: crear, ocupar, liberar,
+│           │                      estado y eliminar
+│           ├── inventario.py      Productos, búsqueda y stock
+│           ├── pedidos.py         Crear/editar/cerrar pedidos y consultar
+│           ├── cuentas.py         Cuenta por mesa/barra, división,
+│           │                      transferencia y cobro
+│           ├── caja.py            Turnos, resumen, ventas por día e historial
+│           └── categorias.py      CRUD de categorías
+│
+├── frontend/
+│   ├── package.json               Scripts npm y dependencias React/TS
+│   ├── tsconfig.json              Configuración de TypeScript
+│   ├── capacitor.config.json      Configuración de la app Android
+│   ├── public/                    index.html, manifest, service worker, iconos
+│   ├── android/                   Proyecto Android generado con Capacitor
+│   ├── scripts/
+│   │   └── patch-capacitor-gradle.js
+│   └── src/
+│       ├── App.tsx                Rutas de administrador y bartender
+│       ├── App.css                Estilos globales y de todos los módulos
+│       ├── index.tsx              Punto de entrada de React
+│       ├── index.css              Estilos base
+│       ├── serviceWorker.ts       Registro de PWA
+│       ├── layouts/
+│       │   ├── AdminLayout.tsx    Navegación del administrador
+│       │   └── BartenderLayout.tsx Navegación del bartender
+│       ├── pages/
+│       │   ├── LoginPage.tsx      Inicio de sesión por alias y clave
+│       │   ├── InventarioPage.tsx Productos, categorías y stock
+│       │   ├── MesasPage.tsx      Mesas, barras, cuentas y totales
+│       │   ├── PedidoMesaPage.tsx Toma de pedidos por mesa/barra
+│       │   ├── CorteCajaPage.tsx  Apertura/cierre de turno
+│       │   ├── ReportesPage.tsx   KPIs, gráficos y CSV
+│       │   ├── HistorialPage.tsx  Historial de ventas con filtros
+│       │   └── UsuariosPage.tsx   Gestión de usuarios y roles
+│       ├── components/
+│       │   ├── CambiarClaveModal.tsx
+│       │   ├── CobroModal.tsx
+│       │   ├── ConfirmModal.tsx
+│       │   ├── CuentaModal.tsx
+│       │   ├── DivisionModal.tsx
+│       │   └── TransferirModal.tsx
+│       └── services/
+│           └── api.ts             Cliente HTTP y detección de API_BASE
+│
+├── scripts/
+│   ├── install.sh                 Instalación en Linux/macOS/WSL
+│   ├── start.sh                   Inicio backend + frontend en Linux/macOS
+│   ├── start.bat                  Inicio backend + frontend en Windows
+│   ├── build_exe.bat              Compila frontend y genera el .exe
+│   ├── build_apk.bat              Sincroniza Capacitor y compila el APK
+│   └── crear_acceso_directo.bat   Acceso directo al ejecutable
+│
+├── docs/                          Reservada para documentación adicional
+├── build/                         Generado: artefactos de PyInstaller
+├── dist/                          Generado: InventarioPOS.exe (ignorado)
+└── frontend/build/                Generado: build de React (ignorado)
+
+Notas
+-----
+- Las carpetas build/, dist/, frontend/build/, frontend/node_modules/,
+  backend/data/, backend/venv/ y venv/ son generadas y no se versionan.
+- La base de datos de desarrollo se crea en backend/data/inventario.db.
+- El ejecutable guarda sus datos en %LOCALAPPDATA%\InventarioPOS\inventario.db.
+- Endpoints principales (prefijo /api):
+  * /api/usuarios      login, CRUD y cambio de clave
+  * /api/mesas         mesas y barras
+  * /api/inventario    productos y stock
+  * /api/pedidos       pedidos
+  * /api/cuentas       cuentas, divisiones, transferencias y cierres
+  * /api/caja          turnos, resumen e historial
+  * /api/categorias    categorías
+- Servicios adicionales: GET /health, GET /api/config y documentación /docs.

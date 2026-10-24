@@ -4,7 +4,7 @@
  *  - Peticiones a la API: network-only (nunca cachear datos de ventas)
  */
 
-const CACHE_NAME = "inventario-pos-v1";
+const CACHE_NAME = "inventario-pos-v2";
 const ASSETS_TO_CACHE = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", (event) => {

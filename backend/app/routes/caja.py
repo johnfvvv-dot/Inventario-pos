@@ -4,11 +4,17 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Mesa, Pedido, TurnoCaja, Usuario
+from app.models import (
+    Mesa,
+    Pedido,
+    TurnoCaja,
+    Usuario,
+    etiqueta_desde_numero_historico,
+)
 from app.schemas import (
     AbrirTurnoOut,
     CerrarTurnoIn,
@@ -263,7 +269,28 @@ def historial_ventas(
         except ValueError:
             pass
     if mesa:
-        query = query.filter(Pedido.mesa_id == mesa)
+        mesa_filtro = db.query(Mesa).filter(Mesa.id == mesa).first()
+        if (
+            mesa_filtro
+            and (mesa_filtro.tipo or "mesa") == "barra"
+            and mesa_filtro.grupo
+        ):
+            # La tarjeta de una barra representa todas sus plazas: el filtro
+            # incluye tambien el historial de barras ya eliminadas.
+            ids_barra = [
+                m.id
+                for m in db.query(Mesa)
+                .filter(Mesa.grupo == mesa_filtro.grupo)
+                .all()
+            ]
+            query = query.filter(
+                or_(
+                    Pedido.mesa_id.in_(ids_barra),
+                    Pedido.mesa_etiqueta_historica == mesa_filtro.grupo,
+                )
+            )
+        else:
+            query = query.filter(Pedido.mesa_id == mesa)
     if forma_pago:
         query = query.filter(Pedido.forma_pago == forma_pago)
 
@@ -293,6 +320,16 @@ def historial_ventas(
             )
         mesa_obj = db.query(Mesa).filter(Mesa.id == pedido.mesa_id).first() if pedido.mesa_id else None
         usuario = db.query(Usuario).filter(Usuario.id == pedido.usuario_id).first()
+        if pedido.mesa_etiqueta_historica:
+            mesa_etiqueta = pedido.mesa_etiqueta_historica
+        elif mesa_obj:
+            mesa_etiqueta = mesa_obj.etiqueta_historial()
+        elif pedido.mesa_numero_historico is not None:
+            mesa_etiqueta = etiqueta_desde_numero_historico(
+                pedido.mesa_numero_historico
+            )
+        else:
+            mesa_etiqueta = None
         resultados.append(
             {
                 "id": pedido.id,
@@ -305,6 +342,7 @@ def historial_ventas(
                     if mesa_obj
                     else pedido.mesa_numero_historico
                 ),
+                "mesa_etiqueta": mesa_etiqueta,
                 "usuario_nombre": usuario.nombre if usuario else "",
                 "productos": productos_txt,
             }

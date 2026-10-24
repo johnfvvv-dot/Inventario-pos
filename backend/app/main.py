@@ -12,7 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.database import Base, SessionLocal, engine, _data_dir
-from app.models import Division, Mesa, Producto, TurnoCaja, Usuario
+from app.models import (
+    Division,
+    Mesa,
+    Pedido,
+    Producto,
+    TurnoCaja,
+    Usuario,
+    etiqueta_desde_numero_historico,
+)
 from app.routes.caja import router as caja_router
 from app.routes.categorias import router as categorias_router
 from app.routes.cuentas import router as cuentas_router
@@ -217,11 +225,50 @@ def _migrar_alias_usuarios() -> None:
                 print(f"[migracion] no se pudo eliminar usuarios.email: {exc}")
 
 
+def _migrar_etiquetas_historial() -> None:
+    """Completa la etiqueta historica de pedidos creados antes de esta version."""
+    db = SessionLocal()
+    try:
+        pendientes = (
+            db.query(Pedido)
+            .filter(Pedido.mesa_etiqueta_historica.is_(None))
+            .all()
+        )
+        if not pendientes:
+            return
+
+        mesas = {m.id: m for m in db.query(Mesa).all()}
+        por_numero = {m.numero: m for m in mesas.values()}
+        cambiados = 0
+        for pedido in pendientes:
+            etiqueta = None
+            if pedido.mesa_id and pedido.mesa_id in mesas:
+                etiqueta = mesas[pedido.mesa_id].etiqueta_historial()
+            elif pedido.mesa_numero_historico is not None:
+                mesa_actual = por_numero.get(pedido.mesa_numero_historico)
+                if mesa_actual:
+                    etiqueta = mesa_actual.etiqueta_historial()
+                else:
+                    etiqueta = etiqueta_desde_numero_historico(
+                        pedido.mesa_numero_historico
+                    )
+            if etiqueta:
+                pedido.mesa_etiqueta_historica = etiqueta
+                cambiados += 1
+
+        if cambiados:
+            db.commit()
+            print(f"[migracion] {cambiados} pedidos con etiqueta historica")
+    finally:
+        db.close()
+
+
 def crear_datos_iniciales() -> None:
     """Crea tablas y siembra usuarios, productos y mesas de ejemplo."""
     Base.metadata.create_all(bind=engine)
     _migrar_columnas_faltantes()
     _migrar_alias_usuarios()
+    _migrar_etiquetas_historial()
 
     db = SessionLocal()
     try:

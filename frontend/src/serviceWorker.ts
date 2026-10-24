@@ -17,11 +17,24 @@ export function registerServiceWorker() {
   }
 }
 
-// Permite que el service worker intercepta peticiones en desarrollo
+// En desarrollo se elimina el service worker y su caché para no servir
+// una versión anterior del frontend.
 export function unregister() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.ready
-      .then((registration) => registration.unregister())
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) =>
+        Promise.all(
+          registrations.map((registration) => registration.unregister())
+        )
+      )
+      .catch((error) => console.log(error.message));
+  }
+
+  if ("caches" in window) {
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
       .catch((error) => console.log(error.message));
   }
 }

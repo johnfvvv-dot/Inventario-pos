@@ -36,6 +36,13 @@ from app.schemas import (
 router = APIRouter(tags=["cuentas"])
 
 
+def _etiqueta_puesto(mesa: Mesa) -> str:
+    """Nombre visible de una mesa o de una plaza de barra."""
+    if (mesa.tipo or "mesa") == "barra":
+        return f"{mesa.grupo or 'Barra'} · Plaza {mesa.posicion or 1}"
+    return f"Mesa {mesa.numero}"
+
+
 def _pedido_out(pedido: Pedido) -> PedidoOut:
     items = [
         PedidoItemOut(
@@ -304,6 +311,7 @@ def cerrar_cuenta(
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
         pedido.fecha_cierre = ahora
+        pedido.mesa_etiqueta_historica = mesa.etiqueta_historial()
 
     # Marcar como pagadas las divisiones pendientes
     divisiones = _cargar_divisiones(db, mesa_id)
@@ -323,11 +331,71 @@ def cerrar_cuenta(
     return consultar_cuenta(mesa_id, db)
 
 
+@router.post("/barra/{numero_barra}/cerrar", response_model=CuentaMesaOut)
+def cerrar_cuenta_barra(
+    numero_barra: int,
+    liberar_barra: bool = False,
+    forma_pago: str = "efectivo",
+    db: Session = Depends(get_db),
+):
+    """Cierra la cuenta completa de una barra (todas sus plazas).
+
+    Por defecto la barra permanece OCUPADA (se puede abrir una nueva cuenta).
+    Con liberar_barra=True todas sus plazas quedan DISPONIBLES al terminar.
+    """
+    grupo = f"Barra {numero_barra}"
+    mesas = (
+        db.query(Mesa).filter(Mesa.grupo == grupo).order_by(Mesa.posicion).all()
+    )
+    if not mesas:
+        raise HTTPException(status_code=404, detail="Barra no encontrada")
+
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ids = [m.id for m in mesas]
+    ahora = datetime.utcnow()
+
+    # Cerrar pedidos abiertos de todas las plazas
+    pedidos = (
+        db.query(Pedido)
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
+        .all()
+    )
+    mesas_por_id = {m.id: m for m in mesas}
+    for pedido in pedidos:
+        pedido.estado = "cerrado"
+        pedido.forma_pago = forma_pago
+        pedido.fecha_cierre = ahora
+        plaza = mesas_por_id.get(pedido.mesa_id)
+        if plaza:
+            pedido.mesa_etiqueta_historica = plaza.etiqueta_historial()
+
+    # Marcar como pagadas las divisiones pendientes de cada plaza
+    for mesa in mesas:
+        for division in _cargar_divisiones(db, mesa.id):
+            if division.estado == "pendiente":
+                division.estado = "pagada"
+                division.forma_pago = forma_pago
+                for participante in division.participantes:
+                    participante.pagado = 1
+                    participante.forma_pago = forma_pago
+
+        mesa.estado = "disponible" if liberar_barra else "ocupada"
+
+    db.commit()
+
+    return cuenta_barra(numero_barra, db)
+
+
 @router.post("/mesa/{mesa_id}/transferir", response_model=TransferirCuentaOut)
 def transferir_cuenta(
     mesa_id: int, destino_id: int, db: Session = Depends(get_db)
 ):
-    """Transfiere la cuenta abierta de una mesa a otra mesa."""
+    """Transfiere una cuenta abierta entre mesas y plazas de barra."""
     origen = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not origen:
         raise HTTPException(status_code=404, detail="Mesa de origen no encontrada")
@@ -338,28 +406,44 @@ def transferir_cuenta(
 
     if origen.id == destino.id:
         raise HTTPException(
-            status_code=400, detail="El destino debe ser otra mesa"
+            status_code=400,
+            detail="El destino debe ser otra mesa o una plaza de barra distinta",
         )
 
     db.flush()
 
-    # La mesa destino no debe tener ya una cuenta abierta
+    # El destino no debe tener ya una cuenta abierta. En una barra se valida
+    # el grupo completo: no se permite sumar la cuenta a una barra ocupada
+    # aunque la plaza elegida esté libre.
+    es_barra_destino = (destino.tipo or "mesa") == "barra" and bool(destino.grupo)
+    if es_barra_destino:
+        destinos_grupo = (
+            db.query(Mesa).filter(Mesa.grupo == destino.grupo).all()
+        )
+        ids_destino = [m.id for m in destinos_grupo]
+        barra_ocupada = any(m.estado == "ocupada" for m in destinos_grupo)
+        detalle_ocupado = "La barra de destino ya tiene una cuenta abierta."
+    else:
+        ids_destino = [destino.id]
+        barra_ocupada = False
+        detalle_ocupado = "El destino ya tiene una cuenta abierta."
+
     pedidos_destino = (
         db.query(func.count(Pedido.id))
-        .filter(Pedido.mesa_id == destino.id, Pedido.estado == "abierto")
+        .filter(Pedido.mesa_id.in_(ids_destino), Pedido.estado == "abierto")
         .scalar()
         or 0
     )
     divisiones_destino = (
         db.query(func.count(Division.id))
-        .filter(Division.mesa_id == destino.id, Division.estado == "pendiente")
+        .filter(Division.mesa_id.in_(ids_destino), Division.estado == "pendiente")
         .scalar()
         or 0
     )
-    if pedidos_destino or divisiones_destino:
+    if barra_ocupada or pedidos_destino or divisiones_destino:
         raise HTTPException(
             status_code=400,
-            detail="La mesa destino ya tiene una cuenta abierta.",
+            detail=detalle_ocupado,
         )
 
     # Mover pedidos abiertos
@@ -372,6 +456,7 @@ def transferir_cuenta(
     total = 0.0
     for pedido in pedidos:
         pedido.mesa_id = destino.id
+        pedido.mesa_etiqueta_historica = destino.etiqueta_historial()
         total += pedido.total or 0.0
 
     # Mover divisiones pendientes
@@ -389,8 +474,8 @@ def transferir_cuenta(
 
     return TransferirCuentaOut(
         mensaje=(
-            f"Cuenta transferida de la mesa {origen.numero} "
-            f"a la mesa {destino.numero}"
+            f"Cuenta transferida de {_etiqueta_puesto(origen)} "
+            f"a {_etiqueta_puesto(destino)}"
         ),
         mesa_origen=origen.id,
         mesa_destino=destino.id,
@@ -400,14 +485,35 @@ def transferir_cuenta(
 
 @router.post("/dividir", response_model=DivisionOut, status_code=201)
 def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
-    """Divide la cuenta de una mesa entre varios clientes (alias).
+    """Divide la cuenta de una mesa o de una barra completa entre varios clientes.
 
-    Solo se divide lo asignado a los alias. El resto de los productos queda
-    en un pedido abierto (bloque único) para que la cuenta se complete.
+    En una barra se toma la cuenta agregada de todas sus plazas. Solo se
+    divide lo asignado a los alias; el resto queda en un pedido abierto
+    (bloque único) para que la cuenta se complete.
     """
-    mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
-    if not mesa:
-        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    es_barra = datos.barra_numero is not None
+    if es_barra:
+        grupo = f"Barra {datos.barra_numero}"
+        mesas = (
+            db.query(Mesa)
+            .filter(Mesa.grupo == grupo)
+            .order_by(Mesa.posicion)
+            .all()
+        )
+        if not mesas:
+            raise HTTPException(status_code=404, detail="Barra no encontrada")
+        etiqueta = f"la barra {datos.barra_numero}"
+    else:
+        if datos.mesa_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Indicá la mesa o la barra que se va a dividir",
+            )
+        mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
+        if not mesa:
+            raise HTTPException(status_code=404, detail="Mesa no encontrada")
+        mesas = [mesa]
+        etiqueta = "la mesa"
 
     usuario = db.query(Usuario).filter(Usuario.id == datos.usuario_id).first()
     if not usuario:
@@ -416,11 +522,13 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     if not datos.participantes:
         raise HTTPException(status_code=400, detail="Agrega al menos un cliente")
 
-    # Pool de productos pendientes (pedidos abiertos de la mesa)
+    ids = [m.id for m in mesas]
+
+    # Pool de productos pendientes (pedidos abiertos de la mesa o de la barra)
     pedidos = (
         db.query(Pedido)
         .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))
-        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
         .order_by(Pedido.id)
         .all()
     )
@@ -440,7 +548,8 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
 
     if not pool:
         raise HTTPException(
-            status_code=400, detail="La mesa no tiene productos pendientes para dividir"
+            status_code=400,
+            detail=f"{etiqueta.capitalize()} no tiene productos pendientes para dividir",
         )
 
     # Validar que lo asignado no exceda lo disponible
@@ -467,9 +576,15 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
                 ),
             )
 
+    # La división se guarda en una plaza concreta: en una barra, la primera
+    # plaza que tenga pedidos abiertos (la cuenta se consulta de forma agregada).
+    mesa_division = next(
+        (m for m in mesas if any(p.mesa_id == m.id for p in pedidos)), mesas[0]
+    )
+
     # Crear la división con los subtotales por alias
     division = Division(
-        mesa_id=mesa.id,
+        mesa_id=mesa_division.id,
         usuario_id=usuario.id,
         total=0.0,
         estado="pendiente",
@@ -531,10 +646,11 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
 
     if resto_items:
         pedido_resto = Pedido(
-            mesa_id=mesa.id,
+            mesa_id=mesa_division.id,
             usuario_id=usuario.id,
             estado="abierto",
             total=resto_total,
+            mesa_etiqueta_historica=mesa_division.etiqueta_historial(),
         )
         db.add(pedido_resto)
         db.flush()
@@ -553,8 +669,8 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     for pedido in pedidos:
         pedido.estado = "dividido"
 
-    # La mesa sigue ocupada
-    mesa.estado = "ocupada"
+    # La mesa/plaza sigue ocupada
+    mesa_division.estado = "ocupada"
 
     db.commit()
 

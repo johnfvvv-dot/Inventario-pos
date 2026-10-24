@@ -106,6 +106,7 @@ class PedidoHistorialOut(BaseModel):
     forma_pago: Optional[str] = None
     total: float
     mesa_numero: Optional[int] = None
+    mesa_etiqueta: Optional[str] = None
     usuario_nombre: str = ""
     productos: List[str] = []
 
@@ -133,6 +134,7 @@ class MesaOut(MesaBase):
 class PosicionBarra(BaseModel):
     """Puesto (cliente) dentro de una barra."""
     id: int
+    posicion: int = 1
     estado: str
     total_cuenta: float = 0.0
 
@@ -318,7 +320,14 @@ class ParticipanteCreate(BaseModel):
 
 
 class DivisionCreate(BaseModel):
-    mesa_id: int = Field(..., gt=0)
+    """División de una mesa o de una barra completa.
+
+    Se debe indicar `mesa_id` (mesa o plaza concreta) o `barra_numero`
+    (cuenta agregada de la barra, con todas sus plazas).
+    """
+
+    mesa_id: Optional[int] = Field(default=None, gt=0)
+    barra_numero: Optional[int] = Field(default=None, gt=0)
     usuario_id: int = Field(..., gt=0)
     participantes: List[ParticipanteCreate]
 

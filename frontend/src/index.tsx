@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
-import { registerServiceWorker } from './serviceWorker';
+import { registerServiceWorker, unregister } from './serviceWorker';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -10,5 +10,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 );
 
-// PWA: registra el service worker para poder instalar la app en el celular
-registerServiceWorker();
+// PWA: solo se registra en producción. En desarrollo se desregistra para
+// evitar que el navegador sirva una versión vieja del frontend desde caché.
+if (process.env.NODE_ENV === 'production') {
+  registerServiceWorker();
+} else {
+  unregister();
+}

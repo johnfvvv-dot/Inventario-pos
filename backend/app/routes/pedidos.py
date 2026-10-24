@@ -80,6 +80,7 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
         usuario_id=usuario.id,
         estado="abierto",
         total=0.0,
+        mesa_etiqueta_historica=mesa.etiqueta_historial(),
     )
     db.add(nuevo_pedido)
     db.flush()  # obtener ID sin confirmar todavía
@@ -190,6 +191,8 @@ def ajustar_item_pedido(
         pedido.estado = "cerrado"
         pedido.forma_pago = "efectivo"
         pedido.fecha_cierre = datetime.utcnow()
+        if pedido.mesa:
+            pedido.mesa_etiqueta_historica = pedido.mesa.etiqueta_historial()
 
     db.commit()
     pedido_cargado = _cargar_pedido(db, pedido.id)
@@ -251,6 +254,8 @@ def cerrar_pedido(
     pedido.estado = "cerrado"
     pedido.forma_pago = forma_pago
     pedido.fecha_cierre = datetime.utcnow()
+    if pedido.mesa:
+        pedido.mesa_etiqueta_historica = pedido.mesa.etiqueta_historial()
 
     # La mesa se libera solo si no quedan pedidos abiertos NI divisiones pendientes
     if pedido.mesa_id:

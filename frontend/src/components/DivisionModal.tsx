@@ -1,12 +1,13 @@
 /**
- * Ventana de división de cuenta por mesa.
+ * Ventana de división de cuenta por mesa o por barra completa.
  *
- * - Productos de la mesa a la izquierda, clientes (alias) a la derecha.
+ * - Productos de la cuenta a la izquierda, clientes (alias) a la derecha.
+ * - En una barra se muestran los productos de todas sus plazas juntos.
  * - Al crear un alias se pueden marcar los productos que se le asignan.
  * - El subtotal de cada alias se calcula automáticamente.
  * - La parte NO asignada se mantiene como bloque único ("Resto de la cuenta"),
  *   sin obligar a crear alias adicionales.
- * - Al confirmar, la mesa permanece ocupada.
+ * - Al confirmar, la mesa/barra permanece ocupada.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -38,12 +39,19 @@ const subtotalDe = (p: Participante) =>
   redondear(p.items.reduce((s, i) => s + i.subtotal, 0));
 
 interface Props {
-  mesaId: number;
+  mesaId?: number;
+  /** Si se indica, se divide la cuenta agregada de la barra */
+  barraNumero?: number | null;
   onClose: () => void;
   onConfirmado?: () => void;
 }
 
-export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) {
+export default function DivisionModal({
+  mesaId,
+  barraNumero = null,
+  onClose,
+  onConfirmado,
+}: Props) {
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [participantes, setParticipantes] = useState<Participante[]>([]);
   const [aliasNuevo, setAliasNuevo] = useState("");
@@ -60,7 +68,9 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
   useEffect(() => {
     const cargar = async () => {
       try {
-        const data: any = await api.getCuentaMesa(mesaId);
+        const data: any = barraNumero
+          ? await api.getCuentaBarra(barraNumero)
+          : await api.getCuentaMesa(mesaId as number);
         const todas: Linea[] = [];
         (data.pedidos || []).forEach((pedido: any) => {
           pedido.items.forEach((i: Linea) => {
@@ -81,7 +91,7 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
       }
     };
     cargar();
-  }, [mesaId]);
+  }, [mesaId, barraNumero]);
 
   /** Unidades ya asignadas de un producto, en todos los alias */
   const unidadesAsignadas = (productoId: number) =>
@@ -251,7 +261,9 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
     setProcesando(true);
     try {
       await api.dividirCuenta({
-        mesa_id: mesaId,
+        ...(barraNumero
+          ? { barra_numero: barraNumero }
+          : { mesa_id: mesaId as number }),
         usuario_id: usuarioId,
         participantes: participantes.map((p) => ({
           alias: p.alias,
@@ -261,10 +273,11 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
           })),
         })),
       });
+      const lugar = barraNumero ? "La barra" : "La mesa";
       setMensaje(
         resto > 0
           ? `División guardada. Quedan $${resto.toFixed(2)} sin asignar en la cuenta.`
-          : "División guardada. La mesa permanece ocupada."
+          : `División guardada. ${lugar} permanece ocupada.`
       );
       setTimeout(() => {
         onConfirmado?.();
@@ -280,7 +293,7 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-xl" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Dividir cuenta por mesa</h3>
+          <h3>Dividir cuenta por {barraNumero ? "barra" : "mesa"}</h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
             ×
           </button>
@@ -291,7 +304,8 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
 
         {lineas.length === 0 ? (
           <p className="empty-state">
-            No hay productos pendientes en esta mesa. Agrega productos al pedido primero.
+            No hay productos pendientes en {barraNumero ? "esta barra" : "esta mesa"}.
+            Agrega productos al pedido primero.
           </p>
         ) : (
           <>
@@ -417,7 +431,7 @@ export default function DivisionModal({ mesaId, onClose, onConfirmado }: Props) 
 
               {/* Columna 2: clientes */}
               <section className="panel">
-                <h3>Clientes de la mesa</h3>
+                <h3>Clientes de la cuenta</h3>
 
                 {participantes.length === 0 && (
                   <p className="empty-state">
