@@ -28,6 +28,13 @@ interface Mesa {
   posiciones?: Posicion[];
 }
 
+/** Formatea el total con separador de miles y sin decimales .00. */
+const formatearTotal = (total: number): string =>
+  total.toLocaleString("es-CO", {
+    minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
+    maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
+  });
+
 export default function MesasPage() {
   const navigate = useNavigate();
   const [mesas, setMesas] = useState<Mesa[]>([]);
@@ -294,7 +301,7 @@ export default function MesasPage() {
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
-                ${(mesa.total_cuenta || 0).toFixed(2)}
+                ${formatearTotal(mesa.total_cuenta || 0)}
               </div>
             )}
 

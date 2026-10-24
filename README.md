@@ -1,140 +1,295 @@
 # Inventario POS
 
-Sistema web multiplataforma de inventario y punto de venta para pequeños negocios.
+Sistema web y de escritorio de inventario y punto de venta para pequeños
+negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
+pedidos, cuentas, caja, reportes e historial en una sola aplicación.
+
+**Versión actual:** 1.1.0
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
-- **Frontend:** React + TypeScript
+- **Frontend:** React 18 + TypeScript
 - **Base de datos:** SQLite (local) / PostgreSQL (nube)
-- **Hosting inicial:** local en la PC, sin costos de servidor
+- **Ejecución inicial:** local en la PC, sin costos de servidor
 
-## Funcionalidades (v1.1)
+## Funcionalidades (v1.1.0)
 
 ### Módulos
-- **Login** con roles `admin` y `mesero` (hash SHA-256), redirección según rol
-- **Inventario:** alta, edición, ajuste de stock (+/− y **ingreso manual del total**), eliminación con **ventana de confirmación**, **búsqueda**, **paginación** y filtro por categoría
-- **Categorías:** CRUD de categorías (Bebidas, Comidas...) con filtro rápido en el POS
-- **Mesas:** creación, **eliminación de mesas eventuales**, estado (disponible/ocupada), apertura directa del pedido con mesa preseleccionada, importe pendiente en vivo y refresco automático cada 15 s
-- **Barras:** creación de **Barra / Barra 2** con **número y capacidad**; se muestran como una tarjeta más del panel ("Barra N", N plazas) y cada plaza guarda su propia cuenta de forma interna
-- **Pedidos:** carrito con control de stock, total automático, **edición de pedidos abiertos** (+/− por línea) y cobro con forma de pago
-- **Cuentas por mesa y barra:** total en vivo, detalle por pedido y por división, cierre con confirmación (Aceptar / Liberar mesa o barra) sin liberar la mesa/barra por defecto
-- **División de cuenta:** reparto entre clientes con alias, cantidad exacta por producto, subtotales por cliente, resto de la cuenta conservado como bloque único y cobro individual de cada alias. Funciona igual en mesas y en la cuenta agregada de una barra
-- **Liberación controlada:** una mesa con cuentas pendientes no se puede liberar; se muestra el aviso *"La mesa aún tiene un pedido abierto."* con acceso directo al pedido abierto
-- **Transferencia de cuenta:** mueve el pedido abierto y las divisiones pendientes a otra mesa (cambio de mesa de los clientes)
-- **Corte de caja:** apertura/cierre de turno con totales por **forma de pago** (efectivo / tarjeta / transferencia), observaciones e historial de turnos
-- **Reportes:** gráficos (línea de ventas por día, barra de top de productos, dona de formas de pago) + KPIs + **exportación CSV**
-- **Historial de ventas:** filtros por rango de fechas, mesa/barra, producto y forma de pago, con paginación y exportación CSV
-- **PWA instalable:** "Añadir a pantalla de inicio" en Android (manifest + service worker)
 
-### Mesas y Barras
+- **Login** con roles `admin` y `bartender` (clave con hash SHA-256) y
+  redirección según el rol.
+- **Inventario:** alta, edición, eliminación con confirmación, búsqueda,
+  paginación y filtro por categoría. La columna **Stock es de solo lectura**;
+  los ingresos se registran en el campo **"Ingreso de stock"** con un botón
+  verde **"Agregar"** que **suma** la cantidad al stock existente. Se conservan
+  los botones **"−"** y **"+"** para ajustes de una unidad.
+- **Categorías:** CRUD de categorías (Bebidas, Comidas, etc.) con filtro rápido
+  en el POS.
+- **Mesas:** creación, eliminación, estado (disponible/ocupada), apertura
+  directa del pedido con la mesa preseleccionada, importe pendiente en vivo y
+  refresco automático cada 15 s.
+- **Barras:** creación de **Barra N** con número y capacidad; se muestran como
+  una tarjeta más del panel y cada plaza guarda su propia cuenta. En el
+  selector de pedidos y en el historial aparecen como **"Barra N"**.
+- **Pedidos:** carrito con control de stock, total automático, edición de
+  pedidos abiertos y cobro con forma de pago. La lista de productos muestra
+  **máximo 8 filas visibles con scroll**; cada producto tiene un campo numérico
+  + botón verde **"Agregar"** para cantidades manuales, además del botón **"+"**
+  incremental.
+- **Cuentas por mesa y barra:** total en vivo, detalle por pedido y por
+  división, cierre con confirmación (Aceptar / Liberar mesa o barra) sin liberar
+  la mesa/barra por defecto. Las barras se cierran y liberan con el mismo flujo
+  que las mesas.
+- **División de cuenta:** reparto entre clientes con alias, cantidad exacta por
+  producto, subtotales por cliente, resto de la cuenta conservado como bloque
+  único y cobro individual de cada alias. Funciona en mesas y en la cuenta
+  agregada de una barra.
+- **Liberación controlada:** una mesa o barra con cuentas pendientes no se puede
+  liberar; se muestra el aviso correspondiente con acceso directo al pedido
+  abierto.
+- **Transferencia de cuenta:** mueve el pedido abierto y las divisiones
+  pendientes a otra mesa o plaza libre. Una barra ocupada no puede ser destino
+  de transferencia.
+- **Corte de caja:** apertura/cierre de turno con totales por forma de pago
+  (efectivo / tarjeta / transferencia), observaciones e historial de turnos.
+- **Reportes:** gráficos (ventas por día, top de productos, formas de pago),
+  KPIs y exportación CSV.
+- **Historial de ventas:** filtros por rango de fechas, mesa/barra, producto y
+  forma de pago, con paginación y exportación CSV. Las etiquetas históricas
+  conservan "Mesa N" o "Barra N" aunque la mesa/barra se elimine.
+- **PWA instalable:** "Añadir a pantalla de inicio" en Android (manifest +
+  service worker).
+
+### Totales de mesas y barras
+
+Los totales pendientes de las tarjetas se muestran en **verde**, con
+**separador de miles** y sin `.00` cuando son enteros:
+
+- `$30400.00` → `$30.400`
+- `$1234567.00` → `$1.234.567`
+- Si hay centavos reales: `$30.400,50`
+
+### Flujo de mesas y barras
+
 ```
 Panel Mesas
  ├─ [Crear mesa]      → mesa numerada (Mesa 1, Mesa 2, ...)
  ├─ [Crear barra]     → Barra N con capacidad C (C plazas)
  │                      la barra se muestra como una tarjeta más, igual que
  │                      una mesa, y cada plaza guarda su propia cuenta
- ├─ [Pedido]  → pedidos con la mesa ya seleccionada
- │              └─ +/− por línea para corregir cantidades
+ ├─ [Pedido]  → pedidos con la mesa/barra ya seleccionada
+ │              └─ cantidad manual o +/− por producto
  ├─ [Cuenta]  → ┌─ Dividir cuenta ────► alias con cantidades por producto
  │              ├─ Cerrar división ───► cobra 1 cliente, los demás siguen
- │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa
- │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa/barra] + forma de pago
+ │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa/plaza libre
+ │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa/barra] + pago
  ├─ [Liberar]  → si hay pendientes: aviso + "Ver el pedido abierto"
- └─ [×]         → eliminar mesa o barra completa (solo si no hay cuentas pendientes)
+ └─ [×]         → eliminar mesa o barra completa (solo sin cuentas pendientes)
 ```
 
-### API (31 endpoints)
-| Módulo | Endpoints |
+## API principal
+
+Todos los endpoints usan el prefijo `/api`. La documentación interactiva está
+disponible en `http://localhost:8000/docs`.
+
+| Módulo | Endpoints principales |
 |---|---|
-| Usuarios | `POST /login`, `POST /`, `GET /` |
-| Mesas | `POST /`, `GET /`, `PUT /{id}/estado`, `POST /{id}/liberar` |
-| Inventario | `GET /` (búsqueda+paginación), `POST /`, `PUT /{id}`, `PUT /{id}/stock`, `DELETE /{id}` |
-| Categorías | `GET /`, `POST /`, `PUT /{id}`, `DELETE /{id}` |
-| Pedidos | `POST /`, `GET /`, `GET /mesa/{id}`, `PUT /{id}/cerrar`, `PUT /{id}/items/{item_id}` |
-| Cuentas | `GET /mesa/{id}`, `POST /mesa/{id}/cerrar`, `POST /mesa/{id}/transferir`, `POST /dividir`, `POST /division/{id}/pagar`, `POST /participante/{id}/pagar`, `GET /mesa/{id}/divisiones` |
-| Caja | `GET /turno-actual`, `POST /abrir`, `POST /cerrar`, `GET /turnos`, `GET /resumen`, `GET /ventas-por-dia`, `GET /historial` |
-| Config | `GET /api/config` (IP, puerto, modo, versión) |
+| Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `POST /usuarios/`, `PUT /usuarios/{id}`, `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
+| Mesas y barras | `GET /mesas/`, `POST /mesas/`, `POST /mesas/barra`, `POST /mesas/{id}/ocupar`, `PUT /mesas/{id}/estado`, `POST /mesas/{id}/liberar`, `DELETE /mesas/{id}` |
+| Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `DELETE /inventario/{id}` |
+| Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
+| Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
+| Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
+| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
+| Configuración | `GET /config` (bajo `/api`) y `GET /health` (sin prefijo) |
 
-## Requisitos
+## Requisitos previos
 
-- Python 3.10+
-- Node.js 18+ (incluye npm)
-- Git (opcional)
+- **Python 3.10 o superior**
+- **Node.js 18 o superior** (incluye `npm`); también se puede usar `yarn`
+- **Git** (opcional, para clonar el repositorio)
+- Para el APK: Android Studio y SDK de Android (opcional)
 
-## Instalación y ejecución (Windows PowerShell)
+## Instalación y ejecución
 
 ### 1. Backend
 
+**Windows (PowerShell):**
+
 ```powershell
-cd C:\Users\XR-18\Desktop\Python\inventario-pos\backend
+cd backend
 python -m venv venv
-.\venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 2. Frontend (en otra ventana)
+**Linux / macOS:**
 
-```powershell
-cd C:\Users\XR-18\Desktop\Python\inventario-pos\frontend
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+> Si PowerShell bloquea la activación del entorno virtual, ejecuta
+> `Set-ExecutionPolicy -Scope Process Bypass` o usa `cmd` con
+> `venv\Scripts\activate.bat`.
+
+### 2. Frontend (en otra terminal)
+
+```bash
+cd frontend
 npm install
 npm start
 ```
 
-> Si ya existía una instalación previa, conviene limpiar:
-> `Remove-Item -Recurse -Force node_modules, package-lock.json` y volver a ejecutar `npm install`.
+Con yarn:
+
+```bash
+cd frontend
+yarn install
+yarn start
+```
+
+> Si ya existía una instalación previa y hay problemas, elimina
+> `node_modules` y `package-lock.json`, y vuelve a ejecutar `npm install`.
 
 ### 3. Acceso
 
 - Frontend: http://localhost:3000
 - API: http://localhost:8000
 - Documentación interactiva: http://localhost:8000/docs
+- Estado del servicio: http://localhost:8000/health
 
-## Usuarios de prueba
+### 4. Base de datos
 
-| Rol | Alias | Contraseña |
-|-----|-------|------------|
-| Administrador | `Admin` | `1234` |
+- En desarrollo se crea automáticamente en `backend/data/inventario.db` con
+  usuarios, productos y mesas de ejemplo la primera vez que arranca el backend.
+- El ejecutable de Windows guarda los datos en
+  `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
+- Para usar PostgreSQL, define la variable de entorno `DATABASE_URL` antes de
+  iniciar el backend.
 
-La base de datos SQLite (`backend/inventario.db`) se crea automáticamente con productos y mesas de ejemplo la primera vez que arranca el backend.
+## Ejemplos de uso básico
+
+### Abrir el inventario y agregar stock
+
+1. Inicia sesión con el usuario administrador.
+2. Entra a **Inventario**.
+3. La columna **Stock** solo muestra la cantidad actual.
+4. Escribe, por ejemplo, `10` en **"Ingreso de stock"** y pulsa el botón verde
+   **"Agregar"**. Si el stock era 50, quedará en 60.
+5. Usa **"−"** o **"+"** para ajustar una unidad; el stock no se edita
+   directamente en la columna.
+
+### Crear un pedido
+
+1. Entra a **Mesas**.
+2. Elige una mesa o una barra (por ejemplo, **Barra 1**) y pulsa **Pedido**.
+3. Agrega productos con el botón **"+"** o escribe una cantidad y pulsa
+   **"Agregar"**. La lista muestra 8 productos visibles y permite desplazarse.
+4. Revisa el carrito y registra el pedido.
+
+### Cobrar y cerrar una cuenta
+
+1. En **Mesas**, pulsa **Cuenta** sobre la mesa o barra.
+2. Desde allí puedes **Dividir cuenta**, **Transferir cuenta** o **Cerrar
+   cuenta**.
+3. Al cerrar, elige la forma de pago y si deseas **Liberar mesa/barra**.
+
+### Generar un reporte
+
+1. Entra a **Reportes**.
+2. Selecciona el rango de fechas.
+3. Consulta los KPIs y gráficos.
+4. Usa **Exportar CSV** para descargar la información. El **Historial** permite
+   filtrar por mesa/barra, producto y forma de pago.
+
+## Usuarios y roles
+
+No se usan correos: el acceso es por **alias** + **clave**.
+
+### Usuario inicial
+
+| Alias | Clave | Rol |
+|---|---|---|
+| `Admin` | `1234` | Administrador |
+
+> Cambia la clave desde **Usuarios → Cambiar clave** en cuanto arranques en
+> producción.
+
+### Permisos
+
+| Módulo | Administrador | Bartender |
+|---|---|---|
+| Inventario | Crear, editar, eliminar, ingresar stock | **Solo lectura** |
+| Mesas / Pedidos / Cuenta | ✅ | ✅ |
+| Corte de caja | ✅ | ✅ |
+| Reportes / Historial | ✅ | ❌ |
+| Usuarios (crear, roles, claves) | ✅ | ❌ |
+
+### Menú de Usuarios (solo Administrador)
+
+`/admin/usuarios` permite crear usuarios con alias y rol, cambiar rol,
+activar/desactivar, cambiar clave y eliminar. Todos los usuarios nuevos nacen
+con la **clave inicial `1234`** (cambiable después).
 
 ## Acceso desde celular o tablet (misma WiFi)
 
 1. Obtén la IP de la PC con `ipconfig` (Windows).
 2. Inicia el backend con `--host 0.0.0.0`.
-3. Abre en el dispositivo: `http://IP_DE_LA_PC:3000`.
-4. Si el frontend no conecta, cambia `API_BASE` en `frontend/src/services/api.ts` por `http://IP_DE_LA_PC:8000/api`.
+3. Abre en el dispositivo: `http://IP_DE_LA_PC:3000` (desarrollo) o
+   `http://IP_DE_LA_PC:8000` (build/ejecutable).
+4. El frontend detecta automáticamente la IP del host; si necesitas fijarla,
+   define `REACT_APP_API_URL=http://IP_DE_LA_PC:8000/api` antes de compilar.
 5. Permite los puertos 3000 y 8000 en el firewall de Windows.
 
-## Estructura
+## Estructura del proyecto
 
 ```
 inventario-pos/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py          # FastAPI, CORS, datos iniciales
-│   │   ├── database.py      # SQLite/PostgreSQL
-│   │   ├── models.py        # Usuario, Producto, Mesa, Pedido, PedidoItem
+│   │   ├── main.py          # FastAPI, CORS, SPA, migraciones y datos iniciales
+│   │   ├── database.py      # SQLite / PostgreSQL
+│   │   ├── models.py        # Usuario, Producto, Mesa, Pedido, Cuenta, Caja...
 │   │   ├── schemas.py       # Validaciones Pydantic
-│   │   └── routes/          # usuarios, mesas, inventario, pedidos
-│   └── requirements.txt
+│   │   └── routes/          # usuarios, mesas, inventario, pedidos, cuentas,
+│   │                        # caja y categorías
+│   ├── data/                # Base SQLite generada (ignorada por git)
+│   ├── requirements.txt
+│   └── run.py               # Entrada del ejecutable
 ├── frontend/
-│   ├── public/index.html
-│   └── src/
-│       ├── pages/           # Login, Inventario, Mesas, Pedidos, Reportes
-│       ├── layouts/         # Admin y Mesero
-│       └── services/api.ts
-├── scripts/                 # install/start para Linux y Windows
-└── docs/
+│   ├── public/              # index.html, manifest, service worker, iconos
+│   ├── src/
+│   │   ├── pages/           # Login, Inventario, Mesas, Pedidos, Caja,
+│   │   │                    # Reportes, Historial, Usuarios
+│   │   ├── components/      # Modales de cuenta, división, cobro, etc.
+│   │   ├── layouts/         # Admin y Bartender
+│   │   └── services/api.ts  # Cliente HTTP
+│   ├── android/             # Proyecto Capacitor
+│   └── package.json
+├── scripts/                 # install/start/build para Linux y Windows
+├── docs/                    # Documentación adicional (reservada)
+├── build_exe.spec           # Configuración de PyInstaller
+├── start_dev.sh             # Script de desarrollo Linux/macOS
+├── requirements.txt
+├── CONTEXT.md
+├── README.md
+└── README.txt
 ```
 
 ## Ejecutable de escritorio (Windows)
 
-`InventarioPOS.exe` es un **archivo único** que incluye el backend (FastAPI) y el frontend (React compilado). Al ejecutarlo:
+`InventarioPOS.exe` es un archivo único que incluye el backend (FastAPI) y el
+frontend (React compilado). Al ejecutarlo:
 
-- Levanta el servidor en `http://localhost:8000` y **abre el navegador solo**
-- Muestra en consola la IP local para conectar el celular: `http://192.168.1.6:8000`
-- Guarda los datos en `%LOCALAPPDATA%\InventarioPOS\inventario.db` (portable)
-- Se puede copiar a otra PC y funciona sin instalar Python ni Node.js
+- Levanta el servidor en `http://localhost:8000` y abre el navegador.
+- Muestra en consola la IP local para conectar el celular.
+- Guarda los datos en `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
+- Se puede copiar a otra PC y funciona sin instalar Python ni Node.js.
 
 ```powershell
 # Construir el .exe (recompila el frontend y empaqueta)
@@ -154,38 +309,37 @@ scripts\build_apk.bat
 adb install -r frontend\android\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-- El APK se conecta al servidor de la PC (`http://<IP_PC>:8000` en `frontend/capacitor.config.json`)
-- **En el Xiaomi/MIUI** hay que activar: *Ajustes → Ajustes adicionales → Opciones de desarrollador → "Instalar por USB"* y *"Depuración USB (ajustes de seguridad)"*
-- La misma APK sirve en tablet (el diseño es responsivo)
-- Para cambiar la IP de destino, edita `frontend/capacitor.config.json` y vuelve a compilar
-
-## Usuarios y roles
-
-No se usan correos: el acceso es por **alias** + **clave**.
-
-### Usuario inicial
-| Alias | Clave | Rol |
-|---|---|---|
-| `Admin` | `1234` | Administrador |
-
-> Cambia la clave desde **Usuarios → Cambiar clave** en cuanto arranques en producción.
-
-### Roles
-
-| Módulo | Administrador | Bartender |
-|---|---|---|
-| Inventario | Crear, editar, eliminar, stock | **Solo lectura** (sin columna de acciones) |
-| Mesas / Pedidos / Cuenta | ✅ | ✅ |
-| Corte de caja | ✅ | ✅ |
-| Reportes / Historial | ✅ | ❌ |
-| Usuarios (crear, roles, claves) | ✅ | ❌ |
-
-### Menú de Usuarios (solo Administrador)
-`/admin/usuarios` → crear usuarios con alias y rol, cambiar rol, activar/desactivar, cambiar clave y eliminar. Todos los usuarios nuevos nacen con la **clave inicial `1234`** (cambiable después).
+- El APK se conecta al servidor de la PC indicado en
+  `frontend/capacitor.config.json`.
+- En Xiaomi/MIUI hay que activar *Ajustes → Ajustes adicionales → Opciones de
+  desarrollador → "Instalar por USB"* y *"Depuración USB (ajustes de
+  seguridad)"*.
+- La misma APK sirve en tablet (el diseño es responsivo).
+- Para cambiar la IP de destino, edita `frontend/capacitor.config.json` y vuelve
+  a compilar.
 
 ## PWA (instalar desde el navegador)
 
-En el celular, abre `http://<IP_PC>:8000` en Chrome → menú **⋮** → **"Añadir a pantalla de inicio"**. Queda como una app instalada con icono propio.
+En el celular, abre `http://<IP_PC>:8000` en Chrome → menú **⋮** → **"Añadir a
+pantalla de inicio"**. Queda como una app instalada con icono propio.
+
+## Pendientes por corregir
+
+1. **Recompilar `dist/InventarioPOS.exe`**: el binario actual es anterior a los
+   últimos ajustes de barras, inventario y pedidos. Regenerar también el APK.
+2. **Ingreso de stock atómico:** el frontend envía `stock_actual + cantidad` a
+   `PUT /api/inventario/{id}/stock`; conviene un endpoint de incremento en el
+   backend para evitar condiciones de carrera.
+3. **Instalador de Windows:** `scripts/start.bat` menciona
+   `scripts/install.bat`, pero ese archivo no existe; crearlo o corregir el
+   mensaje.
+4. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
+   `venv` en la raíz pero espera `backend/venv`).
+5. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
+   migración de etiquetas históricas en una base antigua.
+6. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
+   inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
+   reconstruir.
 
 ## Git
 
@@ -205,14 +359,17 @@ git push -u origin feature/nueva-funcionalidad
 **Repositorio:** https://github.com/johnfvvv-dot/Inventario-pos
 
 ### Historial de versiones
-| Tag | Commit | Contenido |
-|-----|--------|-----------|
+
+| Versión | Commit | Contenido |
+|---|---|---|
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
+| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos y totales con formato |
 
 ## Escalado a la nube
 
-1. Crear una base PostgreSQL (Supabase, Neon, Railway…).
+1. Crear una base PostgreSQL (Supabase, Neon, Railway, etc.).
 2. Definir la variable de entorno `DATABASE_URL=postgresql://...`.
 3. Desplegar el backend en Render/Railway/Fly.io.
-4. Desplegar el frontend en Vercel/Netlify apuntando `API_BASE` al backend público.
+4. Desplegar el frontend en Vercel/Netlify apuntando `REACT_APP_API_URL` al
+   backend público.
 5. Migrar los datos de SQLite con un script de exportación/importación.
