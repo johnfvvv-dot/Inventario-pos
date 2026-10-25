@@ -30,8 +30,9 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   - Nube: PostgreSQL definiendo `DATABASE_URL`.
 - **Frontend:** React 18 + TypeScript (Create React App), React Router y Chart.js.
   Código en `frontend/src/`.
-- **Autenticación:** alias + clave con hash SHA-256. El usuario se guarda en
-  `localStorage`; no se usa JWT. Roles: `admin` y `bartender`.
+- **Autenticación:** usuario + clave con hash SHA-256. El login valida el campo
+  `usuario`; el usuario autenticado se guarda en `localStorage`; no se usa JWT.
+  Roles: `admin` y `bartender`.
 - **API:** prefijo `/api`; documentación interactiva en `/docs`; salud en
   `/health`; configuración de red en `/api/config`.
 - **Empaquetado:** PyInstaller (`dist/InventarioPOS.exe`) y Capacitor

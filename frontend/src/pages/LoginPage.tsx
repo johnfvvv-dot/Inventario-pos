@@ -1,11 +1,11 @@
-/** Pantalla de Login - Acceso por alias. */
+/** Pantalla de Login - Acceso por usuario. */
 
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 
 export default function LoginPage() {
-  const [alias, setAlias] = useState("");
+  const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -17,9 +17,9 @@ export default function LoginPage() {
     setCargando(true);
 
     try {
-      const usuario: any = await api.login(alias.trim(), password);
-      localStorage.setItem("user", JSON.stringify(usuario));
-      navigate(usuario.rol === "admin" ? "/admin" : "/bartender");
+      const sesion: any = await api.login(usuario.trim(), password);
+      localStorage.setItem("user", JSON.stringify(sesion));
+      navigate(sesion.rol === "admin" ? "/admin" : "/bartender");
     } catch (err: any) {
       setError(err.message || "No se pudo iniciar sesión");
     } finally {
@@ -31,17 +31,17 @@ export default function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <h1>Sistema Inventario y Punto de Venta</h1>
-        <p className="muted">Ingresa con tu alias y clave</p>
+        <p className="muted">Ingresa con tu usuario y clave</p>
 
         <form onSubmit={handleLogin} className="login-form">
           <div className="form-group">
-            <label htmlFor="alias">Alias</label>
+            <label htmlFor="usuario">Usuario</label>
             <input
-              id="alias"
+              id="usuario"
               type="text"
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
-              placeholder="Admin"
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              placeholder="Usuario"
               autoCapitalize="none"
               autoComplete="username"
               required

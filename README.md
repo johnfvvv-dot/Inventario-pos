@@ -223,11 +223,12 @@ yarn start
 
 ## Usuarios y roles
 
-No se usan correos: el acceso es por **alias** + **clave**.
+No se usan correos: el acceso es por **usuario** + **clave**. El login envía
+el campo `usuario` al endpoint `POST /api/usuarios/login`.
 
 ### Usuario inicial
 
-| Alias | Clave | Rol |
+| Usuario | Clave | Rol |
 |---|---|---|
 | `Admin` | `1234` | Administrador |
 

@@ -108,10 +108,10 @@ export const api = {
   getConfig: () => request("/config"),
 
   // ---------- Usuarios ----------
-  login: (alias: string, password: string) =>
+  login: (usuario: string, password: string) =>
     request("/usuarios/login", {
       method: "POST",
-      body: JSON.stringify({ alias, password }),
+      body: JSON.stringify({ usuario, password }),
     }),
 
   getUsuarios: () => request("/usuarios/"),

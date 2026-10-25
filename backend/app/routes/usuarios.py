@@ -1,4 +1,4 @@
-"""Endpoints de usuarios: login por alias, gestión de usuarios y roles."""
+"""Endpoints de usuarios: login por usuario, gestión de usuarios y roles."""
 
 import hashlib
 from typing import List
@@ -39,12 +39,12 @@ def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
 
 @router.post("/login", response_model=UsuarioOut)
 def login(datos: UsuarioLogin, db: Session = Depends(get_db)):
-    """Autenticar usuario por alias y contraseña."""
-    alias = (datos.alias or "").strip()
-    usuario = db.query(Usuario).filter(Usuario.alias == alias).first()
+    """Autenticar por nombre de usuario y contraseña."""
+    nombre_usuario = (datos.usuario or "").strip()
+    usuario = db.query(Usuario).filter(Usuario.alias == nombre_usuario).first()
 
     if not usuario or usuario.password_hash != hash_password(datos.password):
-        raise HTTPException(status_code=401, detail="Alias o clave incorrectos")
+        raise HTTPException(status_code=401, detail="Usuario o clave incorrectos")
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="El usuario está desactivado")
 
