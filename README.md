@@ -56,6 +56,10 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
   de transferencia.
 - **Corte de caja:** apertura/cierre de turno con totales por forma de pago
   (efectivo / tarjeta / transferencia), observaciones e historial de turnos.
+  El resumen usa **días calendario**: **Hoy** abarca de 00:00 a la hora actual,
+  **Ayer** el día completo y **7/30 días** incluyen hoy. Su **TOTAL** es la suma
+  de efectivo + tarjeta + transferencia de los pedidos cerrados en ese rango.
+  El historial muestra el **día de la semana de apertura** de cada turno.
 - **Reportes:** gráficos (ventas por día, top de productos, formas de pago),
   KPIs y exportación CSV.
 - **Historial de ventas:** filtros por rango de fechas, mesa/barra, producto y
@@ -118,7 +122,7 @@ disponible en `http://localhost:8000/docs`.
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
 | Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
 | Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
-| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
+| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen?dias=N&offset_dias=M`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
 | Configuración | `GET /config` (bajo `/api`) y `GET /health` (sin prefijo) |
 
 ## Requisitos previos

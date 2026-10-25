@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import CierreTurnoModal from "../components/CierreTurnoModal";
 import { api } from "../services/api";
-import { formatearFechaHora, formatearPrecio } from "../utils/format";
+import {
+  formatearDiaSemana,
+  formatearFechaHora,
+  formatearPrecio,
+} from "../utils/format";
 
 interface Totales {
   efectivo: number;
@@ -37,6 +41,7 @@ export default function CorteCajaPage() {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [periodo, setPeriodo] = useState(1);
+  const [offsetDias, setOffsetDias] = useState(0);
   const [modalCierre, setModalCierre] = useState(false);
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export default function CorteCajaPage() {
       const [t, hist, res]: any = await Promise.all([
         api.getTurnoActual(),
         api.getTurnos(10),
-        api.getResumenCaja(periodo),
+        api.getResumenCaja(periodo, offsetDias),
       ]);
       setTurno(t);
       setTurnos(hist);
@@ -64,7 +69,7 @@ export default function CorteCajaPage() {
 
   useEffect(() => {
     cargar();
-  }, [periodo]);
+  }, [periodo, offsetDias]);
 
   const abrirTurno = async () => {
     setProcesando(true);
@@ -100,15 +105,34 @@ export default function CorteCajaPage() {
     }
   };
 
+  const etiquetaResumen =
+    offsetDias === 1
+      ? "ayer"
+      : periodo === 1
+      ? "hoy"
+      : `últimos ${periodo} días`;
+
   return (
     <div className="page">
       <div className="page-head">
         <h2>Corte de caja</h2>
         <div className="filters">
-          <select value={periodo} onChange={(e) => setPeriodo(Number(e.target.value))}>
-            <option value={1}>Hoy</option>
-            <option value={7}>Últimos 7 días</option>
-            <option value={30}>Últimos 30 días</option>
+          <select
+            value={offsetDias === 1 ? "ayer" : String(periodo)}
+            onChange={(e) => {
+              if (e.target.value === "ayer") {
+                setOffsetDias(1);
+                setPeriodo(1);
+              } else {
+                setOffsetDias(0);
+                setPeriodo(Number(e.target.value));
+              }
+            }}
+          >
+            <option value="1">Hoy</option>
+            <option value="ayer">Ayer</option>
+            <option value="7">Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
           </select>
           <button className="btn-secondary" onClick={cargar}>
             Actualizar
@@ -169,7 +193,11 @@ export default function CorteCajaPage() {
       {/* Resumen del periodo */}
       {resumen && (
         <section className="panel">
-          <h3>Resumen de ventas ({periodo === 1 ? "hoy" : `últimos ${periodo} días`})</h3>
+          <h3>Resumen de ventas ({etiquetaResumen})</h3>
+          <p className="muted small">
+            Rango: {formatearFechaHora(resumen.desde)} —{" "}
+            {formatearFechaHora(resumen.hasta)}
+          </p>
           <div className="kpis">
             <div className="kpi-card">
               <h3>Efectivo</h3>
@@ -203,6 +231,7 @@ export default function CorteCajaPage() {
             <thead>
               <tr>
                 <th>#</th>
+                <th>Día</th>
                 <th>Abierto</th>
                 <th>Cerrado</th>
                 <th>Usuario</th>
@@ -217,6 +246,7 @@ export default function CorteCajaPage() {
               {turnos.map((t) => (
                 <tr key={t.id}>
                   <td>{t.id}</td>
+                  <td>{formatearDiaSemana(t.fecha_apertura)}</td>
                   <td>{formatearFechaHora(t.fecha_apertura)}</td>
                   <td>{formatearFechaHora(t.fecha_cierre)}</td>
                   <td>{t.usuario_nombre}</td>
@@ -231,7 +261,7 @@ export default function CorteCajaPage() {
               ))}
               {turnos.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="empty-state">
+                  <td colSpan={10} className="empty-state">
                     Todavía no hay turnos registrados.
                   </td>
                 </tr>

@@ -145,17 +145,42 @@ def listar_turnos(limite: int = 20, db: Session = Depends(get_db)):
 
 @router.get("/resumen", response_model=ResumenCajaOut)
 def resumen_caja(
-    dias: int = 1, db: Session = Depends(get_db)
+    dias: int = 1, offset_dias: int = 0, db: Session = Depends(get_db)
 ):
-    """Resumen de ventas por forma de pago de los últimos N días."""
-    desde = ahora_local() - timedelta(days=max(1, dias))
-    hasta = ahora_local()
+    """Resumen de ventas por forma de pago de un rango de días calendario.
+
+    ``dias=1`` y ``offset_dias=0`` abarcan únicamente el día actual desde las
+    00:00 hasta ahora. ``offset_dias=1`` permite consultar ayer completo
+    (00:00 a 23:59:59.999999). Para N días se incluyen días completos desde la
+    medianoche, de modo que no se mezclan ventas de fechas distintas.
+    """
+    dias = max(1, min(dias, 365))
+    offset_dias = max(0, min(offset_dias, 365))
+
+    ahora = ahora_local()
+    hoy_inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if offset_dias:
+        desde = hoy_inicio - timedelta(days=offset_dias + dias - 1)
+        hasta = (
+            hoy_inicio
+            - timedelta(days=offset_dias - 1)
+            - timedelta(microseconds=1)
+        )
+    else:
+        desde = hoy_inicio - timedelta(days=dias - 1)
+        hasta = ahora
 
     totales = _totales_por_forma_pago(db, desde, hasta)
 
     cerrados = (
         db.query(Pedido)
-        .filter(Pedido.estado == "cerrado", Pedido.fecha_cierre >= desde)
+        .filter(
+            Pedido.estado == "cerrado",
+            Pedido.fecha_cierre.isnot(None),
+            Pedido.fecha_cierre >= desde,
+            Pedido.fecha_cierre <= hasta,
+        )
         .all()
     )
     mesas = {p.mesa_id for p in cerrados if p.mesa_id}

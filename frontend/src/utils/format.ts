@@ -58,6 +58,34 @@ const parsearFecha = (valor: string): Date => {
 };
 
 /**
+ * Nombre completo del día de la semana en español (Lunes...Domingo).
+ *
+ * Se calcula con la fecha tal como la guarda el servidor (hora local), sin
+ * convertirla a UTC, para que un turno abierto un sábado por la noche siga
+ * mostrando "Sábado" aunque se cierre el domingo.
+ */
+const DIAS_SEMANA = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+];
+
+export const formatearDiaSemana = (
+  valor: string | Date | null | undefined
+): string => {
+  if (!valor) return "-";
+
+  const fecha = typeof valor === "string" ? parsearFecha(valor) : valor;
+  if (Number.isNaN(fecha.getTime())) return "-";
+
+  return DIAS_SEMANA[fecha.getDay()];
+};
+
+/**
  * Fecha y hora local con formato DD/MM/YYYY, HH:mm:ss.
  * Ejemplo: "25/10/2026, 22:52:46".
  */

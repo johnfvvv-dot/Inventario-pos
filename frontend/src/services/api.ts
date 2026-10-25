@@ -370,7 +370,8 @@ export const api = {
 
   getTurnos: (limite = 20) => request(`/caja/turnos?limite=${limite}`),
 
-  getResumenCaja: (dias = 1) => request(`/caja/resumen?dias=${dias}`),
+  getResumenCaja: (dias = 1, offsetDias = 0) =>
+    request(`/caja/resumen?dias=${dias}&offset_dias=${offsetDias}`),
 
   getVentasPorDia: (dias = 14) => request(`/caja/ventas-por-dia?dias=${dias}`),
 

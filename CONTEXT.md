@@ -125,6 +125,14 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 - División de cuenta por alias, cobro individual, transferencia entre mesas y
   plazas de barra, cierre con o sin liberación y corte de caja por turno.
+- El **resumen de ventas** filtra por días calendario: `Hoy` va de las 00:00 a
+  la hora actual, `Ayer` cubre el día completo y `7/30 días` incluyen hoy. Los
+  totales, pedidos cerrados, mesas y operaciones usan el mismo rango; el
+  **TOTAL** siempre es `efectivo + tarjeta + transferencia` (pedidos cerrados).
+- El **historial de turnos** muestra la columna `Día` antes de `Abierto`, con el
+  día completo en español calculado solo desde `fecha_apertura` (helper
+  `formatearDiaSemana`). Un turno abierto el sábado y cerrado el domingo sigue
+  mostrando **Sábado**.
 - La transferencia valida que el destino esté libre y no ofrece barras ocupadas
   como destino.
 - Reportes con KPIs, gráficos y exportación CSV; historial con filtros por
