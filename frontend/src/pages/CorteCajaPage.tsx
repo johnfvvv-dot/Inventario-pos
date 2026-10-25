@@ -1,7 +1,9 @@
 /** Pantalla de Corte de Caja - Administrador. */
 
 import { useEffect, useState } from "react";
+import CierreTurnoModal from "../components/CierreTurnoModal";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface Totales {
   efectivo: number;
@@ -35,7 +37,8 @@ export default function CorteCajaPage() {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [periodo, setPeriodo] = useState(1);
-  const [observaciones, setObservaciones] = useState("");
+  const [modalCierre, setModalCierre] = useState(false);
+  const [errorCierre, setErrorCierre] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -76,18 +79,22 @@ export default function CorteCajaPage() {
     }
   };
 
-  const cerrarTurno = async () => {
-    if (!window.confirm("¿Cerrar el turno de caja? El resumen quedará guardado.")) {
-      return;
-    }
+  const abrirModalCierre = () => {
+    setErrorCierre(null);
+    setMensaje(null);
+    setModalCierre(true);
+  };
+
+  const confirmarCierre = async (observaciones: string) => {
     setProcesando(true);
+    setErrorCierre(null);
     try {
       await api.cerrarTurno(observaciones);
-      setObservaciones("");
+      setModalCierre(false);
       setMensaje("Turno de caja cerrado");
       await cargar();
     } catch (err: any) {
-      setError(err.message);
+      setErrorCierre(err.message);
     } finally {
       setProcesando(false);
     }
@@ -120,7 +127,7 @@ export default function CorteCajaPage() {
         <div className="page-head">
           <h3>Turno actual</h3>
           {turno ? (
-            <button className="btn-warning" onClick={cerrarTurno} disabled={procesando}>
+            <button className="btn-warning" onClick={abrirModalCierre} disabled={procesando}>
               {procesando ? "Cerrando..." : "Cerrar turno"}
             </button>
           ) : (
@@ -138,28 +145,20 @@ export default function CorteCajaPage() {
             <div className="kpis">
               <div className="kpi-card">
                 <h3>Efectivo</h3>
-                <h2>${turno.totales.efectivo.toFixed(2)}</h2>
+                <h2>{formatearPrecio(turno.totales.efectivo)}</h2>
               </div>
               <div className="kpi-card">
                 <h3>Tarjeta</h3>
-                <h2>${turno.totales.tarjeta.toFixed(2)}</h2>
+                <h2>{formatearPrecio(turno.totales.tarjeta)}</h2>
               </div>
               <div className="kpi-card">
                 <h3>Transferencia</h3>
-                <h2>${turno.totales.transferencia.toFixed(2)}</h2>
+                <h2>{formatearPrecio(turno.totales.transferencia)}</h2>
               </div>
               <div className="kpi-card kpi-total">
                 <h3>Total del turno</h3>
-                <h2>${turno.totales.total.toFixed(2)}</h2>
+                <h2>{formatearPrecio(turno.totales.total)}</h2>
               </div>
-            </div>
-            <div className="form-group">
-              <label>Observaciones del cierre</label>
-              <input
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="Ej: caja contada, sobrante $2.50"
-              />
             </div>
           </>
         ) : (
@@ -176,19 +175,19 @@ export default function CorteCajaPage() {
           <div className="kpis">
             <div className="kpi-card">
               <h3>Efectivo</h3>
-              <h2>${resumen.totales.efectivo.toFixed(2)}</h2>
+              <h2>{formatearPrecio(resumen.totales.efectivo)}</h2>
             </div>
             <div className="kpi-card">
               <h3>Tarjeta</h3>
-              <h2>${resumen.totales.tarjeta.toFixed(2)}</h2>
+              <h2>{formatearPrecio(resumen.totales.tarjeta)}</h2>
             </div>
             <div className="kpi-card">
               <h3>Transferencia</h3>
-              <h2>${resumen.totales.transferencia.toFixed(2)}</h2>
+              <h2>{formatearPrecio(resumen.totales.transferencia)}</h2>
             </div>
             <div className="kpi-card kpi-total">
               <h3>Total</h3>
-              <h2>${resumen.totales.total.toFixed(2)}</h2>
+              <h2>{formatearPrecio(resumen.totales.total)}</h2>
             </div>
           </div>
           <p className="muted small">
@@ -213,6 +212,7 @@ export default function CorteCajaPage() {
                 <th>Tarjeta</th>
                 <th>Transfer.</th>
                 <th>Total</th>
+                <th>Observaciones</th>
               </tr>
             </thead>
             <tbody>
@@ -222,17 +222,18 @@ export default function CorteCajaPage() {
                   <td>{fmtFecha(t.fecha_apertura)}</td>
                   <td>{fmtFecha(t.fecha_cierre)}</td>
                   <td>{t.usuario_nombre}</td>
-                  <td>${t.totales.efectivo.toFixed(2)}</td>
-                  <td>${t.totales.tarjeta.toFixed(2)}</td>
-                  <td>${t.totales.transferencia.toFixed(2)}</td>
+                  <td>{formatearPrecio(t.totales.efectivo)}</td>
+                  <td>{formatearPrecio(t.totales.tarjeta)}</td>
+                  <td>{formatearPrecio(t.totales.transferencia)}</td>
                   <td>
-                    <strong>${t.totales.total.toFixed(2)}</strong>
+                    <strong>{formatearPrecio(t.totales.total)}</strong>
                   </td>
+                  <td className="obs-cell">{t.observaciones || "—"}</td>
                 </tr>
               ))}
               {turnos.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="empty-state">
+                  <td colSpan={9} className="empty-state">
                     Todavía no hay turnos registrados.
                   </td>
                 </tr>
@@ -241,6 +242,19 @@ export default function CorteCajaPage() {
           </table>
         </div>
       </section>
+
+      {modalCierre && turno && (
+        <CierreTurnoModal
+          total={turno.totales.total}
+          onCancelar={() => {
+            setModalCierre(false);
+            setErrorCierre(null);
+          }}
+          onConfirmar={confirmarCierre}
+          procesando={procesando}
+          error={errorCierre}
+        />
+      )}
     </div>
   );
 }

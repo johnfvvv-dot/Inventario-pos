@@ -46,6 +46,9 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - La etiqueta histórica se conserva en `Pedido.mesa_etiqueta_historica` y se
   calcula con `Mesa.etiqueta_historial()`. Los pedidos antiguos se completan al
   arrancar mediante `_migrar_etiquetas_historial()`.
+- Cada pedido guarda también `Pedido.mesa_numero_historico` al crearse,
+  cerrarse o transferirse (`Pedido.guardar_origen()`), de modo que el historial
+  siempre muestra "Mesa N" o "Barra N" junto con el total.
 - Las barras cerradas o eliminadas conservan su etiqueta "Barra N" en el
   historial.
 - Una barra **ocupada no puede ser destino de transferencia**; se valida el
@@ -53,9 +56,17 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - El cierre y la liberación de una barra replican el flujo de las mesas:
   `POST /api/cuentas/barra/{numero}/cerrar` y
   `POST /api/mesas/{id}/liberar`, con botón **"Liberar barra"** en la cuenta.
-- Los totales pendientes de las tarjetas de mesa/barra se muestran en **verde**,
-  con **separador de miles** y sin el sufijo `.00` cuando son enteros
-  (ej. `$30.400`).
+- `CuentaModal` recibe `barraNumero` tanto desde **Mesas** como desde
+  **Pedidos**, de modo que el botón siempre usa la cuenta agregada de la barra
+  y no la de una plaza aislada.
+- `api.ts` valida los identificadores antes de construir la URL; un id
+  inválido muestra un mensaje claro en lugar de enviar `/NaN` al backend.
+- Las rutas `/api/...` inexistentes responden `404` con un detalle JSON (el
+  fallback del frontend ya no devuelve "Method Not Allowed" a un POST).
+- Los totales pendientes de las tarjetas de mesa/barra se muestran en **verde**
+  con el formato único de precios (ej. `$30.400`).
+- Todos los precios del sistema usan el mismo formato: separador de miles y
+  sin decimales (ej. `$3.800`).
 
 ### Inventario
 

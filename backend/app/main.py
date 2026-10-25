@@ -226,39 +226,43 @@ def _migrar_alias_usuarios() -> None:
 
 
 def _migrar_etiquetas_historial() -> None:
-    """Completa la etiqueta historica de pedidos creados antes de esta version."""
+    """Completa el origen histórico (número y etiqueta) de pedidos anteriores.
+
+    - Si el pedido conserva su mesa/plaza, toma los datos actuales.
+    - Si la mesa fue eliminada, conserva el número histórico y reconstruye
+      la etiqueta ("Mesa N" o "Barra N") cuando falte.
+    """
     db = SessionLocal()
     try:
-        pendientes = (
-            db.query(Pedido)
-            .filter(Pedido.mesa_etiqueta_historica.is_(None))
-            .all()
-        )
-        if not pendientes:
+        pedidos = db.query(Pedido).all()
+        if not pedidos:
             return
 
         mesas = {m.id: m for m in db.query(Mesa).all()}
-        por_numero = {m.numero: m for m in mesas.values()}
         cambiados = 0
-        for pedido in pendientes:
-            etiqueta = None
+        for pedido in pedidos:
+            numero_antes = pedido.mesa_numero_historico
+            etiqueta_antes = pedido.mesa_etiqueta_historica
             if pedido.mesa_id and pedido.mesa_id in mesas:
-                etiqueta = mesas[pedido.mesa_id].etiqueta_historial()
-            elif pedido.mesa_numero_historico is not None:
-                mesa_actual = por_numero.get(pedido.mesa_numero_historico)
-                if mesa_actual:
-                    etiqueta = mesa_actual.etiqueta_historial()
-                else:
-                    etiqueta = etiqueta_desde_numero_historico(
-                        pedido.mesa_numero_historico
-                    )
-            if etiqueta:
-                pedido.mesa_etiqueta_historica = etiqueta
+                mesa = mesas[pedido.mesa_id]
+                pedido.mesa_numero_historico = mesa.numero
+                pedido.mesa_etiqueta_historica = mesa.etiqueta_historial()
+            elif (
+                pedido.mesa_numero_historico is not None
+                and not pedido.mesa_etiqueta_historica
+            ):
+                pedido.mesa_etiqueta_historica = etiqueta_desde_numero_historico(
+                    pedido.mesa_numero_historico
+                )
+            if (
+                pedido.mesa_numero_historico != numero_antes
+                or pedido.mesa_etiqueta_historica != etiqueta_antes
+            ):
                 cambiados += 1
 
         if cambiados:
             db.commit()
-            print(f"[migracion] {cambiados} pedidos con etiqueta historica")
+            print(f"[migracion] {cambiados} pedidos con origen histórico actualizado")
     finally:
         db.close()
 
@@ -339,6 +343,24 @@ def config():
 # ------------------------------------------------------------------
 
 BUILD = _build_dir()
+
+
+@app.api_route(
+    "/api/{ruta:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+def api_no_encontrada(ruta: str):
+    """Responde 404 claro para una ruta de API inexistente.
+
+    Sin esta ruta, un POST a una dirección no registrada cae en el fallback
+    del frontend (que solo acepta GET) y el cliente recibe un confuso
+    "Method Not Allowed" en lugar de un 404 con el detalle.
+    """
+    raise HTTPException(
+        status_code=404,
+        detail=f"Ruta de API no encontrada: /api/{ruta}",
+    )
 
 
 @app.get("/{ruta:path}", include_in_schema=False)

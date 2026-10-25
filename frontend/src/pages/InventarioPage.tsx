@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 import ConfirmModal from "../components/ConfirmModal";
 
 interface Producto {
@@ -315,7 +316,7 @@ export default function InventarioPage() {
                   {p.descripcion && <div className="muted small">{p.descripcion}</div>}
                 </td>
                 <td className="muted small">{nombreCategoria(p.categoria_id)}</td>
-                <td>${p.precio.toFixed(2)}</td>
+                <td>{formatearPrecio(p.precio)}</td>
                 <td>
                   <span
                     className={

@@ -108,6 +108,16 @@ class Pedido(Base):
         "PedidoItem", back_populates="pedido", cascade="all, delete-orphan"
     )
 
+    def guardar_origen(self, mesa: "Mesa") -> None:
+        """Conserva el origen del pedido para el historial.
+
+        Guarda el número de la mesa/plaza y su etiqueta visible
+        ("Mesa 3" o "Barra 2"), de modo que el historial siga mostrando
+        el origen aunque la mesa se elimine o se reutilice.
+        """
+        self.mesa_numero_historico = mesa.numero
+        self.mesa_etiqueta_historica = mesa.etiqueta_historial()
+
 
 class PedidoItem(Base):
     __tablename__ = "pedido_items"

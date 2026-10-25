@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface PosicionBarra {
   id: number;
@@ -206,7 +207,7 @@ export default function TransferirModal({
             >
               {cuentasOrigen.map((c) => (
                 <option key={c.id} value={c.id}>
-                  Plaza {c.posicion} — ${c.total.toFixed(2)}
+                  Plaza {c.posicion} — {formatearPrecio(c.total)}
                 </option>
               ))}
             </select>

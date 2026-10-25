@@ -311,7 +311,7 @@ def cerrar_cuenta(
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
         pedido.fecha_cierre = ahora
-        pedido.mesa_etiqueta_historica = mesa.etiqueta_historial()
+        pedido.guardar_origen(mesa)
 
     # Marcar como pagadas las divisiones pendientes
     divisiones = _cargar_divisiones(db, mesa_id)
@@ -372,7 +372,7 @@ def cerrar_cuenta_barra(
         pedido.fecha_cierre = ahora
         plaza = mesas_por_id.get(pedido.mesa_id)
         if plaza:
-            pedido.mesa_etiqueta_historica = plaza.etiqueta_historial()
+            pedido.guardar_origen(plaza)
 
     # Marcar como pagadas las divisiones pendientes de cada plaza
     for mesa in mesas:
@@ -456,7 +456,7 @@ def transferir_cuenta(
     total = 0.0
     for pedido in pedidos:
         pedido.mesa_id = destino.id
-        pedido.mesa_etiqueta_historica = destino.etiqueta_historial()
+        pedido.guardar_origen(destino)
         total += pedido.total or 0.0
 
     # Mover divisiones pendientes
@@ -650,8 +650,8 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
             usuario_id=usuario.id,
             estado="abierto",
             total=resto_total,
-            mesa_etiqueta_historica=mesa_division.etiqueta_historial(),
         )
+        pedido_resto.guardar_origen(mesa_division)
         db.add(pedido_resto)
         db.flush()
         for producto_id, entry, restante, subtotal in resto_items:

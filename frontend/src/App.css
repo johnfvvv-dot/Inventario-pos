@@ -359,6 +359,14 @@ td {
   vertical-align: middle;
 }
 
+.obs-cell {
+  max-width: 260px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 tbody tr:hover {
   background: #fafbfc;
 }
@@ -447,9 +455,23 @@ select {
 }
 
 .form-group input:focus,
+.form-group textarea:focus,
 select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+}
+
+.form-group textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  line-height: 1.45;
+  background: #fff;
+  outline: none;
+  resize: vertical;
+  min-height: 96px;
 }
 
 .form-row {
@@ -1082,6 +1104,36 @@ select:focus {
 
 .modal-cobro {
   max-width: 420px;
+}
+
+.modal-cierre-turno {
+  max-width: 480px;
+}
+
+.cierre-monto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: #eafaf1;
+  border: 1px solid #bfe8d2;
+  border-radius: var(--radius);
+  padding: 0.85rem 1.1rem;
+  margin: 0.9rem 0 1rem;
+}
+
+.cierre-monto span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cierre-monto strong {
+  font-size: 1.9rem;
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--success);
 }
 
 .cobro-total {

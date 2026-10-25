@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface PedidoHistorial {
   id: number;
@@ -31,6 +32,23 @@ const POR_PAGINA = 25;
 
 const etiquetaMesa = (m: Mesa) =>
   m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
+
+/**
+ * Devuelve siempre el origen del pedido ("Mesa N" / "Barra N").
+ * Usa la etiqueta guardada y, si falta, la reconstruye desde el número
+ * histórico (las plazas de barra se codifican como N*100 + posición).
+ */
+const etiquetaOrigen = (p: PedidoHistorial): string => {
+  if (p.mesa_etiqueta) return p.mesa_etiqueta;
+  if (p.mesa_numero != null) {
+    const posicion = p.mesa_numero % 100;
+    if (p.mesa_numero >= 100 && posicion >= 1 && posicion <= 20) {
+      return `Barra ${Math.floor(p.mesa_numero / 100)}`;
+    }
+    return `Mesa ${p.mesa_numero}`;
+  }
+  return "—";
+};
 
 export default function HistorialPage() {
   const [items, setItems] = useState<PedidoHistorial[]>([]);
@@ -102,7 +120,7 @@ export default function HistorialPage() {
       ...items.map((p) => [
         String(p.id),
         p.fecha || "",
-        p.mesa_etiqueta || "-",
+        etiquetaOrigen(p),
         p.usuario_nombre,
         p.forma_pago,
         String(p.total),
@@ -227,14 +245,14 @@ export default function HistorialPage() {
               <tr key={p.id}>
                 <td>{p.id}</td>
                 <td>{p.fecha ? new Date(p.fecha).toLocaleString("es") : "-"}</td>
-                <td>{p.mesa_etiqueta || "-"}</td>
+                <td>{etiquetaOrigen(p)}</td>
                 <td>{p.usuario_nombre}</td>
                 <td>
                   <span className="badge badge-success">{p.forma_pago}</span>
                 </td>
                 <td className="muted small">{p.productos.join(", ")}</td>
                 <td>
-                  <strong>${p.total.toFixed(2)}</strong>
+                  <strong>{formatearPrecio(p.total)}</strong>
                 </td>
               </tr>
             ))}

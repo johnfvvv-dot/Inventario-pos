@@ -59,14 +59,15 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 - **PWA instalable:** "Añadir a pantalla de inicio" en Android (manifest +
   service worker).
 
-### Totales de mesas y barras
+### Formato de precios
 
-Los totales pendientes de las tarjetas se muestran en **verde**, con
-**separador de miles** y sin `.00` cuando son enteros:
+Todos los precios de la aplicación (inventario, pedidos, cuentas, divisiones,
+reportes, historial y caja) se muestran con **separador de miles** y **sin
+decimales**:
 
-- `$30400.00` → `$30.400`
+- `$3800.00` → `$3.800`
+- `$100000.00` → `$100.000`
 - `$1234567.00` → `$1.234.567`
-- Si hay centavos reales: `$30.400,50`
 
 ### Flujo de mesas y barras
 
@@ -245,6 +246,28 @@ con la **clave inicial `1234`** (cambiable después).
 4. El frontend detecta automáticamente la IP del host; si necesitas fijarla,
    define `REACT_APP_API_URL=http://IP_DE_LA_PC:8000/api` antes de compilar.
 5. Permite los puertos 3000 y 8000 en el firewall de Windows.
+
+## Solución de problemas
+
+### "Method Not Allowed" al liberar una barra
+
+El botón **Liberar barra** envía `POST /api/cuentas/barra/{n}/cerrar`, una ruta
+que existe en el backend actual. Si aparece **"Method Not Allowed"**, el
+frontend está actualizado pero el backend que está corriendo es una versión
+anterior (por ejemplo, un `InventarioPOS.exe` viejo). La petición no coincide
+con ninguna ruta POST y termina en el fallback del frontend.
+
+Para corregirlo:
+
+1. Cierra la instancia anterior del backend/ejecutable.
+2. Compila el frontend con `npm run build` dentro de `frontend/`.
+3. Regenera el ejecutable con `pyinstaller build_exe.spec --noconfirm`.
+4. Abre la aplicación nueva y recarga el navegador con `Ctrl + F5`.
+
+El comportamiento esperado es:
+
+- **Aceptar:** cobra la cuenta y la barra queda **ocupada**.
+- **Liberar barra:** cobra la cuenta y deja **todas las plazas disponibles**.
 
 ## Estructura del proyecto
 

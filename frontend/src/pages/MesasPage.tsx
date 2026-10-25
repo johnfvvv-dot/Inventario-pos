@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 import ConfirmModal from "../components/ConfirmModal";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
@@ -27,13 +28,6 @@ interface Mesa {
   detalle_pendiente?: string;
   posiciones?: Posicion[];
 }
-
-/** Formatea el total con separador de miles y sin decimales .00. */
-const formatearTotal = (total: number): string =>
-  total.toLocaleString("es-CO", {
-    minimumFractionDigits: Number.isInteger(total) ? 0 : 2,
-    maximumFractionDigits: Number.isInteger(total) ? 0 : 2,
-  });
 
 export default function MesasPage() {
   const navigate = useNavigate();
@@ -301,7 +295,7 @@ export default function MesasPage() {
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
-                ${formatearTotal(mesa.total_cuenta || 0)}
+                {formatearPrecio(mesa.total_cuenta || 0)}
               </div>
             )}
 

@@ -16,6 +16,7 @@ import {
 } from "chart.js";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import { api } from "../services/api";
+import { formatearNumero, formatearPrecio } from "../utils/format";
 
 ChartJS.register(
   CategoryScale,
@@ -198,7 +199,7 @@ export default function ReportesPage() {
       <div className="kpis">
         <div className="kpi-card">
           <h3>Ventas totales</h3>
-          <h2>${(totales?.total ?? 0).toFixed(2)}</h2>
+          <h2>{formatearPrecio(totales?.total ?? 0)}</h2>
         </div>
         <div className="kpi-card">
           <h3>Operaciones</h3>
@@ -227,8 +228,23 @@ export default function ReportesPage() {
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: true } },
-                scales: { y: { beginAtZero: true } },
+                plugins: {
+                  legend: { display: true },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx: any) =>
+                        `${ctx.dataset.label}: ${formatearPrecio(ctx.parsed.y)}`,
+                    },
+                  },
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      callback: (valor: any) => formatearNumero(Number(valor)),
+                    },
+                  },
+                },
               }}
             />
           </div>
@@ -257,7 +273,15 @@ export default function ReportesPage() {
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  plugins: { legend: { position: "bottom" } },
+                  plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                      callbacks: {
+                        label: (ctx: any) =>
+                          `${ctx.label}: ${formatearPrecio(Number(ctx.parsed))}`,
+                      },
+                    },
+                  },
                 }}
               />
             </div>
@@ -314,7 +338,7 @@ export default function ReportesPage() {
               {productos.map((p) => (
                 <tr key={p.id}>
                   <td>{p.nombre}</td>
-                  <td>${p.precio.toFixed(2)}</td>
+                  <td>{formatearPrecio(p.precio)}</td>
                   <td>{p.stock}</td>
                   <td>
                     <span

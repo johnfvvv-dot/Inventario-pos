@@ -40,6 +40,23 @@ function detalleError(detail: unknown): string {
   return "";
 }
 
+/**
+ * Valida un identificador antes de construir la URL.
+ *
+ * Evita enviar `NaN`, `undefined` o cadenas vacías a rutas como
+ * `/cuentas/barra/{n}/cerrar` o `/mesas/{id}/liberar`, que no coinciden con
+ * la ruta del backend y terminan respondiendo "Method Not Allowed".
+ */
+function idPositivo(valor: number, nombre: string): number {
+  const numero = Number(valor);
+  if (!Number.isInteger(numero) || numero <= 0) {
+    throw new Error(
+      `${nombre} no válido. Cierra la ventana y vuelve a abrir la cuenta.`
+    );
+  }
+  return numero;
+}
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -138,18 +155,18 @@ export const api = {
     }),
 
   updateMesaEstado: (mesaId: number, nuevo_estado: string) =>
-    request(`/mesas/${mesaId}/estado`, {
+    request(`/mesas/${idPositivo(mesaId, "Mesa")}/estado`, {
       method: "PUT",
       body: JSON.stringify({ nuevo_estado }),
     }),
 
   /** Libera la mesa solo si no tiene cuentas pendientes */
   liberarMesa: (mesaId: number) =>
-    request(`/mesas/${mesaId}/liberar`, { method: "POST" }),
+    request(`/mesas/${idPositivo(mesaId, "Mesa")}/liberar`, { method: "POST" }),
 
   /** Elimina una mesa o una barra completa (incluidas todas sus plazas) */
   deleteMesa: (mesaId: number) =>
-    request(`/mesas/${mesaId}`, { method: "DELETE" }),
+    request(`/mesas/${idPositivo(mesaId, "Mesa")}`, { method: "DELETE" }),
 
   /** Crea una barra: una cuenta por cada plaza (cliente) */
   createBarra: (numero: number, capacidad: number) =>
@@ -160,18 +177,20 @@ export const api = {
 
   /** Asigna un cliente a una mesa o a un puesto libre de la barra */
   ocuparMesa: (mesaId: number) =>
-    request(`/mesas/${mesaId}/ocupar`, { method: "POST" }),
+    request(`/mesas/${idPositivo(mesaId, "Mesa")}/ocupar`, { method: "POST" }),
 
   // ---------- Cuentas de mesa ----------
-  getCuentaMesa: (mesaId: number) => request(`/cuentas/mesa/${mesaId}`),
+  getCuentaMesa: (mesaId: number) =>
+    request(`/cuentas/mesa/${idPositivo(mesaId, "Mesa")}`),
 
   /** Cuenta agregada de una barra (todos sus puestos) */
-  getCuentaBarra: (numeroBarra: number) => request(`/cuentas/barra/${numeroBarra}`),
+  getCuentaBarra: (numeroBarra: number) =>
+    request(`/cuentas/barra/${idPositivo(numeroBarra, "Barra")}`),
 
   /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
   cerrarCuentaMesa: (mesaId: number, liberarMesa = false, formaPago = "efectivo") =>
     request(
-      `/cuentas/mesa/${mesaId}/cerrar?liberar_mesa=${liberarMesa}&forma_pago=${formaPago}`,
+      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar?liberar_mesa=${liberarMesa}&forma_pago=${formaPago}`,
       { method: "POST" }
     ),
 
@@ -182,15 +201,19 @@ export const api = {
     formaPago = "efectivo"
   ) =>
     request(
-      `/cuentas/barra/${numeroBarra}/cerrar?liberar_barra=${liberarBarra}&forma_pago=${formaPago}`,
+      `/cuentas/barra/${idPositivo(numeroBarra, "Barra")}/cerrar?liberar_barra=${liberarBarra}&forma_pago=${formaPago}`,
       { method: "POST" }
     ),
 
   /** Transfiere la cuenta abierta a otra mesa */
   transferirCuenta: (mesaId: number, destinoId: number) =>
-    request(`/cuentas/mesa/${mesaId}/transferir?destino_id=${destinoId}`, {
-      method: "POST",
-    }),
+    request(
+      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/transferir?destino_id=${idPositivo(
+        destinoId,
+        "Destino"
+      )}`,
+      { method: "POST" }
+    ),
 
   // ---------- Inventario ----------
   /** Inventario con búsqueda, filtro por categoría y paginación */
@@ -261,7 +284,8 @@ export const api = {
   // ---------- Pedidos ----------
   getPedidos: () => request("/pedidos/"),
 
-  getPedidosMesa: (mesaId: number) => request(`/pedidos/mesa/${mesaId}`),
+  getPedidosMesa: (mesaId: number) =>
+    request(`/pedidos/mesa/${idPositivo(mesaId, "Mesa")}`),
 
   createPedido: (datos: {
     mesa_id: number;
@@ -298,18 +322,23 @@ export const api = {
     }),
 
   getDivisionesMesa: (mesaId: number) =>
-    request(`/cuentas/mesa/${mesaId}/divisiones`),
+    request(`/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/divisiones`),
 
   pagarDivision: (divisionId: number, formaPago = "efectivo") =>
-    request(`/cuentas/division/${divisionId}/pagar?forma_pago=${formaPago}`, {
-      method: "POST",
-    }),
+    request(
+      `/cuentas/division/${idPositivo(divisionId, "División")}/pagar?forma_pago=${formaPago}`,
+      { method: "POST" }
+    ),
 
   /** Cierra solo la cuenta de un alias (el cliente paga su parte) */
   pagarParticipante: (participanteId: number, formaPago = "efectivo") =>
-    request(`/cuentas/participante/${participanteId}/pagar?forma_pago=${formaPago}`, {
-      method: "POST",
-    }),
+    request(
+      `/cuentas/participante/${idPositivo(
+        participanteId,
+        "Cliente"
+      )}/pagar?forma_pago=${formaPago}`,
+      { method: "POST" }
+    ),
 
   // ---------- Corte de caja ----------
   getTurnoActual: () => request("/caja/turno-actual"),
