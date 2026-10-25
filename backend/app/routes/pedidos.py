@@ -1,6 +1,5 @@
 """Endpoints para gestión de pedidos y ventas por mesa."""
 
-from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +14,7 @@ from app.schemas import (
     PedidoItemOut,
     PedidoOut,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["pedidos"])
 
@@ -43,6 +43,7 @@ def _pedido_to_out(pedido: Pedido) -> PedidoOut:
         usuario=pedido.usuario,
         items=items,
         fecha=pedido.fecha,
+        fecha_cierre=pedido.fecha_cierre,
         total=pedido.total,
         estado=pedido.estado,
     )
@@ -190,7 +191,7 @@ def ajustar_item_pedido(
     if total == 0:
         pedido.estado = "cerrado"
         pedido.forma_pago = "efectivo"
-        pedido.fecha_cierre = datetime.utcnow()
+        pedido.fecha_cierre = ahora_local()
         if pedido.mesa:
             pedido.guardar_origen(pedido.mesa)
 
@@ -253,7 +254,7 @@ def cerrar_pedido(
 
     pedido.estado = "cerrado"
     pedido.forma_pago = forma_pago
-    pedido.fecha_cierre = datetime.utcnow()
+    pedido.fecha_cierre = ahora_local()
     if pedido.mesa:
         pedido.guardar_origen(pedido.mesa)
 

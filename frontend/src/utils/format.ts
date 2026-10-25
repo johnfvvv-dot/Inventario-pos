@@ -19,3 +19,69 @@ export const formatearNumero = (valor: number | null | undefined): string => {
   const seguro = Number.isFinite(numero) ? Math.round(numero) : 0;
   return seguro.toLocaleString("es-CO", { maximumFractionDigits: 0 });
 };
+
+/**
+ * Interpreta una fecha del backend como hora local.
+ *
+ * El servidor guarda horas locales "naive" (sin zona horaria). Si el texto
+ * no trae zona, se construye con los componentes tal cual para evitar que
+ * el navegador lo interprete como UTC (que era el origen del desfase).
+ */
+const parsearFecha = (valor: string): Date => {
+  const soloFecha = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  if (soloFecha) {
+    return new Date(
+      Number(soloFecha[1]),
+      Number(soloFecha[2]) - 1,
+      Number(soloFecha[3])
+    );
+  }
+
+  const sinZona =
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?$/.exec(
+      valor
+    );
+  if (sinZona) {
+    const micros = (sinZona[7] || "").slice(0, 3).padEnd(3, "0");
+    return new Date(
+      Number(sinZona[1]),
+      Number(sinZona[2]) - 1,
+      Number(sinZona[3]),
+      Number(sinZona[4]),
+      Number(sinZona[5]),
+      Number(sinZona[6] || 0),
+      Number(micros || 0)
+    );
+  }
+
+  return new Date(valor);
+};
+
+/**
+ * Fecha y hora local con formato DD/MM/YYYY, HH:mm:ss.
+ * Ejemplo: "25/10/2026, 22:52:46".
+ */
+export const formatearFechaHora = (
+  valor: string | Date | null | undefined
+): string => {
+  if (!valor) return "-";
+
+  const fecha = typeof valor === "string" ? parsearFecha(valor) : valor;
+  if (Number.isNaN(fecha.getTime())) return "-";
+
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const anio = fecha.getFullYear();
+  const hora = String(fecha.getHours()).padStart(2, "0");
+  const minuto = String(fecha.getMinutes()).padStart(2, "0");
+  const segundo = String(fecha.getSeconds()).padStart(2, "0");
+
+  return `${dia}/${mes}/${anio}, ${hora}:${minuto}:${segundo}`;
+};
+
+/** Fecha local en formato YYYY-MM-DD (para nombres de archivos). */
+export const fechaParaArchivo = (valor: Date = new Date()): string => {
+  const dia = String(valor.getDate()).padStart(2, "0");
+  const mes = String(valor.getMonth() + 1).padStart(2, "0");
+  return `${valor.getFullYear()}-${mes}-${dia}`;
+};

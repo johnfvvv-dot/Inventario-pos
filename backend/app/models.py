@@ -1,10 +1,10 @@
 """Modelos ORM SQLAlchemy para la base de datos."""
 
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.tiempo import ahora_local
 
 
 def etiqueta_desde_numero_historico(numero: int) -> str:
@@ -29,7 +29,7 @@ class Usuario(Base):
     rol = Column(String(20), nullable=False, default="bartender")  # admin | bartender
     password_hash = Column(String(128), nullable=False)
     activo = Column(Integer, default=1)
-    creado_en = Column(DateTime, default=datetime.utcnow)
+    creado_en = Column(DateTime, default=ahora_local)
 
     pedidos = relationship("Pedido", back_populates="usuario")
 
@@ -92,7 +92,7 @@ class Pedido(Base):
     id = Column(Integer, primary_key=True, index=True)
     mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha = Column(DateTime, default=datetime.utcnow)
+    fecha = Column(DateTime, default=ahora_local)
     total = Column(Float, default=0.0)
     estado = Column(String(20), default="abierto")  # abierto | cerrado | dividido
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
@@ -141,7 +141,7 @@ class Division(Base):
     id = Column(Integer, primary_key=True, index=True)
     mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=False)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha = Column(DateTime, default=datetime.utcnow)
+    fecha = Column(DateTime, default=ahora_local)
     total = Column(Float, default=0.0)
     estado = Column(String(20), default="pendiente")  # pendiente | pagada
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
@@ -194,9 +194,18 @@ class TurnoCaja(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha_apertura = Column(DateTime, default=datetime.utcnow)
+    fecha_apertura = Column(DateTime, default=ahora_local)
     fecha_cierre = Column(DateTime, nullable=True)
     observaciones = Column(String(255), nullable=True)
     estado = Column(String(20), default="abierto")  # abierto | cerrado
 
     usuario = relationship("Usuario")
+
+
+class MigracionSistema(Base):
+    """Marcador de migraciones ya aplicadas a la base de datos."""
+
+    __tablename__ = "migraciones_sistema"
+
+    clave = Column(String(80), primary_key=True)
+    aplicado_en = Column(DateTime, default=ahora_local)

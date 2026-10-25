@@ -263,6 +263,7 @@ class PedidoOut(BaseModel):
     usuario: UsuarioOut
     items: List[PedidoItemOut]
     fecha: datetime
+    fecha_cierre: Optional[datetime] = None
     total: float
     estado: str
     model_config = ConfigDict(from_attributes=True)

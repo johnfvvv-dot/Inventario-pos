@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import CierreTurnoModal from "../components/CierreTurnoModal";
 import { api } from "../services/api";
-import { formatearPrecio } from "../utils/format";
+import { formatearFechaHora, formatearPrecio } from "../utils/format";
 
 interface Totales {
   efectivo: number;
@@ -100,9 +100,6 @@ export default function CorteCajaPage() {
     }
   };
 
-  const fmtFecha = (f: string | null) =>
-    f ? new Date(f).toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : "-";
-
   return (
     <div className="page">
       <div className="page-head">
@@ -140,7 +137,8 @@ export default function CorteCajaPage() {
         {turno ? (
           <>
             <p className="muted small">
-              Abierto por <strong>{turno.usuario_nombre}</strong> el {fmtFecha(turno.fecha_apertura)}
+              Abierto por <strong>{turno.usuario_nombre}</strong> el{" "}
+              {formatearFechaHora(turno.fecha_apertura)}
             </p>
             <div className="kpis">
               <div className="kpi-card">
@@ -219,8 +217,8 @@ export default function CorteCajaPage() {
               {turnos.map((t) => (
                 <tr key={t.id}>
                   <td>{t.id}</td>
-                  <td>{fmtFecha(t.fecha_apertura)}</td>
-                  <td>{fmtFecha(t.fecha_cierre)}</td>
+                  <td>{formatearFechaHora(t.fecha_apertura)}</td>
+                  <td>{formatearFechaHora(t.fecha_cierre)}</td>
                   <td>{t.usuario_nombre}</td>
                   <td>{formatearPrecio(t.totales.efectivo)}</td>
                   <td>{formatearPrecio(t.totales.tarjeta)}</td>

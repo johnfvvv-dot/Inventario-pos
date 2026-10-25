@@ -1,7 +1,6 @@
 """Endpoints de usuarios: login por alias, gestión de usuarios y roles."""
 
 import hashlib
-from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +17,7 @@ from app.schemas import (
     UsuarioOut,
     UsuarioUpdate,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["usuarios"])
 
@@ -33,7 +33,7 @@ def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
         nombre=usuario.nombre,
         rol=usuario.rol,
         activo=bool(usuario.activo),
-        creado_en=usuario.creado_en or datetime.utcnow(),
+        creado_en=usuario.creado_en or ahora_local(),
     )
 
 

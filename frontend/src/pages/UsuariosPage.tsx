@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
 import CambiarClaveModal from "../components/CambiarClaveModal";
 import ConfirmModal from "../components/ConfirmModal";
+import { formatearFechaHora } from "../utils/format";
 
 interface Usuario {
   id: number;
@@ -215,9 +216,7 @@ export default function UsuariosPage() {
                     </span>
                   </td>
                   <td className="muted small">
-                    {u.creado_en
-                      ? new Date(u.creado_en).toLocaleDateString("es")
-                      : "-"}
+                    {formatearFechaHora(u.creado_en)}
                   </td>
                   <td className="actions">
                     <button

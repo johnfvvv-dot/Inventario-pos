@@ -99,13 +99,19 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   como destino.
 - Reportes con KPIs, gráficos y exportación CSV; historial con filtros por
   fecha, mesa/barra, producto y forma de pago.
-- Migraciones ligeras al iniciar: columnas faltantes, alias de usuarios y
-  etiquetas históricas.
+- Todas las fechas se guardan y muestran en **hora local** con formato
+  `DD/MM/YYYY, HH:mm:ss` (helper `backend/app/tiempo.py` y
+  `frontend/src/utils/format.ts`). El cierre de pedidos de mesa y barra usa
+  `ahora_local()`.
+- Migraciones ligeras al iniciar: columnas faltantes, alias de usuarios,
+  etiquetas históricas y conversión única UTC → hora local
+  (`migraciones_sistema.fechas_locales_v1`).
+- El filtro "Hasta" del historial incluye el día completo.
 
 ## 4. Pendientes por corregir / completar
 
-1. **Recompilar `dist/InventarioPOS.exe`**: el binario actual es anterior a los
-   últimos ajustes de barras, inventario y pedidos. Regenerar también el APK.
+1. **Recompilar el APK**: el `.exe` ya incluye los últimos ajustes, pero el APK
+   de Android debe regenerarse para incorporarlos.
 2. **Ingreso de stock atómico:** hoy el frontend envía `stock_actual + cantidad`
    al endpoint `PUT /api/inventario/{id}/stock`. Conviene un endpoint de
    incremento en el backend para evitar condiciones de carrera con varios

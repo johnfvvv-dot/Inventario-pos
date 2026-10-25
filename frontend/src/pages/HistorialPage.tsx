@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
-import { formatearPrecio } from "../utils/format";
+import {
+  fechaParaArchivo,
+  formatearFechaHora,
+  formatearPrecio,
+} from "../utils/format";
 
 interface PedidoHistorial {
   id: number;
@@ -119,7 +123,7 @@ export default function HistorialPage() {
       ["Pedido", "Fecha", "Mesa / Barra", "Usuario", "Forma de pago", "Total", "Productos"],
       ...items.map((p) => [
         String(p.id),
-        p.fecha || "",
+        formatearFechaHora(p.fecha),
         etiquetaOrigen(p),
         p.usuario_nombre,
         p.forma_pago,
@@ -134,7 +138,7 @@ export default function HistorialPage() {
     const url = URL.createObjectURL(blob);
     const enlace = document.createElement("a");
     enlace.href = url;
-    enlace.download = `historial-ventas-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.download = `historial-ventas-${fechaParaArchivo()}.csv`;
     enlace.click();
     URL.revokeObjectURL(url);
   };
@@ -244,7 +248,7 @@ export default function HistorialPage() {
             {items.map((p) => (
               <tr key={p.id}>
                 <td>{p.id}</td>
-                <td>{p.fecha ? new Date(p.fecha).toLocaleString("es") : "-"}</td>
+                <td>{formatearFechaHora(p.fecha)}</td>
                 <td>{etiquetaOrigen(p)}</td>
                 <td>{p.usuario_nombre}</td>
                 <td>

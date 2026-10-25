@@ -69,6 +69,19 @@ decimales**:
 - `$100000.00` → `$100.000`
 - `$1234567.00` → `$1.234.567`
 
+### Formato de fechas y horas
+
+Las fechas del historial, los reportes, los turnos de caja y los usuarios usan
+siempre la **hora local del servidor** (el reloj del equipo donde corre la
+aplicación), con el formato `DD/MM/YYYY, HH:mm:ss`:
+
+- `2026-10-24T22:52:46` → `24/10/2026, 22:52:46`
+
+Al cerrar un pedido de mesa o de barra se guarda `fecha_cierre` con la hora
+local exacta. Las fechas creadas por versiones anteriores (que se guardaban en
+UTC) se convierten una sola vez al iniciar; la tabla `migraciones_sistema`
+registra que esa conversión ya se aplicó para no desplazarlas dos veces.
+
 ### Flujo de mesas y barras
 
 ```
@@ -386,7 +399,7 @@ git push -u origin feature/nueva-funcionalidad
 | Versión | Commit | Contenido |
 |---|---|---|
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
-| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos y totales con formato |
+| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 
 ## Escalado a la nube
 

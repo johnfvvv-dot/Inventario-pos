@@ -1,6 +1,5 @@
 """Endpoints de la cuenta de una mesa: consulta, cierre y división entre clientes."""
 
-from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +31,7 @@ from app.schemas import (
     PedidoItemOut,
     TransferirCuentaOut,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["cuentas"])
 
@@ -306,7 +306,7 @@ def cerrar_cuenta(
             detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
         )
 
-    ahora = datetime.utcnow()
+    ahora = ahora_local()
     for pedido in pedidos:
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
@@ -357,7 +357,7 @@ def cerrar_cuenta_barra(
         )
 
     ids = [m.id for m in mesas]
-    ahora = datetime.utcnow()
+    ahora = ahora_local()
 
     # Cerrar pedidos abiertos de todas las plazas
     pedidos = (

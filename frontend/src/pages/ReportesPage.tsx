@@ -16,7 +16,12 @@ import {
 } from "chart.js";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import { api } from "../services/api";
-import { formatearNumero, formatearPrecio } from "../utils/format";
+import {
+  fechaParaArchivo,
+  formatearFechaHora,
+  formatearNumero,
+  formatearPrecio,
+} from "../utils/format";
 
 ChartJS.register(
   CategoryScale,
@@ -43,6 +48,7 @@ interface Pedido {
   total: number;
   estado: string;
   fecha: string;
+  fecha_cierre: string | null;
   mesa?: { numero: number } | null;
   items: {
     producto_id: number;
@@ -127,7 +133,7 @@ export default function ReportesPage() {
   const exportarCSV = () => {
     const filas: string[][] = [];
     filas.push(["REPORTE DE VENTAS - Inventario POS"]);
-    filas.push(["Generado", new Date().toLocaleString("es")]);
+    filas.push(["Generado", formatearFechaHora(new Date())]);
     filas.push(["Periodo (dias)", String(periodo)]);
     filas.push([]);
     filas.push(["=== VENTAS POR FORMA DE PAGO ==="]);
@@ -153,7 +159,7 @@ export default function ReportesPage() {
         filas.push([
           String(p.id),
           p.mesa ? String(p.mesa.numero) : "-",
-          p.fecha,
+          formatearFechaHora(p.fecha_cierre || p.fecha),
           p.estado,
           String(p.total),
           p.items.map((i) => `${i.cantidad}x ${i.producto_nombre}`).join(" | "),
@@ -168,7 +174,7 @@ export default function ReportesPage() {
     const url = URL.createObjectURL(blob);
     const enlace = document.createElement("a");
     enlace.href = url;
-    enlace.download = `reporte-ventas-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.download = `reporte-ventas-${fechaParaArchivo()}.csv`;
     enlace.click();
     URL.revokeObjectURL(url);
   };
