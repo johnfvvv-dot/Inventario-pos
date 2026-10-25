@@ -437,6 +437,12 @@ a {
   color: var(--primary);
 }
 
+.admin-nav a.activo,
+.admin-nav a.activo:hover {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
 .admin-content {
   min-width: 0;
 }

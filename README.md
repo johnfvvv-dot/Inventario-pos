@@ -17,6 +17,9 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
 - **Login** con roles `admin` y `bartender` (clave con hash SHA-256) y
   redirección según el rol.
+- **Navegación:** el menú lateral resalta la sección activa con fondo verde
+  suave (`#E8F5E9`) y texto verde oscuro (`#2E7D32`), tanto en el panel del
+  Administrador como en el del Bartender.
 - **Inventario:** alta, edición, eliminación con confirmación, búsqueda,
   paginación y filtro por categoría. La columna **Stock es de solo lectura**;
   la columna **"Ingreso de Stock"** tiene un campo numérico y un botón verde

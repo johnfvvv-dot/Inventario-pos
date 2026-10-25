@@ -42,6 +42,15 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 ## 3. Estado actual y ajustes recientes
 
+### Navegación
+
+- `MenuLink` (`frontend/src/components/MenuLink.tsx`) resalta el ítem activo
+  del menú lateral con fondo `#E8F5E9` y texto `#2E7D32`.
+- Usa `useLocation` y compara la ruta normalizada; las rutas índice `/admin` y
+  `/bartender` activan **Inventario** y **Pedidos** respectivamente.
+- Solo un enlace recibe la clase `activo` y `aria-current="page"`. Aplica en
+  los paneles de Administrador y Bartender, también en el modo móvil.
+
 ### Mesas y barras
 
 - Las barras se muestran como **"Barra N"** en el selector de pedidos y en el

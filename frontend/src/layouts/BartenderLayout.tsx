@@ -1,7 +1,8 @@
 /** Layout del panel de Bartender: acceso operativo sin edición. */
 
 import { useEffect, useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
+import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
 import { api } from "../services/api";
 
@@ -81,10 +82,12 @@ export default function BartenderLayout() {
 
       <div className="admin-body">
         <nav className="admin-nav">
-          <Link to="/bartender/pedidos">Pedidos</Link>
-          <Link to="/bartender/mesas">Mesas</Link>
-          <Link to="/bartender/inventario">Inventario</Link>
-          <Link to="/bartender/corte-caja">Corte de caja</Link>
+          <MenuLink to="/bartender/pedidos" rutas={["/bartender"]}>
+            Pedidos
+          </MenuLink>
+          <MenuLink to="/bartender/mesas">Mesas</MenuLink>
+          <MenuLink to="/bartender/inventario">Inventario</MenuLink>
+          <MenuLink to="/bartender/corte-caja">Corte de caja</MenuLink>
         </nav>
 
         <main className="admin-content">
