@@ -439,8 +439,9 @@ a {
 
 .admin-nav a.activo,
 .admin-nav a.activo:hover {
-  background: #E8F5E9;
-  color: #2E7D32;
+  /* Misma paleta que una mesa disponible: badge-success y --success. */
+  background: #e5f7ed;
+  color: var(--success);
 }
 
 .admin-content {

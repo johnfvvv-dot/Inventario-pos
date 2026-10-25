@@ -45,7 +45,8 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 ### Navegación
 
 - `MenuLink` (`frontend/src/components/MenuLink.tsx`) resalta el ítem activo
-  del menú lateral con fondo `#E8F5E9` y texto `#2E7D32`.
+  del menú lateral con la paleta de una mesa disponible: fondo `#e5f7ed`
+  (`.badge-success`) y texto `var(--success)` = `#27ae60`.
 - Usa `useLocation` y compara la ruta normalizada; las rutas índice `/admin` y
   `/bartender` activan **Inventario** y **Pedidos** respectivamente.
 - Solo un enlace recibe la clase `activo` y `aria-current="page"`. Aplica en
