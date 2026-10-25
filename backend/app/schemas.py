@@ -99,6 +99,12 @@ class StockUpdate(BaseModel):
     nuevo_stock: int = Field(..., ge=0)
 
 
+class StockAjuste(BaseModel):
+    """Variación de stock: positiva para ingresar, negativa para descontar."""
+
+    delta: int = Field(..., ge=-1000000, le=1000000)
+
+
 class ProductoFiltroOut(BaseModel):
     """Respuesta paginada del inventario."""
     items: List[ProductoOut]

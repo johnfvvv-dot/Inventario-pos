@@ -73,12 +73,24 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 - La columna **Stock es de solo lectura** y muestra únicamente la cantidad
   actual mediante un badge (rojo/amarillo/verde según el nivel).
-- Se agregó la columna **"Ingreso de stock"**: campo numérico + botón verde
+- La columna **"Ingreso de Stock"** tiene un campo numérico + botón verde
   **"Agregar"** que **suma** la cantidad al stock existente
-  (ej. 50 + 10 = 60). También se confirma con Enter.
-- Se conservan los botones **"−"** y **"+"** para ajustes incrementales.
-- El campo solo acepta dígitos y valida cantidades mayores a cero.
-- El rol `bartender` mantiene el inventario en modo solo lectura.
+  (ej. 50 + 10 = 60). También se confirma con Enter. El campo solo acepta
+  dígitos y valida cantidades mayores a cero.
+- El **Administrador** siempre ve la columna de ingreso, junto con los botones
+  incrementales **"−"** y **"+"** y las acciones de crear, editar y eliminar.
+- El **Bartender** inicia en **solo lectura**, sin acciones de productos ni
+  botones incrementales. Desde el menú de usuario (dropdown del encabezado)
+  puede **activar o desactivar** la columna "Ingreso de Stock"; al activarla
+  obtiene únicamente el campo numérico + botón **"Agregar"**. El estado vive en
+  `BartenderLayout` y se comparte con `InventarioPage` por `Outlet context`;
+  vuelve a desactivado al recargar o iniciar una nueva sesión.
+- El ajuste usa `POST /api/inventario/{id}/stock/ajuste` con `{ delta }`, que
+  aplica `max(0, stock + delta)` de forma atómica en la base. Se usa tanto para
+  "Agregar" como para los botones **"−"** y **"+"**. Se conserva
+  `PUT /api/inventario/{id}/stock` por compatibilidad.
+- El menú de usuario es el componente reutilizable `UserMenu`; en el
+  Administrador solo muestra la sesión y "Cerrar sesión".
 
 ### Pedidos
 
@@ -113,18 +125,14 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 1. **Recompilar el APK**: el `.exe` ya incluye los últimos ajustes, pero el APK
    de Android debe regenerarse para incorporarlos.
-2. **Ingreso de stock atómico:** hoy el frontend envía `stock_actual + cantidad`
-   al endpoint `PUT /api/inventario/{id}/stock`. Conviene un endpoint de
-   incremento en el backend para evitar condiciones de carrera con varios
-   usuarios.
-3. **Script de instalación para Windows:** `scripts/start.bat` menciona
+2. **Script de instalación para Windows:** `scripts/start.bat` menciona
    `scripts/install.bat`, pero ese archivo no existe; crear el `.bat` o corregir
    el mensaje.
-4. **`start_dev.sh`:** crea/activa el entorno virtual en la raíz pero luego
+3. **`start_dev.sh`:** crea/activa el entorno virtual en la raíz pero luego
    espera `backend/venv`; unificar la ruta.
-5. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
+4. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
    migración de etiquetas históricas sobre una base de datos antigua.
-6. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
+5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
 

@@ -19,9 +19,11 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
   redirección según el rol.
 - **Inventario:** alta, edición, eliminación con confirmación, búsqueda,
   paginación y filtro por categoría. La columna **Stock es de solo lectura**;
-  los ingresos se registran en el campo **"Ingreso de stock"** con un botón
-  verde **"Agregar"** que **suma** la cantidad al stock existente. Se conservan
-  los botones **"−"** y **"+"** para ajustes de una unidad.
+  la columna **"Ingreso de Stock"** tiene un campo numérico y un botón verde
+  **"Agregar"** que **suma** la cantidad al stock existente. El Administrador
+  siempre la ve, junto con los botones **"−"** y **"+"**; el Bartender inicia
+  en solo lectura y puede habilitarla temporalmente desde su menú de usuario
+  (sin botones incrementales).
 - **Categorías:** CRUD de categorías (Bebidas, Comidas, etc.) con filtro rápido
   en el POS.
 - **Mesas:** creación, eliminación, estado (disponible/ocupada), apertura
@@ -109,7 +111,7 @@ disponible en `http://localhost:8000/docs`.
 |---|---|
 | Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `POST /usuarios/`, `PUT /usuarios/{id}`, `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
 | Mesas y barras | `GET /mesas/`, `POST /mesas/`, `POST /mesas/barra`, `POST /mesas/{id}/ocupar`, `PUT /mesas/{id}/estado`, `POST /mesas/{id}/liberar`, `DELETE /mesas/{id}` |
-| Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `DELETE /inventario/{id}` |
+| Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `POST /inventario/{id}/stock/ajuste` (delta atómico), `DELETE /inventario/{id}` |
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
 | Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
 | Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
@@ -239,11 +241,26 @@ el campo `usuario` al endpoint `POST /api/usuarios/login`.
 
 | Módulo | Administrador | Bartender |
 |---|---|---|
-| Inventario | Crear, editar, eliminar, ingresar stock | **Solo lectura** |
+| Inventario | Crear, editar, eliminar, ingresar stock | **Solo lectura** (ingreso de stock opcional) |
 | Mesas / Pedidos / Cuenta | ✅ | ✅ |
 | Corte de caja | ✅ | ✅ |
 | Reportes / Historial | ✅ | ❌ |
 | Usuarios (crear, roles, claves) | ✅ | ❌ |
+
+### Ingreso de stock del Bartender
+
+El Bartender abre el inventario en **modo lectura**: no puede crear, editar ni
+eliminar productos y no ve los botones **"−"** ni **"+"**. Desde el menú de
+usuario (parte superior derecha) puede activar **"Ingreso de Stock"** para
+mostrar temporalmente la columna con un campo numérico y el botón verde
+**"Agregar"**; la cantidad se suma al stock existente y se refleja al instante.
+Al desactivar la opción, recargar la página o iniciar una nueva sesión, el
+inventario vuelve a solo lectura. El Administrador mantiene la columna siempre
+activa, con el mismo botón **"Agregar"** y los ajustes de una unidad.
+
+El ajuste se envía a `POST /api/inventario/{id}/stock/ajuste` como
+`{ "delta": N }` y el backend aplica `max(0, stock + N)` de forma atómica, sin
+sobrescribir cambios concurrentes.
 
 ### Menú de Usuarios (solo Administrador)
 

@@ -1,6 +1,7 @@
 /** Layout del panel de administración. */
 
 import { Link, Outlet, useNavigate } from "react-router-dom";
+import UserMenu from "../components/UserMenu";
 
 export default function AdminLayout() {
   const navigate = useNavigate();
@@ -19,10 +20,11 @@ export default function AdminLayout() {
           <p className="muted">Panel de Administración</p>
         </div>
         <div className="user-info">
-          <span>{usuario.alias || usuario.nombre || "Administrador"}</span>
-          <button className="btn-logout" onClick={cerrarSesion}>
-            Cerrar sesión
-          </button>
+          <UserMenu
+            nombre={usuario.alias || usuario.nombre || "Administrador"}
+            rol={usuario.rol || "admin"}
+            onCerrarSesion={cerrarSesion}
+          />
         </div>
       </header>
 
@@ -38,7 +40,7 @@ export default function AdminLayout() {
         </nav>
 
         <main className="admin-content">
-          <Outlet />
+          <Outlet context={{ ingresoStockHabilitado: usuario.rol === "admin" }} />
         </main>
       </div>
     </div>

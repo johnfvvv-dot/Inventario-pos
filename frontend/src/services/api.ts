@@ -248,6 +248,13 @@ export const api = {
       body: JSON.stringify({ nuevo_stock }),
     }),
 
+  /** Suma (o resta) una cantidad al stock actual de forma atómica. */
+  ajustarStock: (productoId: number, delta: number) =>
+    request(`/inventario/${productoId}/stock/ajuste`, {
+      method: "POST",
+      body: JSON.stringify({ delta }),
+    }),
+
   deleteProducto: (productoId: number) =>
     request(`/inventario/${productoId}`, { method: "DELETE" }),
 

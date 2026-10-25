@@ -1,10 +1,15 @@
 /** Layout del panel de Bartender: acceso operativo sin edición. */
 
+import { useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
+import UserMenu from "../components/UserMenu";
 
 export default function BartenderLayout() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  // Por defecto el Bartender solo consulta el inventario. El menú de usuario
+  // permite habilitar temporalmente la columna de ingreso de stock.
+  const [ingresoStock, setIngresoStock] = useState(false);
 
   const cerrarSesion = () => {
     localStorage.removeItem("user");
@@ -19,10 +24,13 @@ export default function BartenderLayout() {
           <p className="muted">Panel de Bartender</p>
         </div>
         <div className="user-info">
-          <span>{usuario.alias || usuario.nombre || "Bartender"}</span>
-          <button className="btn-logout" onClick={cerrarSesion}>
-            Cerrar sesión
-          </button>
+          <UserMenu
+            nombre={usuario.alias || usuario.nombre || "Bartender"}
+            rol={usuario.rol || "bartender"}
+            onCerrarSesion={cerrarSesion}
+            ingresoStock={ingresoStock}
+            onToggleIngresoStock={setIngresoStock}
+          />
         </div>
       </header>
 
@@ -35,7 +43,7 @@ export default function BartenderLayout() {
         </nav>
 
         <main className="admin-content">
-          <Outlet />
+          <Outlet context={{ ingresoStockHabilitado: ingresoStock }} />
         </main>
       </div>
     </div>
