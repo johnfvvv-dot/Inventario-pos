@@ -29,6 +29,9 @@ class Usuario(Base):
     rol = Column(String(20), nullable=False, default="bartender")  # admin | bartender
     password_hash = Column(String(128), nullable=False)
     activo = Column(Integer, default=1)
+    # Permiso para ingresar stock (solo aplica a bartenders; el admin siempre
+    # tiene la columna activa). Lo habilita el administrador desde Usuarios.
+    ingreso_stock = Column(Integer, default=0)
     creado_en = Column(DateTime, default=ahora_local)
 
     pedidos = relationship("Pedido", back_populates="usuario")

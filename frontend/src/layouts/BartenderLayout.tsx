@@ -1,15 +1,62 @@
 /** Layout del panel de Bartender: acceso operativo sin edición. */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import UserMenu from "../components/UserMenu";
+import { api } from "../services/api";
 
 export default function BartenderLayout() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
-  // Por defecto el Bartender solo consulta el inventario. El menú de usuario
-  // permite habilitar temporalmente la columna de ingreso de stock.
-  const [ingresoStock, setIngresoStock] = useState(false);
+  const usuarioId = usuario?.id;
+  // El permiso lo define el Administrador desde Usuarios y se guarda en la
+  // base. Por defecto el Bartender solo consulta el inventario.
+  const [ingresoStock, setIngresoStock] = useState<boolean>(
+    Boolean(usuario?.ingreso_stock)
+  );
+
+  useEffect(() => {
+    if (!usuarioId) return;
+    let vigente = true;
+
+    const consultarPermiso = async () => {
+      try {
+        const datos: any = await api.getUsuario(usuarioId);
+        if (!vigente) return;
+
+        const habilitado = Boolean(datos?.ingreso_stock);
+        setIngresoStock(habilitado);
+
+        // Mantiene sincronizada la sesión guardada en el navegador.
+        const sesion = JSON.parse(localStorage.getItem("user") || "{}");
+        if (Boolean(sesion.ingreso_stock) !== habilitado) {
+          localStorage.setItem(
+            "user",
+            JSON.stringify({ ...sesion, ingreso_stock: habilitado })
+          );
+        }
+      } catch {
+        // Si el servidor no responde, se conserva el último estado conocido.
+      }
+    };
+
+    consultarPermiso();
+    // Refresco periódico para reflejar cambios del Administrador sin recargar.
+    const intervalo = window.setInterval(consultarPermiso, 5000);
+
+    const alVolverALaVentana = () => {
+      if (document.visibilityState === "visible") consultarPermiso();
+    };
+    document.addEventListener("visibilitychange", alVolverALaVentana);
+    window.addEventListener("focus", consultarPermiso);
+
+    return () => {
+      vigente = false;
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", alVolverALaVentana);
+      window.removeEventListener("focus", consultarPermiso);
+    };
+  }, [usuarioId]);
 
   const cerrarSesion = () => {
     localStorage.removeItem("user");
@@ -28,8 +75,6 @@ export default function BartenderLayout() {
             nombre={usuario.alias || usuario.nombre || "Bartender"}
             rol={usuario.rol || "bartender"}
             onCerrarSesion={cerrarSesion}
-            ingresoStock={ingresoStock}
-            onToggleIngresoStock={setIngresoStock}
           />
         </div>
       </header>

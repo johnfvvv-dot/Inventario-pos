@@ -116,6 +116,9 @@ export const api = {
 
   getUsuarios: () => request("/usuarios/"),
 
+  /** Consulta un usuario; sirve para refrescar permisos en la sesión activa. */
+  getUsuario: (usuarioId: number) => request(`/usuarios/${usuarioId}`),
+
   createUsuario: (datos: {
     alias: string;
     nombre?: string;
@@ -129,7 +132,13 @@ export const api = {
 
   updateUsuario: (
     usuarioId: number,
-    datos: { alias?: string; nombre?: string; rol?: string; activo?: boolean }
+    datos: {
+      alias?: string;
+      nombre?: string;
+      rol?: string;
+      activo?: boolean;
+      ingreso_stock?: boolean;
+    }
   ) =>
     request(`/usuarios/${usuarioId}`, {
       method: "PUT",

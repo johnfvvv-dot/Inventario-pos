@@ -33,6 +33,7 @@ def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
         nombre=usuario.nombre,
         rol=usuario.rol,
         activo=bool(usuario.activo),
+        ingreso_stock=bool(usuario.ingreso_stock),
         creado_en=usuario.creado_en or ahora_local(),
     )
 
@@ -56,6 +57,15 @@ def listar_usuarios(db: Session = Depends(get_db)):
     """Listar todos los usuarios."""
     usuarios = db.query(Usuario).order_by(Usuario.alias).all()
     return [_a_usuario_out(u) for u in usuarios]
+
+
+@router.get("/{usuario_id}", response_model=UsuarioOut)
+def obtener_usuario(usuario_id: int, db: Session = Depends(get_db)):
+    """Devuelve un usuario; el Bartender lo consulta para refrescar permisos."""
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return _a_usuario_out(usuario)
 
 
 @router.post("/", response_model=UsuarioOut, status_code=201)
@@ -90,7 +100,7 @@ def crear_usuario(datos: UsuarioCreate, db: Session = Depends(get_db)):
 def actualizar_usuario(
     usuario_id: int, datos: UsuarioUpdate, db: Session = Depends(get_db)
 ):
-    """Actualiza alias, nombre, rol o estado activo."""
+    """Actualiza alias, nombre, rol, estado activo o permiso de stock."""
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -116,6 +126,8 @@ def actualizar_usuario(
         usuario.rol = datos.rol
     if datos.activo is not None:
         usuario.activo = 1 if datos.activo else 0
+    if datos.ingreso_stock is not None:
+        usuario.ingreso_stock = 1 if datos.ingreso_stock else 0
 
     db.commit()
     db.refresh(usuario)

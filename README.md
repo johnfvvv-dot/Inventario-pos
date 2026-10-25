@@ -21,9 +21,9 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
   paginación y filtro por categoría. La columna **Stock es de solo lectura**;
   la columna **"Ingreso de Stock"** tiene un campo numérico y un botón verde
   **"Agregar"** que **suma** la cantidad al stock existente. El Administrador
-  siempre la ve, junto con los botones **"−"** y **"+"**; el Bartender inicia
-  en solo lectura y puede habilitarla temporalmente desde su menú de usuario
-  (sin botones incrementales).
+  siempre la ve, junto con los botones **"−"** y **"+"**. El Bartender inicia
+  en solo lectura y el Administrador puede habilitarle la columna por usuario
+  desde **Usuarios** (sin botones incrementales).
 - **Categorías:** CRUD de categorías (Bebidas, Comidas, etc.) con filtro rápido
   en el POS.
 - **Mesas:** creación, eliminación, estado (disponible/ocupada), apertura
@@ -109,7 +109,7 @@ disponible en `http://localhost:8000/docs`.
 
 | Módulo | Endpoints principales |
 |---|---|
-| Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `POST /usuarios/`, `PUT /usuarios/{id}`, `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
+| Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `GET /usuarios/{id}`, `POST /usuarios/`, `PUT /usuarios/{id}` (incluye `ingreso_stock`), `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
 | Mesas y barras | `GET /mesas/`, `POST /mesas/`, `POST /mesas/barra`, `POST /mesas/{id}/ocupar`, `PUT /mesas/{id}/estado`, `POST /mesas/{id}/liberar`, `DELETE /mesas/{id}` |
 | Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `POST /inventario/{id}/stock/ajuste` (delta atómico), `DELETE /inventario/{id}` |
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
@@ -247,16 +247,26 @@ el campo `usuario` al endpoint `POST /api/usuarios/login`.
 | Reportes / Historial | ✅ | ❌ |
 | Usuarios (crear, roles, claves) | ✅ | ❌ |
 
+El acceso a las rutas de administración está restringido en la interfaz: un
+Bartender que intente abrir `/admin` es redirigido a su propio panel. La API
+local no usa tokens; el control de roles es de interfaz.
+
 ### Ingreso de stock del Bartender
 
 El Bartender abre el inventario en **modo lectura**: no puede crear, editar ni
-eliminar productos y no ve los botones **"−"** ni **"+"**. Desde el menú de
-usuario (parte superior derecha) puede activar **"Ingreso de Stock"** para
-mostrar temporalmente la columna con un campo numérico y el botón verde
+eliminar productos y no ve los botones **"−"** ni **"+"**. Por defecto tampoco
+ve la columna **"Ingreso de Stock"**.
+
+El Administrador decide qué Bartenders pueden cargar stock desde
+**Usuarios → Usuarios registrados**, con el interruptor de la columna
+**"Ingreso de Stock"**. El permiso se guarda en la base (`usuarios.ingreso_stock`,
+apagado por defecto) y se aplica por usuario. Cuando está habilitado, la vista
+del Bartender muestra la columna con un campo numérico y el botón verde
 **"Agregar"**; la cantidad se suma al stock existente y se refleja al instante.
-Al desactivar la opción, recargar la página o iniciar una nueva sesión, el
-inventario vuelve a solo lectura. El Administrador mantiene la columna siempre
-activa, con el mismo botón **"Agregar"** y los ajustes de una unidad.
+El Bartender consulta su permiso cada 5 segundos, por lo que los cambios del
+Administrador aparecen sin recargar la página (también se actualizan al volver
+a la ventana). El Administrador mantiene la columna siempre activa, con el
+mismo botón **"Agregar"** y los ajustes de una unidad.
 
 El ajuste se envía a `POST /api/inventario/{id}/stock/ajuste` como
 `{ "delta": N }` y el backend aplica `max(0, stock + N)` de forma atómica, sin
@@ -265,8 +275,11 @@ sobrescribir cambios concurrentes.
 ### Menú de Usuarios (solo Administrador)
 
 `/admin/usuarios` permite crear usuarios con alias y rol, cambiar rol,
-activar/desactivar, cambiar clave y eliminar. Todos los usuarios nuevos nacen
-con la **clave inicial `1234`** (cambiable después).
+activar/desactivar, cambiar clave y eliminar. En **Usuarios registrados** cada
+Bartender tiene un interruptor de **Ingreso de Stock**; el Administrador
+aparece como **"Siempre activo"**. Todos los usuarios nuevos nacen con la
+**clave inicial `1234`** (cambiable después) y con el ingreso de stock
+desactivado.
 
 ## Acceso desde celular o tablet (misma WiFi)
 
@@ -379,19 +392,16 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 
 ## Pendientes por corregir
 
-1. **Recompilar `dist/InventarioPOS.exe`**: el binario actual es anterior a los
-   últimos ajustes de barras, inventario y pedidos. Regenerar también el APK.
-2. **Ingreso de stock atómico:** el frontend envía `stock_actual + cantidad` a
-   `PUT /api/inventario/{id}/stock`; conviene un endpoint de incremento en el
-   backend para evitar condiciones de carrera.
-3. **Instalador de Windows:** `scripts/start.bat` menciona
+1. **Recompilar el APK**: el `.exe` ya incluye los últimos ajustes, pero el APK
+   de Android debe regenerarse para incorporarlos.
+2. **Instalador de Windows:** `scripts/start.bat` menciona
    `scripts/install.bat`, pero ese archivo no existe; crearlo o corregir el
    mensaje.
-4. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
+3. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
    `venv` en la raíz pero espera `backend/venv`).
-5. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
+4. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
    migración de etiquetas históricas en una base antigua.
-6. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
+5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
 

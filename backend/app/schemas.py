@@ -43,6 +43,7 @@ class UsuarioUpdate(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=100)
     rol: Optional[str] = Field(default=None, max_length=20)
     activo: Optional[bool] = None
+    ingreso_stock: Optional[bool] = None
 
 
 class CambiarClaveIn(BaseModel):
@@ -55,6 +56,7 @@ class UsuarioOut(BaseModel):
     nombre: Optional[str] = None
     rol: str
     activo: bool = True
+    ingreso_stock: bool = False
     creado_en: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 

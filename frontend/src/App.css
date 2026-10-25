@@ -1476,6 +1476,32 @@ select:focus {
   font-size: 0.85rem;
 }
 
+.permiso-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.permiso-stock:hover {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.permiso-stock.activo {
+  color: var(--success);
+}
+
 .permisos-bloque {
   background: #f8fafc;
   border: 1px solid var(--border);

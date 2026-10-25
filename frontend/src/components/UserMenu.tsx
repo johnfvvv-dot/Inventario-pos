@@ -6,17 +6,12 @@ interface UserMenuProps {
   nombre: string;
   rol: string;
   onCerrarSesion: () => void;
-  /** Solo para Bartender: estado de la columna de ingreso de stock. */
-  ingresoStock?: boolean;
-  onToggleIngresoStock?: (activo: boolean) => void;
 }
 
 export default function UserMenu({
   nombre,
   rol,
   onCerrarSesion,
-  ingresoStock,
-  onToggleIngresoStock,
 }: UserMenuProps) {
   const [abierto, setAbierto] = useState(false);
   const contenedor = useRef<HTMLDivElement>(null);
@@ -47,10 +42,6 @@ export default function UserMenu({
   const nombreVisible = nombre || "Usuario";
   const inicial = nombreVisible.trim().charAt(0).toUpperCase() || "U";
   const esBartender = rol !== "admin";
-  const mostrarToggle =
-    esBartender &&
-    typeof ingresoStock === "boolean" &&
-    Boolean(onToggleIngresoStock);
 
   return (
     <div className="user-menu" ref={contenedor}>
@@ -75,34 +66,6 @@ export default function UserMenu({
             <strong>{nombreVisible}</strong>
             <small>{esBartender ? "Bartender" : "Administrador"}</small>
           </div>
-
-          {mostrarToggle && (
-            <>
-              <div className="user-menu-separador" />
-              <button
-                type="button"
-                className="user-menu-opcion"
-                role="menuitemcheckbox"
-                aria-checked={ingresoStock}
-                onClick={() => onToggleIngresoStock?.(!ingresoStock)}
-              >
-                <span className="user-menu-texto">
-                  <strong>Ingreso de Stock</strong>
-                  <small>
-                    {ingresoStock
-                      ? "Columna activada"
-                      : "Inventario solo lectura"}
-                  </small>
-                </span>
-                <span
-                  className={`toggle${ingresoStock ? " activo" : ""}`}
-                  aria-hidden="true"
-                >
-                  <span className="toggle-bola" />
-                </span>
-              </button>
-            </>
-          )}
 
           <div className="user-menu-separador" />
           <button

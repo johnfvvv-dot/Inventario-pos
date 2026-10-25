@@ -250,7 +250,9 @@ export default function InventarioPage() {
               Categorías ({categorias.length})
             </button>
           )}
-          {soloLectura && <span className="badge badge-warning">Solo lectura</span>}
+          {soloLectura && !mostrarIngresoStock && (
+            <span className="badge badge-warning">Solo lectura</span>
+          )}
           {soloLectura && mostrarIngresoStock && (
             <span className="badge badge-success">Ingreso de Stock activo</span>
           )}

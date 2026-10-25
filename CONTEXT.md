@@ -32,7 +32,9 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   Código en `frontend/src/`.
 - **Autenticación:** usuario + clave con hash SHA-256. El login valida el campo
   `usuario`; el usuario autenticado se guarda en `localStorage`; no se usa JWT.
-  Roles: `admin` y `bartender`.
+  Roles: `admin` y `bartender`. Las rutas `/admin` y `/bartender` están
+  protegidas en el cliente (`RutaAdmin`/`RutaBartender` en `App.tsx`); la API
+  no valida roles ni usa tokens.
 - **API:** prefijo `/api`; documentación interactiva en `/docs`; salud en
   `/health`; configuración de red en `/api/config`.
 - **Empaquetado:** PyInstaller (`dist/InventarioPOS.exe`) y Capacitor
@@ -80,17 +82,22 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - El **Administrador** siempre ve la columna de ingreso, junto con los botones
   incrementales **"−"** y **"+"** y las acciones de crear, editar y eliminar.
 - El **Bartender** inicia en **solo lectura**, sin acciones de productos ni
-  botones incrementales. Desde el menú de usuario (dropdown del encabezado)
-  puede **activar o desactivar** la columna "Ingreso de Stock"; al activarla
-  obtiene únicamente el campo numérico + botón **"Agregar"**. El estado vive en
-  `BartenderLayout` y se comparte con `InventarioPage` por `Outlet context`;
-  vuelve a desactivado al recargar o iniciar una nueva sesión.
+  botones incrementales. El permiso de ingreso de stock es **por usuario** y lo
+  controla el Administrador desde **Usuarios → Usuarios registrados**; se guarda
+  en `usuarios.ingreso_stock` (0 por defecto). Al habilitarlo, el Bartender ve
+  únicamente el campo numérico + botón **"Agregar"**.
+- `BartenderLayout` consulta `GET /api/usuarios/{id}` al cargar y cada **5 s**
+  (además de `focus` y `visibilitychange`), comparte el permiso con
+  `InventarioPage` por `Outlet context` y mantiene sincronizado el
+  `localStorage`. Así el cambio del Administrador aparece sin recargar.
 - El ajuste usa `POST /api/inventario/{id}/stock/ajuste` con `{ delta }`, que
   aplica `max(0, stock + delta)` de forma atómica en la base. Se usa tanto para
   "Agregar" como para los botones **"−"** y **"+"**. Se conserva
   `PUT /api/inventario/{id}/stock` por compatibilidad.
-- El menú de usuario es el componente reutilizable `UserMenu`; en el
-  Administrador solo muestra la sesión y "Cerrar sesión".
+- La tabla de **Usuarios registrados** incluye la columna "Ingreso de Stock":
+  interruptor por Bartender y badge "Siempre activo" para el Administrador.
+- El menú de usuario es el componente reutilizable `UserMenu`; ya no contiene
+  el interruptor de stock y solo muestra la sesión y "Cerrar sesión".
 
 ### Pedidos
 
@@ -116,8 +123,9 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `DD/MM/YYYY, HH:mm:ss` (helper `backend/app/tiempo.py` y
   `frontend/src/utils/format.ts`). El cierre de pedidos de mesa y barra usa
   `ahora_local()`.
-- Migraciones ligeras al iniciar: columnas faltantes, alias de usuarios,
-  etiquetas históricas y conversión única UTC → hora local
+- Migraciones ligeras al iniciar: columnas faltantes (incluida
+  `usuarios.ingreso_stock`), alias de usuarios, etiquetas históricas y
+  conversión única UTC → hora local
   (`migraciones_sistema.fechas_locales_v1`).
 - El filtro "Hasta" del historial incluye el día completo.
 
