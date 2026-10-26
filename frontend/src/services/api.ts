@@ -63,8 +63,15 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${url}`, {
-      headers: { "Content-Type": "application/json" },
+    // Garantiza que la API_BASE no termine en slash y que url siempre empiece con uno
+    const cleanBase = API_BASE.replace(/\/$/, "");
+    const cleanUrl = url.startsWith("/") ? url : `/${url}`;
+
+    response = await fetch(`${cleanBase}${cleanUrl}`, {
+      headers: { 
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "69420"
+      },
       signal: controller.signal,
       ...options,
     });
