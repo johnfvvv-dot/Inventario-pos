@@ -17,11 +17,16 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
 - **Login** con roles `admin` y `bartender` (clave con hash SHA-256) y
   redirección según el rol.
+- **Navegación:** el menú lateral resalta la sección activa con los mismos
+  verdes de una mesa disponible: fondo `#e5f7ed` y texto `var(--success)`
+  (`#27ae60`), tanto en el panel del Administrador como en el del Bartender.
 - **Inventario:** alta, edición, eliminación con confirmación, búsqueda,
   paginación y filtro por categoría. La columna **Stock es de solo lectura**;
-  los ingresos se registran en el campo **"Ingreso de stock"** con un botón
-  verde **"Agregar"** que **suma** la cantidad al stock existente. Se conservan
-  los botones **"−"** y **"+"** para ajustes de una unidad.
+  la columna **"Ingreso de Stock"** tiene un campo numérico y un botón verde
+  **"Agregar"** que **suma** la cantidad al stock existente. El Administrador
+  siempre la ve, junto con los botones **"−"** y **"+"**. El Bartender inicia
+  en solo lectura y el Administrador puede habilitarle la columna por usuario
+  desde **Usuarios** (sin botones incrementales).
 - **Categorías:** CRUD de categorías (Bebidas, Comidas, etc.) con filtro rápido
   en el POS.
 - **Mesas:** creación, eliminación, estado (disponible/ocupada), apertura
@@ -51,6 +56,10 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
   de transferencia.
 - **Corte de caja:** apertura/cierre de turno con totales por forma de pago
   (efectivo / tarjeta / transferencia), observaciones e historial de turnos.
+  El resumen usa **días calendario**: **Hoy** abarca de 00:00 a la hora actual,
+  **Ayer** el día completo y **7/30 días** incluyen hoy. Su **TOTAL** es la suma
+  de efectivo + tarjeta + transferencia de los pedidos cerrados en ese rango.
+  El historial muestra el **día de la semana de apertura** de cada turno.
 - **Reportes:** gráficos (ventas por día, top de productos, formas de pago),
   KPIs y exportación CSV.
 - **Historial de ventas:** filtros por rango de fechas, mesa/barra, producto y
@@ -59,14 +68,28 @@ pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 - **PWA instalable:** "Añadir a pantalla de inicio" en Android (manifest +
   service worker).
 
-### Totales de mesas y barras
+### Formato de precios
 
-Los totales pendientes de las tarjetas se muestran en **verde**, con
-**separador de miles** y sin `.00` cuando son enteros:
+Todos los precios de la aplicación (inventario, pedidos, cuentas, divisiones,
+reportes, historial y caja) se muestran con **separador de miles** y **sin
+decimales**:
 
-- `$30400.00` → `$30.400`
+- `$3800.00` → `$3.800`
+- `$100000.00` → `$100.000`
 - `$1234567.00` → `$1.234.567`
-- Si hay centavos reales: `$30.400,50`
+
+### Formato de fechas y horas
+
+Las fechas del historial, los reportes, los turnos de caja y los usuarios usan
+siempre la **hora local del servidor** (el reloj del equipo donde corre la
+aplicación), con el formato `DD/MM/YYYY, HH:mm:ss`:
+
+- `2026-10-24T22:52:46` → `24/10/2026, 22:52:46`
+
+Al cerrar un pedido de mesa o de barra se guarda `fecha_cierre` con la hora
+local exacta. Las fechas creadas por versiones anteriores (que se guardaban en
+UTC) se convierten una sola vez al iniciar; la tabla `migraciones_sistema`
+registra que esa conversión ya se aplicó para no desplazarlas dos veces.
 
 ### Flujo de mesas y barras
 
@@ -93,13 +116,13 @@ disponible en `http://localhost:8000/docs`.
 
 | Módulo | Endpoints principales |
 |---|---|
-| Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `POST /usuarios/`, `PUT /usuarios/{id}`, `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
+| Usuarios | `POST /usuarios/login`, `GET /usuarios/`, `GET /usuarios/{id}`, `POST /usuarios/`, `PUT /usuarios/{id}` (incluye `ingreso_stock`), `PUT /usuarios/{id}/clave`, `DELETE /usuarios/{id}` |
 | Mesas y barras | `GET /mesas/`, `POST /mesas/`, `POST /mesas/barra`, `POST /mesas/{id}/ocupar`, `PUT /mesas/{id}/estado`, `POST /mesas/{id}/liberar`, `DELETE /mesas/{id}` |
-| Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `DELETE /inventario/{id}` |
+| Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `POST /inventario/{id}/stock/ajuste` (delta atómico), `DELETE /inventario/{id}` |
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
 | Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
 | Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
-| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
+| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen?dias=N&offset_dias=M`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
 | Configuración | `GET /config` (bajo `/api`) y `GET /health` (sin prefijo) |
 
 ## Requisitos previos
@@ -209,11 +232,12 @@ yarn start
 
 ## Usuarios y roles
 
-No se usan correos: el acceso es por **alias** + **clave**.
+No se usan correos: el acceso es por **usuario** + **clave**. El login envía
+el campo `usuario` al endpoint `POST /api/usuarios/login`.
 
 ### Usuario inicial
 
-| Alias | Clave | Rol |
+| Usuario | Clave | Rol |
 |---|---|---|
 | `Admin` | `1234` | Administrador |
 
@@ -224,17 +248,45 @@ No se usan correos: el acceso es por **alias** + **clave**.
 
 | Módulo | Administrador | Bartender |
 |---|---|---|
-| Inventario | Crear, editar, eliminar, ingresar stock | **Solo lectura** |
+| Inventario | Crear, editar, eliminar, ingresar stock | **Solo lectura** (ingreso de stock opcional) |
 | Mesas / Pedidos / Cuenta | ✅ | ✅ |
 | Corte de caja | ✅ | ✅ |
 | Reportes / Historial | ✅ | ❌ |
 | Usuarios (crear, roles, claves) | ✅ | ❌ |
 
+El acceso a las rutas de administración está restringido en la interfaz: un
+Bartender que intente abrir `/admin` es redirigido a su propio panel. La API
+local no usa tokens; el control de roles es de interfaz.
+
+### Ingreso de stock del Bartender
+
+El Bartender abre el inventario en **modo lectura**: no puede crear, editar ni
+eliminar productos y no ve los botones **"−"** ni **"+"**. Por defecto tampoco
+ve la columna **"Ingreso de Stock"**.
+
+El Administrador decide qué Bartenders pueden cargar stock desde
+**Usuarios → Usuarios registrados**, con el interruptor de la columna
+**"Ingreso de Stock"**. El permiso se guarda en la base (`usuarios.ingreso_stock`,
+apagado por defecto) y se aplica por usuario. Cuando está habilitado, la vista
+del Bartender muestra la columna con un campo numérico y el botón verde
+**"Agregar"**; la cantidad se suma al stock existente y se refleja al instante.
+El Bartender consulta su permiso cada 5 segundos, por lo que los cambios del
+Administrador aparecen sin recargar la página (también se actualizan al volver
+a la ventana). El Administrador mantiene la columna siempre activa, con el
+mismo botón **"Agregar"** y los ajustes de una unidad.
+
+El ajuste se envía a `POST /api/inventario/{id}/stock/ajuste` como
+`{ "delta": N }` y el backend aplica `max(0, stock + N)` de forma atómica, sin
+sobrescribir cambios concurrentes.
+
 ### Menú de Usuarios (solo Administrador)
 
 `/admin/usuarios` permite crear usuarios con alias y rol, cambiar rol,
-activar/desactivar, cambiar clave y eliminar. Todos los usuarios nuevos nacen
-con la **clave inicial `1234`** (cambiable después).
+activar/desactivar, cambiar clave y eliminar. En **Usuarios registrados** cada
+Bartender tiene un interruptor de **Ingreso de Stock**; el Administrador
+aparece como **"Siempre activo"**. Todos los usuarios nuevos nacen con la
+**clave inicial `1234`** (cambiable después) y con el ingreso de stock
+desactivado.
 
 ## Acceso desde celular o tablet (misma WiFi)
 
@@ -245,6 +297,28 @@ con la **clave inicial `1234`** (cambiable después).
 4. El frontend detecta automáticamente la IP del host; si necesitas fijarla,
    define `REACT_APP_API_URL=http://IP_DE_LA_PC:8000/api` antes de compilar.
 5. Permite los puertos 3000 y 8000 en el firewall de Windows.
+
+## Solución de problemas
+
+### "Method Not Allowed" al liberar una barra
+
+El botón **Liberar barra** envía `POST /api/cuentas/barra/{n}/cerrar`, una ruta
+que existe en el backend actual. Si aparece **"Method Not Allowed"**, el
+frontend está actualizado pero el backend que está corriendo es una versión
+anterior (por ejemplo, un `InventarioPOS.exe` viejo). La petición no coincide
+con ninguna ruta POST y termina en el fallback del frontend.
+
+Para corregirlo:
+
+1. Cierra la instancia anterior del backend/ejecutable.
+2. Compila el frontend con `npm run build` dentro de `frontend/`.
+3. Regenera el ejecutable con `pyinstaller build_exe.spec --noconfirm`.
+4. Abre la aplicación nueva y recarga el navegador con `Ctrl + F5`.
+
+El comportamiento esperado es:
+
+- **Aceptar:** cobra la cuenta y la barra queda **ocupada**.
+- **Liberar barra:** cobra la cuenta y deja **todas las plazas disponibles**.
 
 ## Estructura del proyecto
 
@@ -325,19 +399,16 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 
 ## Pendientes por corregir
 
-1. **Recompilar `dist/InventarioPOS.exe`**: el binario actual es anterior a los
-   últimos ajustes de barras, inventario y pedidos. Regenerar también el APK.
-2. **Ingreso de stock atómico:** el frontend envía `stock_actual + cantidad` a
-   `PUT /api/inventario/{id}/stock`; conviene un endpoint de incremento en el
-   backend para evitar condiciones de carrera.
-3. **Instalador de Windows:** `scripts/start.bat` menciona
+1. **Recompilar el APK**: el `.exe` ya incluye los últimos ajustes, pero el APK
+   de Android debe regenerarse para incorporarlos.
+2. **Instalador de Windows:** `scripts/start.bat` menciona
    `scripts/install.bat`, pero ese archivo no existe; crearlo o corregir el
    mensaje.
-4. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
+3. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
    `venv` en la raíz pero espera `backend/venv`).
-5. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
+4. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
    migración de etiquetas históricas en una base antigua.
-6. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
+5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
 
@@ -363,7 +434,7 @@ git push -u origin feature/nueva-funcionalidad
 | Versión | Commit | Contenido |
 |---|---|---|
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
-| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos y totales con formato |
+| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 
 ## Escalado a la nube
 

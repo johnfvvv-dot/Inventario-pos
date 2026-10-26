@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
 import CambiarClaveModal from "../components/CambiarClaveModal";
 import ConfirmModal from "../components/ConfirmModal";
+import { formatearFechaHora } from "../utils/format";
 
 interface Usuario {
   id: number;
@@ -11,6 +12,7 @@ interface Usuario {
   nombre?: string | null;
   rol: string;
   activo: boolean;
+  ingreso_stock: boolean;
   creado_en: string;
 }
 
@@ -78,6 +80,22 @@ export default function UsuariosPage() {
   const alternarActivo = async (u: Usuario) => {
     try {
       await api.updateUsuario(u.id, { activo: !u.activo });
+      await cargar();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  /** Habilita o deshabilita la columna de ingreso de stock del Bartender. */
+  const alternarIngresoStock = async (u: Usuario) => {
+    if (u.rol !== "bartender") return;
+    try {
+      await api.updateUsuario(u.id, { ingreso_stock: !u.ingreso_stock });
+      setMensaje(
+        `Ingreso de stock de "${u.alias}" ${
+          u.ingreso_stock ? "deshabilitado" : "habilitado"
+        }`
+      );
       await cargar();
     } catch (err: any) {
       setError(err.message);
@@ -178,6 +196,11 @@ export default function UsuariosPage() {
       {/* Lista de usuarios */}
       <section className="panel">
         <h3>Usuarios registrados</h3>
+        <p className="muted small">
+          El ingreso de stock está desactivado por defecto para los Bartenders.
+          Habilitalo por usuario cuando necesiten cargar mercadería; el cambio
+          se refleja en su inventario sin recargar la página.
+        </p>
         <div className="table-wrap">
           <table>
             <thead>
@@ -185,6 +208,7 @@ export default function UsuariosPage() {
                 <th>Alias</th>
                 <th>Nombre</th>
                 <th>Rol</th>
+                <th>Ingreso de Stock</th>
                 <th>Estado</th>
                 <th>Creado</th>
                 <th>Acciones</th>
@@ -208,6 +232,41 @@ export default function UsuariosPage() {
                     </select>
                   </td>
                   <td>
+                    {u.rol === "bartender" ? (
+                      <button
+                        type="button"
+                        className={`permiso-stock${
+                          u.ingreso_stock ? " activo" : ""
+                        }`}
+                        role="switch"
+                        aria-checked={u.ingreso_stock}
+                        aria-label={`Ingreso de stock para ${u.alias}`}
+                        title={
+                          u.ingreso_stock
+                            ? "Deshabilitar el ingreso de stock"
+                            : "Habilitar el ingreso de stock"
+                        }
+                        onClick={() => alternarIngresoStock(u)}
+                      >
+                        <span
+                          className={`toggle${
+                            u.ingreso_stock ? " activo" : ""
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <span className="toggle-bola" />
+                        </span>
+                        <span>
+                          {u.ingreso_stock ? "Habilitado" : "Solo lectura"}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="badge badge-success">
+                        Siempre activo
+                      </span>
+                    )}
+                  </td>
+                  <td>
                     <span
                       className={u.activo ? "badge badge-success" : "badge badge-danger"}
                     >
@@ -215,9 +274,7 @@ export default function UsuariosPage() {
                     </span>
                   </td>
                   <td className="muted small">
-                    {u.creado_en
-                      ? new Date(u.creado_en).toLocaleDateString("es")
-                      : "-"}
+                    {formatearFechaHora(u.creado_en)}
                   </td>
                   <td className="actions">
                     <button
@@ -244,7 +301,7 @@ export default function UsuariosPage() {
               ))}
               {usuarios.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="empty-state">
+                  <td colSpan={7} className="empty-state">
                     No hay usuarios registrados.
                   </td>
                 </tr>
@@ -297,7 +354,10 @@ export default function UsuariosPage() {
             <h4>Bartender</h4>
             <ul>
               <li>Mesas, Pedidos y Cuentas</li>
-              <li>Inventario en modo lectura (sin editar)</li>
+              <li>
+                Inventario en modo lectura; el Administrador puede habilitarle
+                el ingreso de stock desde esta pantalla
+              </li>
               <li>Corte de caja</li>
               <li>Sin acceso a Reportes, Historial ni Usuarios</li>
             </ul>

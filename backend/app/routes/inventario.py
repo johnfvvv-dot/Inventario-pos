@@ -12,6 +12,7 @@ from app.schemas import (
     ProductoCreate,
     ProductoFiltroOut,
     ProductoOut,
+    StockAjuste,
     StockUpdate,
 )
 
@@ -84,6 +85,26 @@ def actualizar_stock(
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
     producto.stock = datos.nuevo_stock
+    db.commit()
+    db.refresh(producto)
+    return producto
+
+
+@router.post("/{producto_id}/stock/ajuste", response_model=ProductoOut)
+def ajustar_stock(
+    producto_id: int, datos: StockAjuste, db: Session = Depends(get_db)
+):
+    """Suma o resta una cantidad al stock actual de forma atómica.
+
+    Se usa para el ingreso de mercadería y los botones +/-. Al operar sobre
+    el valor actual de la base evita sobrescribir cambios hechos por otro
+    usuario entre la lectura y la escritura.
+    """
+    producto = db.query(Producto).filter(Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    producto.stock = max(0, producto.stock + datos.delta)
     db.commit()
     db.refresh(producto)
     return producto

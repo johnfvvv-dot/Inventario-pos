@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ---------- Usuarios ----------
@@ -24,8 +24,18 @@ class UsuarioCreate(UsuarioBase):
 
 
 class UsuarioLogin(BaseModel):
-    alias: str
+    """Credenciales de acceso: el identificador se llama "usuario"."""
+
+    usuario: str = Field(..., min_length=1, max_length=60)
     password: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def _aceptar_alias_antiguo(cls, datos):
+        """Compatibilidad con clientes anteriores que enviaban 'alias'."""
+        if isinstance(datos, dict) and not datos.get("usuario") and datos.get("alias"):
+            return {**datos, "usuario": datos["alias"]}
+        return datos
 
 
 class UsuarioUpdate(BaseModel):
@@ -33,6 +43,7 @@ class UsuarioUpdate(BaseModel):
     nombre: Optional[str] = Field(default=None, max_length=100)
     rol: Optional[str] = Field(default=None, max_length=20)
     activo: Optional[bool] = None
+    ingreso_stock: Optional[bool] = None
 
 
 class CambiarClaveIn(BaseModel):
@@ -45,6 +56,7 @@ class UsuarioOut(BaseModel):
     nombre: Optional[str] = None
     rol: str
     activo: bool = True
+    ingreso_stock: bool = False
     creado_en: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -87,6 +99,12 @@ class ProductoOut(ProductoBase):
 
 class StockUpdate(BaseModel):
     nuevo_stock: int = Field(..., ge=0)
+
+
+class StockAjuste(BaseModel):
+    """Variación de stock: positiva para ingresar, negativa para descontar."""
+
+    delta: int = Field(..., ge=-1000000, le=1000000)
 
 
 class ProductoFiltroOut(BaseModel):
@@ -263,6 +281,7 @@ class PedidoOut(BaseModel):
     usuario: UsuarioOut
     items: List[PedidoItemOut]
     fecha: datetime
+    fecha_cierre: Optional[datetime] = None
     total: float
     estado: str
     model_config = ConfigDict(from_attributes=True)

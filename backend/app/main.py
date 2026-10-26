@@ -4,7 +4,6 @@ import hashlib
 import os
 import socket
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -15,6 +14,7 @@ from app.database import Base, SessionLocal, engine, _data_dir
 from app.models import (
     Division,
     Mesa,
+    MigracionSistema,
     Pedido,
     Producto,
     TurnoCaja,
@@ -29,8 +29,11 @@ from app.routes.mesas import router as mesas_router
 from app.routes.pedidos import router as pedidos_router
 from app.routes.usuarios import router as usuarios_router
 from app.schemas import CLAVE_INICIAL
+from app.tiempo import utc_a_local
 
 VERSION = "1.1.0"
+
+CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
 app = FastAPI(
     title="Sistema Inventario y Punto de Venta",
@@ -209,7 +212,7 @@ def _migrar_alias_usuarios() -> None:
         try:
             conexion.execute(
                 text(
-                    "UPDATE usuarios SET creado_en = datetime('now') "
+                    "UPDATE usuarios SET creado_en = datetime('now', 'localtime') "
                     "WHERE creado_en IS NULL"
                 )
             )
@@ -225,40 +228,95 @@ def _migrar_alias_usuarios() -> None:
                 print(f"[migracion] no se pudo eliminar usuarios.email: {exc}")
 
 
-def _migrar_etiquetas_historial() -> None:
-    """Completa la etiqueta historica de pedidos creados antes de esta version."""
+def _migrar_fechas_a_hora_local() -> None:
+    """Convierte a hora local las fechas que versiones anteriores guardaron en UTC.
+
+    Se ejecuta una sola vez por base de datos. El marcador en
+    ``migraciones_sistema`` evita desplazar de nuevo fechas ya convertidas.
+    """
     db = SessionLocal()
     try:
-        pendientes = (
-            db.query(Pedido)
-            .filter(Pedido.mesa_etiqueta_historica.is_(None))
-            .all()
+        aplicada = (
+            db.query(MigracionSistema)
+            .filter(MigracionSistema.clave == CLAVE_MIGRACION_FECHAS)
+            .first()
         )
-        if not pendientes:
+        if aplicada:
+            return
+
+        cambios = 0
+
+        for usuario in db.query(Usuario).all():
+            if usuario.creado_en is not None:
+                usuario.creado_en = utc_a_local(usuario.creado_en)
+                cambios += 1
+
+        for pedido in db.query(Pedido).all():
+            if pedido.fecha is not None:
+                pedido.fecha = utc_a_local(pedido.fecha)
+                cambios += 1
+            if pedido.fecha_cierre is not None:
+                pedido.fecha_cierre = utc_a_local(pedido.fecha_cierre)
+                cambios += 1
+
+        for division in db.query(Division).all():
+            if division.fecha is not None:
+                division.fecha = utc_a_local(division.fecha)
+                cambios += 1
+
+        for turno in db.query(TurnoCaja).all():
+            if turno.fecha_apertura is not None:
+                turno.fecha_apertura = utc_a_local(turno.fecha_apertura)
+                cambios += 1
+            if turno.fecha_cierre is not None:
+                turno.fecha_cierre = utc_a_local(turno.fecha_cierre)
+                cambios += 1
+
+        db.add(MigracionSistema(clave=CLAVE_MIGRACION_FECHAS))
+        db.commit()
+        print(f"[migracion] {cambios} fechas convertidas de UTC a hora local")
+    finally:
+        db.close()
+
+
+def _migrar_etiquetas_historial() -> None:
+    """Completa el origen histórico (número y etiqueta) de pedidos anteriores.
+
+    - Si el pedido conserva su mesa/plaza, toma los datos actuales.
+    - Si la mesa fue eliminada, conserva el número histórico y reconstruye
+      la etiqueta ("Mesa N" o "Barra N") cuando falte.
+    """
+    db = SessionLocal()
+    try:
+        pedidos = db.query(Pedido).all()
+        if not pedidos:
             return
 
         mesas = {m.id: m for m in db.query(Mesa).all()}
-        por_numero = {m.numero: m for m in mesas.values()}
         cambiados = 0
-        for pedido in pendientes:
-            etiqueta = None
+        for pedido in pedidos:
+            numero_antes = pedido.mesa_numero_historico
+            etiqueta_antes = pedido.mesa_etiqueta_historica
             if pedido.mesa_id and pedido.mesa_id in mesas:
-                etiqueta = mesas[pedido.mesa_id].etiqueta_historial()
-            elif pedido.mesa_numero_historico is not None:
-                mesa_actual = por_numero.get(pedido.mesa_numero_historico)
-                if mesa_actual:
-                    etiqueta = mesa_actual.etiqueta_historial()
-                else:
-                    etiqueta = etiqueta_desde_numero_historico(
-                        pedido.mesa_numero_historico
-                    )
-            if etiqueta:
-                pedido.mesa_etiqueta_historica = etiqueta
+                mesa = mesas[pedido.mesa_id]
+                pedido.mesa_numero_historico = mesa.numero
+                pedido.mesa_etiqueta_historica = mesa.etiqueta_historial()
+            elif (
+                pedido.mesa_numero_historico is not None
+                and not pedido.mesa_etiqueta_historica
+            ):
+                pedido.mesa_etiqueta_historica = etiqueta_desde_numero_historico(
+                    pedido.mesa_numero_historico
+                )
+            if (
+                pedido.mesa_numero_historico != numero_antes
+                or pedido.mesa_etiqueta_historica != etiqueta_antes
+            ):
                 cambiados += 1
 
         if cambiados:
             db.commit()
-            print(f"[migracion] {cambiados} pedidos con etiqueta historica")
+            print(f"[migracion] {cambiados} pedidos con origen histórico actualizado")
     finally:
         db.close()
 
@@ -267,6 +325,8 @@ def crear_datos_iniciales() -> None:
     """Crea tablas y siembra usuarios, productos y mesas de ejemplo."""
     Base.metadata.create_all(bind=engine)
     _migrar_columnas_faltantes()
+    # Antes de completar fechas nulas: así las que se rellenen ya quedan locales.
+    _migrar_fechas_a_hora_local()
     _migrar_alias_usuarios()
     _migrar_etiquetas_historial()
 
@@ -339,6 +399,24 @@ def config():
 # ------------------------------------------------------------------
 
 BUILD = _build_dir()
+
+
+@app.api_route(
+    "/api/{ruta:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    include_in_schema=False,
+)
+def api_no_encontrada(ruta: str):
+    """Responde 404 claro para una ruta de API inexistente.
+
+    Sin esta ruta, un POST a una dirección no registrada cae en el fallback
+    del frontend (que solo acepta GET) y el cliente recibe un confuso
+    "Method Not Allowed" en lugar de un 404 con el detalle.
+    """
+    raise HTTPException(
+        status_code=404,
+        detail=f"Ruta de API no encontrada: /api/{ruta}",
+    )
 
 
 @app.get("/{ruta:path}", include_in_schema=False)

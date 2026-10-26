@@ -1,7 +1,6 @@
-"""Endpoints de usuarios: login por alias, gestión de usuarios y roles."""
+"""Endpoints de usuarios: login por usuario, gestión de usuarios y roles."""
 
 import hashlib
-from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,6 +17,7 @@ from app.schemas import (
     UsuarioOut,
     UsuarioUpdate,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["usuarios"])
 
@@ -33,18 +33,19 @@ def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
         nombre=usuario.nombre,
         rol=usuario.rol,
         activo=bool(usuario.activo),
-        creado_en=usuario.creado_en or datetime.utcnow(),
+        ingreso_stock=bool(usuario.ingreso_stock),
+        creado_en=usuario.creado_en or ahora_local(),
     )
 
 
 @router.post("/login", response_model=UsuarioOut)
 def login(datos: UsuarioLogin, db: Session = Depends(get_db)):
-    """Autenticar usuario por alias y contraseña."""
-    alias = (datos.alias or "").strip()
-    usuario = db.query(Usuario).filter(Usuario.alias == alias).first()
+    """Autenticar por nombre de usuario y contraseña."""
+    nombre_usuario = (datos.usuario or "").strip()
+    usuario = db.query(Usuario).filter(Usuario.alias == nombre_usuario).first()
 
     if not usuario or usuario.password_hash != hash_password(datos.password):
-        raise HTTPException(status_code=401, detail="Alias o clave incorrectos")
+        raise HTTPException(status_code=401, detail="Usuario o clave incorrectos")
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="El usuario está desactivado")
 
@@ -56,6 +57,15 @@ def listar_usuarios(db: Session = Depends(get_db)):
     """Listar todos los usuarios."""
     usuarios = db.query(Usuario).order_by(Usuario.alias).all()
     return [_a_usuario_out(u) for u in usuarios]
+
+
+@router.get("/{usuario_id}", response_model=UsuarioOut)
+def obtener_usuario(usuario_id: int, db: Session = Depends(get_db)):
+    """Devuelve un usuario; el Bartender lo consulta para refrescar permisos."""
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return _a_usuario_out(usuario)
 
 
 @router.post("/", response_model=UsuarioOut, status_code=201)
@@ -90,7 +100,7 @@ def crear_usuario(datos: UsuarioCreate, db: Session = Depends(get_db)):
 def actualizar_usuario(
     usuario_id: int, datos: UsuarioUpdate, db: Session = Depends(get_db)
 ):
-    """Actualiza alias, nombre, rol o estado activo."""
+    """Actualiza alias, nombre, rol, estado activo o permiso de stock."""
     usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -116,6 +126,8 @@ def actualizar_usuario(
         usuario.rol = datos.rol
     if datos.activo is not None:
         usuario.activo = 1 if datos.activo else 0
+    if datos.ingreso_stock is not None:
+        usuario.ingreso_stock = 1 if datos.ingreso_stock else 0
 
     db.commit()
     db.refresh(usuario)

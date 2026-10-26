@@ -16,6 +16,12 @@ import {
 } from "chart.js";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
 import { api } from "../services/api";
+import {
+  fechaParaArchivo,
+  formatearFechaHora,
+  formatearNumero,
+  formatearPrecio,
+} from "../utils/format";
 
 ChartJS.register(
   CategoryScale,
@@ -42,6 +48,7 @@ interface Pedido {
   total: number;
   estado: string;
   fecha: string;
+  fecha_cierre: string | null;
   mesa?: { numero: number } | null;
   items: {
     producto_id: number;
@@ -126,7 +133,7 @@ export default function ReportesPage() {
   const exportarCSV = () => {
     const filas: string[][] = [];
     filas.push(["REPORTE DE VENTAS - Inventario POS"]);
-    filas.push(["Generado", new Date().toLocaleString("es")]);
+    filas.push(["Generado", formatearFechaHora(new Date())]);
     filas.push(["Periodo (dias)", String(periodo)]);
     filas.push([]);
     filas.push(["=== VENTAS POR FORMA DE PAGO ==="]);
@@ -152,7 +159,7 @@ export default function ReportesPage() {
         filas.push([
           String(p.id),
           p.mesa ? String(p.mesa.numero) : "-",
-          p.fecha,
+          formatearFechaHora(p.fecha_cierre || p.fecha),
           p.estado,
           String(p.total),
           p.items.map((i) => `${i.cantidad}x ${i.producto_nombre}`).join(" | "),
@@ -167,7 +174,7 @@ export default function ReportesPage() {
     const url = URL.createObjectURL(blob);
     const enlace = document.createElement("a");
     enlace.href = url;
-    enlace.download = `reporte-ventas-${new Date().toISOString().slice(0, 10)}.csv`;
+    enlace.download = `reporte-ventas-${fechaParaArchivo()}.csv`;
     enlace.click();
     URL.revokeObjectURL(url);
   };
@@ -198,7 +205,7 @@ export default function ReportesPage() {
       <div className="kpis">
         <div className="kpi-card">
           <h3>Ventas totales</h3>
-          <h2>${(totales?.total ?? 0).toFixed(2)}</h2>
+          <h2>{formatearPrecio(totales?.total ?? 0)}</h2>
         </div>
         <div className="kpi-card">
           <h3>Operaciones</h3>
@@ -227,8 +234,23 @@ export default function ReportesPage() {
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: true } },
-                scales: { y: { beginAtZero: true } },
+                plugins: {
+                  legend: { display: true },
+                  tooltip: {
+                    callbacks: {
+                      label: (ctx: any) =>
+                        `${ctx.dataset.label}: ${formatearPrecio(ctx.parsed.y)}`,
+                    },
+                  },
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      callback: (valor: any) => formatearNumero(Number(valor)),
+                    },
+                  },
+                },
               }}
             />
           </div>
@@ -257,7 +279,15 @@ export default function ReportesPage() {
                 options={{
                   responsive: true,
                   maintainAspectRatio: false,
-                  plugins: { legend: { position: "bottom" } },
+                  plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                      callbacks: {
+                        label: (ctx: any) =>
+                          `${ctx.label}: ${formatearPrecio(Number(ctx.parsed))}`,
+                      },
+                    },
+                  },
                 }}
               />
             </div>
@@ -314,7 +344,7 @@ export default function ReportesPage() {
               {productos.map((p) => (
                 <tr key={p.id}>
                   <td>{p.nombre}</td>
-                  <td>${p.precio.toFixed(2)}</td>
+                  <td>{formatearPrecio(p.precio)}</td>
                   <td>{p.stock}</td>
                   <td>
                     <span
