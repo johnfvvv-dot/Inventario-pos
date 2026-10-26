@@ -20,7 +20,7 @@ const detectApiBase = (): string => {
 export const API_BASE = detectApiBase();
 
 /** Timeout de la petición: evita que la interfaz se quede cargando eternamente */
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS = 60000;
 
 /** Convierte los errores de validación de FastAPI en un texto legible. */
 function detalleError(detail: unknown): string {
