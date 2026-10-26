@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface Linea {
   producto_id: number;
@@ -276,7 +277,7 @@ export default function DivisionModal({
       const lugar = barraNumero ? "La barra" : "La mesa";
       setMensaje(
         resto > 0
-          ? `División guardada. Quedan $${resto.toFixed(2)} sin asignar en la cuenta.`
+          ? `División guardada. Quedan ${formatearPrecio(resto)} sin asignar en la cuenta.`
           : `División guardada. ${lugar} permanece ocupada.`
       );
       setTimeout(() => {
@@ -316,7 +317,7 @@ export default function DivisionModal({
                   <option value="nuevo">— Nuevo cliente —</option>
                   {participantes.map((p, i) => (
                     <option key={i} value={String(i)}>
-                      {p.alias} (${subtotalDe(p).toFixed(2)})
+                      {p.alias} ({formatearPrecio(subtotalDe(p))})
                     </option>
                   ))}
                 </select>
@@ -365,12 +366,12 @@ export default function DivisionModal({
                           {totalProducto}
                           <span className="muted small">
                             {" "}
-                            · {linea.precio_unitario.toFixed(2)} c/u · libre {libre} de{" "}
+                            · {formatearPrecio(linea.precio_unitario)} c/u · libre {libre} de{" "}
                             {maximo}
                           </span>
                         </span>
                         <strong>
-                          ${redondear(linea.precio_unitario * cantidad).toFixed(2)}
+                          {formatearPrecio(redondear(linea.precio_unitario * cantidad))}
                         </strong>
                       </div>
 
@@ -417,13 +418,16 @@ export default function DivisionModal({
                   <div className="resto-bloque">
                     <span>Marcado para el nuevo alias</span>
                     <strong>
-                      $
-                      {redondear(
-                        Object.entries(seleccion).reduce((s, [pid, cant]) => {
-                          const linea = lineas.find((l) => l.producto_id === Number(pid));
-                          return s + (linea ? linea.precio_unitario * cant : 0);
-                        }, 0)
-                      ).toFixed(2)}
+                      {formatearPrecio(
+                        redondear(
+                          Object.entries(seleccion).reduce((s, [pid, cant]) => {
+                            const linea = lineas.find(
+                              (l) => l.producto_id === Number(pid)
+                            );
+                            return s + (linea ? linea.precio_unitario * cant : 0);
+                          }, 0)
+                        )
+                      )}
                     </strong>
                   </div>
                 )}
@@ -444,7 +448,7 @@ export default function DivisionModal({
                     <div className="participante-head">
                       <strong>{p.alias}</strong>
                       <span>
-                        ${subtotalDe(p).toFixed(2)}
+                        {formatearPrecio(subtotalDe(p))}
                         <button
                           className="btn-icon danger"
                           title="Quitar cliente"
@@ -469,7 +473,7 @@ export default function DivisionModal({
                             {item.cantidad} × {linea?.producto_nombre || "Producto"}
                           </span>
                           <span>
-                            ${item.subtotal.toFixed(2)}
+                            {formatearPrecio(item.subtotal)}
                             <button
                               className="btn-icon danger"
                               title="Quitar una unidad"
@@ -487,7 +491,7 @@ export default function DivisionModal({
                 {participantes.length > 0 && (
                   <div className="resto-bloque">
                     <span>Resto sin asignar (queda como bloque único)</span>
-                    <strong>${resto.toFixed(2)}</strong>
+                    <strong>{formatearPrecio(resto)}</strong>
                   </div>
                 )}
               </section>
@@ -495,10 +499,10 @@ export default function DivisionModal({
 
             <div className="total-row">
               <span>
-                Total de la división: ${totalAsignado.toFixed(2)} · Resto: $
-                {resto.toFixed(2)}
+                Total de la división: {formatearPrecio(totalAsignado)} · Resto:{" "}
+                {formatearPrecio(resto)}
               </span>
-              <strong>${totalCuenta.toFixed(2)}</strong>
+              <strong>{formatearPrecio(totalCuenta)}</strong>
             </div>
 
             <div className="modal-actions">

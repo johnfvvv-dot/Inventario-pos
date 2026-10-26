@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { api, FORMAS_PAGO } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface LineaItem {
   producto_id: number;
@@ -71,14 +72,15 @@ export default function CuentaModal({
   const [confirmacion, setConfirmacion] = useState(false);
   const [formaPago, setFormaPago] = useState("efectivo");
 
-  const esBarra = barraNumero !== null;
+  const esBarra = barraNumero != null;
   const etiqueta = esBarra ? "barra" : "mesa";
 
   const cargar = async () => {
     try {
-      const data: any = barraNumero
-        ? await api.getCuentaBarra(barraNumero)
-        : await api.getCuentaMesa(mesaId);
+      const data: any =
+        barraNumero != null
+          ? await api.getCuentaBarra(barraNumero)
+          : await api.getCuentaMesa(mesaId);
       setCuenta(data);
       setError(null);
     } catch (err: any) {
@@ -93,8 +95,9 @@ export default function CuentaModal({
 
   const cerrarCuenta = async (liberar = false) => {
     setProcesando(true);
+    setError(null);
     try {
-      if (barraNumero !== null) {
+      if (barraNumero != null) {
         // Cobra la cuenta agregada de la barra y libera todas sus plazas si se pidió
         await api.cerrarCuentaBarra(barraNumero, liberar, formaPago);
       } else {
@@ -154,7 +157,9 @@ export default function CuentaModal({
         <div className="modal-head">
           <h3>
             {cuenta
-              ? `Cuenta ${barraNumero ? "Barra" : "Mesa"} ${cuenta.mesa_numero}`
+              ? `Cuenta ${
+                  barraNumero != null ? "Barra" : "Mesa"
+                } ${cuenta.mesa_numero}`
               : "Cargando cuenta..."}
           </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
@@ -169,7 +174,7 @@ export default function CuentaModal({
           <>
             <div className="cuenta-total">
               <span>Total de la cuenta</span>
-              <strong>${cuenta.total.toFixed(2)}</strong>
+              <strong>{formatearPrecio(cuenta.total)}</strong>
             </div>
 
             <div className="cuenta-scroll">
@@ -185,12 +190,12 @@ export default function CuentaModal({
                       <span>
                         {item.cantidad} × {item.producto_nombre}
                       </span>
-                      <strong>${item.subtotal.toFixed(2)}</strong>
+                      <strong>{formatearPrecio(item.subtotal)}</strong>
                     </div>
                   ))}
                   <div className="cuenta-linea cuenta-subtotal">
                     <span>Subtotal pedido</span>
-                    <strong>${pedido.total.toFixed(2)}</strong>
+                    <strong>{formatearPrecio(pedido.total)}</strong>
                   </div>
                 </div>
               ))}
@@ -200,8 +205,8 @@ export default function CuentaModal({
                   <div className="cuenta-bloque-head">
                     <h4>División #{division.id}</h4>
                     <span className="muted small">
-                      Total ${division.total.toFixed(2)} · Pendiente $
-                      {division.total_pendiente.toFixed(2)}
+                      Total {formatearPrecio(division.total)} · Pendiente{" "}
+                      {formatearPrecio(division.total_pendiente)}
                     </span>
                   </div>
 
@@ -217,7 +222,7 @@ export default function CuentaModal({
                           )}
                         </span>
                         <span>
-                          ${p.subtotal.toFixed(2)}
+                          {formatearPrecio(p.subtotal)}
                           {!p.pagado && (
                             <button
                               className="btn-secondary btn-small"
@@ -235,7 +240,7 @@ export default function CuentaModal({
                           <span>
                             {item.cantidad} × {item.producto_nombre}
                           </span>
-                          <span>${item.subtotal.toFixed(2)}</span>
+                          <span>{formatearPrecio(item.subtotal)}</span>
                         </div>
                       ))}
                     </div>
@@ -244,7 +249,7 @@ export default function CuentaModal({
                   {division.participantes.some((p) => !p.pagado) && (
                     <div className="cuenta-linea cuenta-subtotal">
                       <span>Pendiente de cobro</span>
-                      <strong>${division.total_pendiente.toFixed(2)}</strong>
+                      <strong>{formatearPrecio(division.total_pendiente)}</strong>
                     </div>
                   )}
                 </div>

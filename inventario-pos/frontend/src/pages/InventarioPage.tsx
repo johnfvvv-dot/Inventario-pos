@@ -1,7 +1,9 @@
-/** Pantalla de Inventario - Administrador. Búsqueda, paginación y categorías. */
+/** Pantalla de Inventario - Administrador y Bartender. */
 
 import { FormEvent, useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 import ConfirmModal from "../components/ConfirmModal";
 
 interface Producto {
@@ -38,9 +40,17 @@ const parseNumero = (valor: string): number => {
 };
 
 export default function InventarioPage() {
-  // El Bartender solo consulta: no puede crear, editar ni eliminar
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
-  const soloLectura = usuario?.rol !== "admin";
+  const esAdmin = usuario?.rol === "admin";
+  // El Bartender no puede crear, editar ni eliminar productos.
+  const soloLectura = !esAdmin;
+  // El administrador siempre tiene el ingreso de stock; el Bartender lo
+  // habilita temporalmente desde el menú de usuario.
+  const contexto = useOutletContext<
+    { ingresoStockHabilitado?: boolean } | undefined
+  >();
+  const mostrarIngresoStock =
+    esAdmin || Boolean(contexto?.ingresoStockHabilitado);
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -178,7 +188,8 @@ export default function InventarioPage() {
       return;
     }
     try {
-      await api.updateProductoStock(producto.id, producto.stock + cantidad);
+      // Suma sobre el stock actual de la base (no sobre el valor en pantalla).
+      await api.ajustarStock(producto.id, cantidad);
       setIngresos((actual) => ({ ...actual, [producto.id]: "" }));
       setError(null);
       setMensaje(
@@ -192,9 +203,9 @@ export default function InventarioPage() {
     }
   };
 
-  const ajustarStock = async (id: number, stockActual: number, delta: number) => {
+  const ajustarStock = async (id: number, delta: number) => {
     try {
-      await api.updateProductoStock(id, Math.max(0, stockActual + delta));
+      await api.ajustarStock(id, delta);
       await cargar();
     } catch (err: any) {
       setError(err.message);
@@ -239,7 +250,12 @@ export default function InventarioPage() {
               Categorías ({categorias.length})
             </button>
           )}
-          {soloLectura && <span className="badge badge-warning">Solo lectura</span>}
+          {soloLectura && !mostrarIngresoStock && (
+            <span className="badge badge-warning">Solo lectura</span>
+          )}
+          {soloLectura && mostrarIngresoStock && (
+            <span className="badge badge-success">Ingreso de Stock activo</span>
+          )}
           {!soloLectura && (
           <button
             className="btn-primary"
@@ -302,7 +318,7 @@ export default function InventarioPage() {
               <th>Categoría</th>
               <th>Precio</th>
               <th>Stock</th>
-              {!soloLectura && <th>Ingreso de stock</th>}
+              {mostrarIngresoStock && <th>Ingreso de Stock</th>}
               {!soloLectura && <th>Acciones</th>}
             </tr>
           </thead>
@@ -315,7 +331,7 @@ export default function InventarioPage() {
                   {p.descripcion && <div className="muted small">{p.descripcion}</div>}
                 </td>
                 <td className="muted small">{nombreCategoria(p.categoria_id)}</td>
-                <td>${p.precio.toFixed(2)}</td>
+                <td>{formatearPrecio(p.precio)}</td>
                 <td>
                   <span
                     className={
@@ -329,7 +345,7 @@ export default function InventarioPage() {
                     {p.stock}
                   </span>
                 </td>
-                {!soloLectura && (
+                {mostrarIngresoStock && (
                   <td>
                     <div className="stock-editor">
                       <input
@@ -357,22 +373,24 @@ export default function InventarioPage() {
                       >
                         Agregar
                       </button>
-                      <div className="stock-acciones">
-                        <button
-                          className="btn-icon"
-                          title="Restar 1"
-                          onClick={() => ajustarStock(p.id, p.stock, -1)}
-                        >
-                          −
-                        </button>
-                        <button
-                          className="btn-icon"
-                          title="Sumar 1"
-                          onClick={() => ajustarStock(p.id, p.stock, +1)}
-                        >
-                          +
-                        </button>
-                      </div>
+                      {esAdmin && (
+                        <div className="stock-acciones">
+                          <button
+                            className="btn-icon"
+                            title="Restar 1"
+                            onClick={() => ajustarStock(p.id, -1)}
+                          >
+                            −
+                          </button>
+                          <button
+                            className="btn-icon"
+                            title="Sumar 1"
+                            onClick={() => ajustarStock(p.id, +1)}
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </td>
                 )}
@@ -398,7 +416,14 @@ export default function InventarioPage() {
             ))}
             {productos.length === 0 && (
               <tr>
-                <td colSpan={soloLectura ? 5 : 7} className="empty-state">
+                <td
+                  colSpan={
+                    5 +
+                    (mostrarIngresoStock ? 1 : 0) +
+                    (soloLectura ? 0 : 1)
+                  }
+                  className="empty-state"
+                >
                   {buscar || categoriaFiltro
                     ? "Sin resultados para el filtro aplicado."
                     : "No hay productos registrados."}

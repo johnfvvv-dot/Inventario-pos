@@ -1,0 +1,200 @@
+{
+  "title": "Distribución de planes — Petamigo vs Petfiel",
+  "subtitle": "Contratos, mascotas y prima por familia de plan",
+  "meta": "Prompt: «Muestra la distribución de planes Petamigo vs Petfiel» · Datos: Cttes / Beneficiarios",
+  "kpis": [
+    {
+      "label": "Contratos Petamigo",
+      "value": 15,
+      "format": "int"
+    },
+    {
+      "label": "Contratos Petfiel",
+      "value": 15,
+      "format": "int"
+    },
+    {
+      "label": "Mascotas Petamigo",
+      "value": 26,
+      "format": "int"
+    },
+    {
+      "label": "Mascotas Petfiel",
+      "value": 31,
+      "format": "int"
+    },
+    {
+      "label": "Prima activa Petamigo",
+      "value": 1205000.0,
+      "format": "money",
+      "hint": "8 contratos activos"
+    },
+    {
+      "label": "Prima activa Petfiel",
+      "value": 2395000.0,
+      "format": "money",
+      "hint": "13 contratos activos"
+    }
+  ],
+  "charts": [
+    {
+      "type": "pie",
+      "donut": true,
+      "format": "int",
+      "title": "Contratos por familia de plan",
+      "data": [
+        {
+          "name": "Petamigo",
+          "value": 15
+        },
+        {
+          "name": "Petfiel",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "type": "pie",
+      "donut": true,
+      "format": "int",
+      "title": "Mascotas aseguradas por familia",
+      "data": [
+        {
+          "name": "Petfiel",
+          "value": 31
+        },
+        {
+          "name": "Petamigo",
+          "value": 26
+        }
+      ]
+    },
+    {
+      "type": "bar",
+      "horizontal": true,
+      "format": "int",
+      "title": "Contratos por plan (top 10)",
+      "categories": [
+        "PETFIEL - SUPERIOR - 2020",
+        "PETPLAN INDIVIDUAL",
+        "PETAMIGO COLECTIVO - 2019",
+        "PETAMIGO - LA ASCENSION",
+        "PETFIEL - VIP - 2020",
+        "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "PETAMIGO - 2020"
+      ],
+      "series": [
+        {
+          "name": "Contratos",
+          "data": [
+            6,
+            5,
+            5,
+            5,
+            4,
+            4,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bar",
+      "horizontal": true,
+      "format": "money",
+      "title": "Prima mensual activa por plan (top 10)",
+      "categories": [
+        "PETFIEL - SUPERIOR - 2020",
+        "PETPLAN INDIVIDUAL",
+        "PETAMIGO COLECTIVO - 2019",
+        "PETAMIGO - LA ASCENSION",
+        "PETFIEL - VIP - 2020",
+        "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "PETAMIGO - 2020"
+      ],
+      "series": [
+        {
+          "name": "Prima activa",
+          "data": [
+            1330000.0,
+            485000.0,
+            285000.0,
+            530000.0,
+            580000.0,
+            390000.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Detalle por plan",
+      "columns": [
+        "Familia",
+        "Plan",
+        "Contratos",
+        "Activos",
+        "Prima mensual activa"
+      ],
+      "formats": [
+        null,
+        null,
+        "int",
+        "int",
+        "money"
+      ],
+      "rows": [
+        [
+          "Petfiel",
+          "PETFIEL - SUPERIOR - 2020",
+          6,
+          6,
+          1330000.0
+        ],
+        [
+          "Petfiel",
+          "PETPLAN INDIVIDUAL",
+          5,
+          4,
+          485000.0
+        ],
+        [
+          "Petamigo",
+          "PETAMIGO COLECTIVO - 2019",
+          5,
+          2,
+          285000.0
+        ],
+        [
+          "Petamigo",
+          "PETAMIGO - LA ASCENSION",
+          5,
+          3,
+          530000.0
+        ],
+        [
+          "Petfiel",
+          "PETFIEL - VIP - 2020",
+          4,
+          3,
+          580000.0
+        ],
+        [
+          "Petamigo",
+          "PETAMIGO - GRANITOS Y MARMOLES SAS",
+          4,
+          3,
+          390000.0
+        ],
+        [
+          "Petamigo",
+          "PETAMIGO - 2020",
+          1,
+          0,
+          0.0
+        ]
+      ]
+    }
+  ]
+}

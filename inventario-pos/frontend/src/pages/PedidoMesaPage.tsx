@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
@@ -15,6 +16,7 @@ interface Mesa {
   estado: string;
   tipo?: string;
   grupo?: string | null;
+  posiciones?: { id: number; posicion: number; estado: string }[];
 }
 
 interface Producto {
@@ -78,6 +80,33 @@ export default function PedidoMesaPage() {
     () => carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
     [carrito]
   );
+
+  /**
+   * Mesa o barra seleccionada en el desplegable.
+   *
+   * En una barra, el desplegable usa el id de la plaza activa. Si la URL
+   * trae el id de otra plaza, se busca dentro de `posiciones` para saber a
+   * qué barra pertenece.
+   */
+  const mesaSeleccionada = useMemo(() => {
+    const directa = mesas.find((m) => m.id === mesaId);
+    if (directa?.tipo === "barra") return directa;
+
+    const barra = mesas.find(
+      (m) =>
+        m.tipo === "barra" &&
+        (m.posiciones || []).some((p) => p.id === mesaId)
+    );
+    return barra || directa || null;
+  }, [mesas, mesaId]);
+
+  /**
+   * Número de barra cuando la selección es una barra.
+   * El backend lista la barra como una sola tarjeta con el número de barra,
+   * aunque internamente los pedidos se guarden por plaza.
+   */
+  const barraNumero =
+    mesaSeleccionada?.tipo === "barra" ? mesaSeleccionada.numero : null;
 
   const etiquetaMesa = (m: Mesa) =>
     m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
@@ -319,7 +348,7 @@ export default function PedidoMesaPage() {
                 {productos.map((p) => (
                   <tr key={p.id}>
                     <td>{p.nombre}</td>
-                    <td>${p.precio.toFixed(2)}</td>
+                    <td>{formatearPrecio(p.precio)}</td>
                     <td>{p.stock}</td>
                     <td>
                       <div className="producto-acciones">
@@ -387,7 +416,7 @@ export default function PedidoMesaPage() {
                     <tr key={i.producto_id}>
                       <td>{i.nombre}</td>
                       <td>{i.cantidad}</td>
-                      <td>${(i.precio * i.cantidad).toFixed(2)}</td>
+                      <td>{formatearPrecio(i.precio * i.cantidad)}</td>
                       <td>
                         <button
                           className="btn-icon danger"
@@ -405,7 +434,7 @@ export default function PedidoMesaPage() {
 
           <div className="total-row">
             <span>Total</span>
-            <strong>${total.toFixed(2)}</strong>
+            <strong>{formatearPrecio(total)}</strong>
           </div>
 
           <button className="btn-primary btn-block" onClick={confirmarPedido}>
@@ -464,7 +493,7 @@ export default function PedidoMesaPage() {
                         </div>
                       ))}
                     </td>
-                    <td>${p.total.toFixed(2)}</td>
+                    <td>{formatearPrecio(p.total)}</td>
                     <td>
                       <button
                         className="btn-primary btn-small"
@@ -496,6 +525,7 @@ export default function PedidoMesaPage() {
       {mostrarCuenta && mesaId !== "" && (
         <CuentaModal
           mesaId={Number(mesaId)}
+          barraNumero={barraNumero}
           onClose={() => setMostrarCuenta(false)}
           onDividir={() => {
             setMostrarCuenta(false);
@@ -516,6 +546,7 @@ export default function PedidoMesaPage() {
       {mostrarDivision && mesaId !== "" && (
         <DivisionModal
           mesaId={Number(mesaId)}
+          barraNumero={barraNumero}
           onClose={() => setMostrarDivision(false)}
           onConfirmado={() => {
             cargarPedidos(Number(mesaId));
@@ -528,6 +559,7 @@ export default function PedidoMesaPage() {
       {mostrarTransferir && mesaId !== "" && (
         <TransferirModal
           mesaId={Number(mesaId)}
+          barraNumero={barraNumero ?? undefined}
           onClose={() => setMostrarTransferir(false)}
           onTransferido={() => {
             setMostrarTransferir(false);

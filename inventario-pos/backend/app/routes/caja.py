@@ -22,6 +22,7 @@ from app.schemas import (
     TotalesFormaPago,
     TurnoCajaOut,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["caja"])
 
@@ -63,7 +64,7 @@ def _totales_por_forma_pago(
 
 
 def _turno_out(db: Session, turno: TurnoCaja) -> TurnoCajaOut:
-    hasta = turno.fecha_cierre or datetime.utcnow()
+    hasta = turno.fecha_cierre or ahora_local()
     totales = _totales_por_forma_pago(db, turno.fecha_apertura, hasta)
     usuario = db.query(Usuario).filter(Usuario.id == turno.usuario_id).first()
     return TurnoCajaOut(
@@ -126,7 +127,7 @@ def cerrar_turno(datos: CerrarTurnoIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No hay un turno de caja abierto")
 
     turno.estado = "cerrado"
-    turno.fecha_cierre = datetime.utcnow()
+    turno.fecha_cierre = ahora_local()
     turno.observaciones = datos.observaciones
     db.commit()
     db.refresh(turno)
@@ -144,17 +145,42 @@ def listar_turnos(limite: int = 20, db: Session = Depends(get_db)):
 
 @router.get("/resumen", response_model=ResumenCajaOut)
 def resumen_caja(
-    dias: int = 1, db: Session = Depends(get_db)
+    dias: int = 1, offset_dias: int = 0, db: Session = Depends(get_db)
 ):
-    """Resumen de ventas por forma de pago de los últimos N días."""
-    desde = datetime.utcnow() - timedelta(days=max(1, dias))
-    hasta = datetime.utcnow()
+    """Resumen de ventas por forma de pago de un rango de días calendario.
+
+    ``dias=1`` y ``offset_dias=0`` abarcan únicamente el día actual desde las
+    00:00 hasta ahora. ``offset_dias=1`` permite consultar ayer completo
+    (00:00 a 23:59:59.999999). Para N días se incluyen días completos desde la
+    medianoche, de modo que no se mezclan ventas de fechas distintas.
+    """
+    dias = max(1, min(dias, 365))
+    offset_dias = max(0, min(offset_dias, 365))
+
+    ahora = ahora_local()
+    hoy_inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if offset_dias:
+        desde = hoy_inicio - timedelta(days=offset_dias + dias - 1)
+        hasta = (
+            hoy_inicio
+            - timedelta(days=offset_dias - 1)
+            - timedelta(microseconds=1)
+        )
+    else:
+        desde = hoy_inicio - timedelta(days=dias - 1)
+        hasta = ahora
 
     totales = _totales_por_forma_pago(db, desde, hasta)
 
     cerrados = (
         db.query(Pedido)
-        .filter(Pedido.estado == "cerrado", Pedido.fecha_cierre >= desde)
+        .filter(
+            Pedido.estado == "cerrado",
+            Pedido.fecha_cierre.isnot(None),
+            Pedido.fecha_cierre >= desde,
+            Pedido.fecha_cierre <= hasta,
+        )
         .all()
     )
     mesas = {p.mesa_id for p in cerrados if p.mesa_id}
@@ -179,7 +205,7 @@ def resumen_caja(
 def ventas_por_dia(dias: int = 14, db: Session = Depends(get_db)):
     """Serie diaria de ventas (para el gráfico de líneas) y top de productos."""
     dias = max(1, min(dias, 90))
-    desde = (datetime.utcnow() - timedelta(days=dias - 1)).replace(
+    desde = (ahora_local() - timedelta(days=dias - 1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
 
@@ -265,7 +291,14 @@ def historial_ventas(
             pass
     if hasta:
         try:
-            query = query.filter(Pedido.fecha_cierre <= _dt.fromisoformat(hasta))
+            hasta_dt = _dt.fromisoformat(hasta)
+            # El formulario envía solo la fecha (YYYY-MM-DD): el filtro debe
+            # incluir todo ese día, no únicamente la medianoche.
+            if len(hasta.strip()) <= 10:
+                hasta_dt = hasta_dt.replace(
+                    hour=23, minute=59, second=59, microsecond=999999
+                )
+            query = query.filter(Pedido.fecha_cierre <= hasta_dt)
         except ValueError:
             pass
     if mesa:

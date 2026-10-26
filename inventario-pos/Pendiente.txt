@@ -1,0 +1,9 @@
+Listado de pendientes por corregir
+
+1. Ejecutable de instalación:
+   - Crear un instalador sencillo que al descargarse desde GitHub instale todo lo necesario:
+     - Python
+     - Node.js
+     - Librerías necesarias de Python
+     - Dependencias del frontend
+   - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.

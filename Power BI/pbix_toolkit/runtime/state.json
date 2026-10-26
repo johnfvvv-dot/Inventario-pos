@@ -1,0 +1,16 @@
+{
+  "source": "C:\\Users\\XR-18\\Desktop\\Python\\Power BI\\Visión Ejecutiva - Portafolio de Mascotas1.pbix",
+  "copy": "C:\\Users\\XR-18\\Desktop\\Python\\Power BI\\pbix_toolkit\\runtime\\model.pbix",
+  "pid": 16236,
+  "pidsPBI": [
+    16236
+  ],
+  "port": 59937,
+  "catalog": "f6d5f747-23ad-4939-b3c0-3189ec9b8eec",
+  "launchedAt": 1792202041.319234,
+  "sourceStat": {
+    "mtimeNs": 1792196942799841400,
+    "size": 172832
+  },
+  "engineVersion": "1.0"
+}

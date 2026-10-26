@@ -1,0 +1,220 @@
+{
+  "title": "KPIs de ventas por región — Portafolio de Mascotas",
+  "subtitle": "Prima mensual, contratos y mascotas aseguradas por sucursal",
+  "meta": "Prompt: «Genera un tablero de KPIs de ventas por región» · Datos: Cttes / Beneficiarios / Estados",
+  "kpis": [
+    {
+      "label": "Contratos totales",
+      "value": 30,
+      "format": "int"
+    },
+    {
+      "label": "Contratos activos",
+      "value": 21,
+      "format": "int",
+      "hint": "70% del portafolio"
+    },
+    {
+      "label": "Prima mensual activa",
+      "value": 3600000.0,
+      "format": "money",
+      "hint": "contratos en estado Activo"
+    },
+    {
+      "label": "Prima promedio / contrato",
+      "value": 171428.5714,
+      "format": "money"
+    },
+    {
+      "label": "Mascotas aseguradas",
+      "value": 57,
+      "format": "int",
+      "hint": "49 perros · 8 gatos"
+    }
+  ],
+  "charts": [
+    {
+      "type": "bar",
+      "horizontal": true,
+      "format": "money",
+      "title": "Prima mensual activa por sucursal",
+      "categories": [
+        "Cali Sur",
+        "Bogotá Norte",
+        "Bucaramanga",
+        "Medellín",
+        "Bogotá Chapinero",
+        "Barranquilla"
+      ],
+      "series": [
+        {
+          "name": "Prima activa",
+          "data": [
+            1645000.0,
+            820000.0,
+            545000.0,
+            360000.0,
+            230000.0,
+            0.0
+          ]
+        }
+      ]
+    },
+    {
+      "type": "bar",
+      "format": "int",
+      "title": "Contratos por sucursal (activos vs resto)",
+      "categories": [
+        "Cali Sur",
+        "Bogotá Norte",
+        "Bucaramanga",
+        "Medellín",
+        "Bogotá Chapinero",
+        "Barranquilla"
+      ],
+      "series": [
+        {
+          "name": "Activos",
+          "data": [
+            10,
+            5,
+            3,
+            2,
+            1,
+            0
+          ],
+          "stack": true
+        },
+        {
+          "name": "No activos",
+          "data": [
+            0,
+            3,
+            3,
+            1,
+            1,
+            1
+          ],
+          "stack": true
+        }
+      ]
+    },
+    {
+      "type": "pie",
+      "donut": true,
+      "format": "int",
+      "title": "Contratos por estado",
+      "data": [
+        {
+          "name": "Activo",
+          "value": 21
+        },
+        {
+          "name": "Cancelado",
+          "value": 6
+        },
+        {
+          "name": "Suspendido",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "type": "bar",
+      "horizontal": true,
+      "format": "int",
+      "title": "Mascotas aseguradas por sucursal",
+      "categories": [
+        "Cali Sur",
+        "Bogotá Norte",
+        "Bucaramanga",
+        "Medellín",
+        "Bogotá Chapinero",
+        "Barranquilla"
+      ],
+      "series": [
+        {
+          "name": "Mascotas",
+          "data": [
+            18,
+            16,
+            11,
+            7,
+            4,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Detalle por sucursal",
+      "columns": [
+        "Sucursal",
+        "Contratos",
+        "Activos",
+        "% Activos",
+        "Prima mensual activa",
+        "Mascotas"
+      ],
+      "formats": [
+        null,
+        "int",
+        "int",
+        "int",
+        "money",
+        "int"
+      ],
+      "rows": [
+        [
+          "Cali Sur",
+          10,
+          10,
+          100,
+          1645000.0,
+          18
+        ],
+        [
+          "Bogotá Norte",
+          8,
+          5,
+          62,
+          820000.0,
+          16
+        ],
+        [
+          "Bucaramanga",
+          6,
+          3,
+          50,
+          545000.0,
+          11
+        ],
+        [
+          "Medellín",
+          3,
+          2,
+          67,
+          360000.0,
+          7
+        ],
+        [
+          "Bogotá Chapinero",
+          2,
+          1,
+          50,
+          230000.0,
+          4
+        ],
+        [
+          "Barranquilla",
+          1,
+          0,
+          0,
+          0.0,
+          1
+        ]
+      ]
+    }
+  ]
+}

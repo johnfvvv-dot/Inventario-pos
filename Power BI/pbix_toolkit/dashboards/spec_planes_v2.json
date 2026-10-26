@@ -1,0 +1,1039 @@
+{
+  "titulo": "Distribución de planes — Petamigo vs Petfiel",
+  "subtitulo": "Contratos, mascotas y prima por familia de plan",
+  "meta": "Filtros interactivos: familia, sucursal y tipo de mascota · Datos: modelo del .pbix (Cttes / Beneficiarios)",
+  "colores": {
+    "Activo": "#2563eb",
+    "Cancelado": "#f59e0b",
+    "Suspendido": "#10b981",
+    "Petamigo": "#2563eb",
+    "Petfiel": "#f59e0b"
+  },
+  "filtros": [
+    {
+      "id": "familia",
+      "etiqueta": "Familia de plan",
+      "valores": [
+        "Petamigo",
+        "Petfiel"
+      ],
+      "todos": "Todas"
+    },
+    {
+      "id": "sucursal",
+      "etiqueta": "Sucursal",
+      "valores": [
+        "Barranquilla",
+        "Bogotá Chapinero",
+        "Bogotá Norte",
+        "Bucaramanga",
+        "Cali Sur",
+        "Medellín"
+      ],
+      "todos": "Todas"
+    },
+    {
+      "id": "tipo",
+      "etiqueta": "Tipo de mascota",
+      "valores": [
+        "PERRO",
+        "GATO"
+      ],
+      "etiquetas": {
+        "PERRO": "Perro",
+        "GATO": "Gato"
+      },
+      "todos": "Todos"
+    }
+  ],
+  "kpis": [
+    {
+      "etiqueta": "Contratos Petamigo",
+      "base": "contratos",
+      "agg": "count",
+      "filtro": {
+        "fam": [
+          "Petamigo"
+        ]
+      },
+      "formato": "int",
+      "pista": "auto:activos"
+    },
+    {
+      "etiqueta": "Contratos Petfiel",
+      "base": "contratos",
+      "agg": "count",
+      "filtro": {
+        "fam": [
+          "Petfiel"
+        ]
+      },
+      "formato": "int",
+      "pista": "auto:activos"
+    },
+    {
+      "etiqueta": "Mascotas Petamigo",
+      "base": "mascotas",
+      "agg": "count",
+      "filtro": {
+        "fam": [
+          "Petamigo"
+        ]
+      },
+      "formato": "int"
+    },
+    {
+      "etiqueta": "Mascotas Petfiel",
+      "base": "mascotas",
+      "agg": "count",
+      "filtro": {
+        "fam": [
+          "Petfiel"
+        ]
+      },
+      "formato": "int"
+    },
+    {
+      "etiqueta": "Prima activa Petamigo",
+      "base": "contratos",
+      "agg": "sum",
+      "medida": "v",
+      "filtro": {
+        "fam": [
+          "Petamigo"
+        ],
+        "e": [
+          "ACT"
+        ]
+      },
+      "formato": "money0"
+    },
+    {
+      "etiqueta": "Prima activa Petfiel",
+      "base": "contratos",
+      "agg": "sum",
+      "medida": "v",
+      "filtro": {
+        "fam": [
+          "Petfiel"
+        ],
+        "e": [
+          "ACT"
+        ]
+      },
+      "formato": "money0"
+    }
+  ],
+  "graficos": [
+    {
+      "tipo": "dona",
+      "titulo": "Contratos por familia de plan",
+      "dim": "fam",
+      "series": [
+        {
+          "nombre": "Contratos",
+          "base": "contratos",
+          "agg": "count",
+          "formato": "int"
+        }
+      ]
+    },
+    {
+      "tipo": "dona",
+      "titulo": "Mascotas aseguradas por familia",
+      "dim": "fam",
+      "series": [
+        {
+          "nombre": "Mascotas",
+          "base": "mascotas",
+          "agg": "count",
+          "formato": "int"
+        }
+      ]
+    },
+    {
+      "tipo": "barras-h",
+      "titulo": "Contratos por plan (top 10)",
+      "dim": "pl",
+      "limite": 10,
+      "series": [
+        {
+          "nombre": "Contratos",
+          "base": "contratos",
+          "agg": "count",
+          "formato": "int"
+        }
+      ]
+    },
+    {
+      "tipo": "barras-h",
+      "titulo": "Prima mensual activa por plan (top 10)",
+      "dim": "pl",
+      "limite": 10,
+      "series": [
+        {
+          "nombre": "Prima activa",
+          "base": "contratos",
+          "agg": "sum",
+          "medida": "v",
+          "filtro": {
+            "e": [
+              "ACT"
+            ]
+          },
+          "formato": "money0"
+        }
+      ]
+    },
+    {
+      "tipo": "tabla",
+      "titulo": "Detalle por plan",
+      "dim": "fam",
+      "dim2": "pl",
+      "columnas": [
+        {
+          "titulo": "Familia",
+          "campo": "dim"
+        },
+        {
+          "titulo": "Plan",
+          "campo": "dim2"
+        },
+        {
+          "titulo": "Contratos",
+          "base": "contratos",
+          "agg": "count",
+          "formato": "int",
+          "id": "total"
+        },
+        {
+          "titulo": "Activos",
+          "base": "contratos",
+          "agg": "count",
+          "filtro": {
+            "e": [
+              "ACT"
+            ]
+          },
+          "formato": "int",
+          "id": "activos"
+        },
+        {
+          "titulo": "Prima mensual activa",
+          "base": "contratos",
+          "agg": "sum",
+          "medida": "v",
+          "filtro": {
+            "e": [
+              "ACT"
+            ]
+          },
+          "formato": "money0"
+        }
+      ]
+    }
+  ],
+  "datos": {
+    "contratos": [
+      {
+        "c": "CTR-8001",
+        "de": "10001",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETPLAN INDIVIDUAL",
+        "v": 85000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8002",
+        "de": "10002",
+        "s": "Bucaramanga",
+        "e": "SUSP",
+        "enomb": "Suspendido",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO COLECTIVO - 2019",
+        "v": 160000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8003",
+        "de": "10003",
+        "s": "Bucaramanga",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETPLAN INDIVIDUAL",
+        "v": 135000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8004",
+        "de": "10004",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETPLAN INDIVIDUAL",
+        "v": 125000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8005",
+        "de": "10005",
+        "s": "Bucaramanga",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 245000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8006",
+        "de": "10006",
+        "s": "Bogotá Norte",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO COLECTIVO - 2019",
+        "v": 100000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8007",
+        "de": "10007",
+        "s": "Bogotá Norte",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO COLECTIVO - 2019",
+        "v": 120000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8008",
+        "de": "10008",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - LA ASCENSION",
+        "v": 205000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8009",
+        "de": "10009",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 210000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8010",
+        "de": "10010",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETPLAN INDIVIDUAL",
+        "v": 140000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8011",
+        "de": "10011",
+        "s": "Medellín",
+        "e": "SUSP",
+        "enomb": "Suspendido",
+        "fam": "Petfiel",
+        "pl": "PETPLAN INDIVIDUAL",
+        "v": 155000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8012",
+        "de": "10012",
+        "s": "Medellín",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - VIP - 2020",
+        "v": 240000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8013",
+        "de": "10013",
+        "s": "Bogotá Norte",
+        "e": "SUSP",
+        "enomb": "Suspendido",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - 2020",
+        "v": 80000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8014",
+        "de": "10014",
+        "s": "Medellín",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO COLECTIVO - 2019",
+        "v": 120000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8015",
+        "de": "10015",
+        "s": "Barranquilla",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - LA ASCENSION",
+        "v": 100000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8016",
+        "de": "10016",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 210000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8017",
+        "de": "10017",
+        "s": "Bogotá Chapinero",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 230000.0,
+        "tipos": [
+          "GATO",
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8018",
+        "de": "10018",
+        "s": "Bucaramanga",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "v": 100000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8019",
+        "de": "10019",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - LA ASCENSION",
+        "v": 245000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8020",
+        "de": "10020",
+        "s": "Bogotá Norte",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - VIP - 2020",
+        "v": 95000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8021",
+        "de": "10021",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "v": 135000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8022",
+        "de": "10022",
+        "s": "Bucaramanga",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO COLECTIVO - 2019",
+        "v": 165000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8023",
+        "de": "10023",
+        "s": "Bogotá Chapinero",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - VIP - 2020",
+        "v": 235000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8024",
+        "de": "10024",
+        "s": "Bogotá Norte",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - VIP - 2020",
+        "v": 245000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8025",
+        "de": "10025",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 205000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8026",
+        "de": "10026",
+        "s": "Bucaramanga",
+        "e": "CANC",
+        "enomb": "Cancelado",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - LA ASCENSION",
+        "v": 180000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8027",
+        "de": "10027",
+        "s": "Cali Sur",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "v": 85000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8028",
+        "de": "10028",
+        "s": "Bogotá Norte",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - LA ASCENSION",
+        "v": 80000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8029",
+        "de": "10029",
+        "s": "Bogotá Norte",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petamigo",
+        "pl": "PETAMIGO - GRANITOS Y MARMOLES SAS",
+        "v": 170000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      },
+      {
+        "c": "CTR-8030",
+        "de": "10030",
+        "s": "Bogotá Norte",
+        "e": "ACT",
+        "enomb": "Activo",
+        "fam": "Petfiel",
+        "pl": "PETFIEL - SUPERIOR - 2020",
+        "v": 230000.0,
+        "tipos": [
+          "PERRO"
+        ]
+      }
+    ],
+    "mascotas": [
+      {
+        "de": "10001",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8001"
+      },
+      {
+        "de": "10001",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8001"
+      },
+      {
+        "de": "10001",
+        "t": "GATO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8001"
+      },
+      {
+        "de": "10002",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petamigo",
+        "c": "CTR-8002"
+      },
+      {
+        "de": "10002",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petamigo",
+        "c": "CTR-8002"
+      },
+      {
+        "de": "10003",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8003"
+      },
+      {
+        "de": "10003",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8003"
+      },
+      {
+        "de": "10003",
+        "t": "GATO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8003"
+      },
+      {
+        "de": "10004",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8004"
+      },
+      {
+        "de": "10004",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8004"
+      },
+      {
+        "de": "10005",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8005"
+      },
+      {
+        "de": "10005",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8005"
+      },
+      {
+        "de": "10005",
+        "t": "GATO",
+        "s": "Bucaramanga",
+        "fam": "Petfiel",
+        "c": "CTR-8005"
+      },
+      {
+        "de": "10006",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8006"
+      },
+      {
+        "de": "10006",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8006"
+      },
+      {
+        "de": "10006",
+        "t": "GATO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8006"
+      },
+      {
+        "de": "10007",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8007"
+      },
+      {
+        "de": "10007",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8007"
+      },
+      {
+        "de": "10007",
+        "t": "GATO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8007"
+      },
+      {
+        "de": "10008",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8008"
+      },
+      {
+        "de": "10009",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8009"
+      },
+      {
+        "de": "10009",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8009"
+      },
+      {
+        "de": "10009",
+        "t": "GATO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8009"
+      },
+      {
+        "de": "10010",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8010"
+      },
+      {
+        "de": "10011",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petfiel",
+        "c": "CTR-8011"
+      },
+      {
+        "de": "10011",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petfiel",
+        "c": "CTR-8011"
+      },
+      {
+        "de": "10012",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petfiel",
+        "c": "CTR-8012"
+      },
+      {
+        "de": "10012",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petfiel",
+        "c": "CTR-8012"
+      },
+      {
+        "de": "10013",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8013"
+      },
+      {
+        "de": "10013",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8013"
+      },
+      {
+        "de": "10014",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petamigo",
+        "c": "CTR-8014"
+      },
+      {
+        "de": "10014",
+        "t": "PERRO",
+        "s": "Medellín",
+        "fam": "Petamigo",
+        "c": "CTR-8014"
+      },
+      {
+        "de": "10014",
+        "t": "GATO",
+        "s": "Medellín",
+        "fam": "Petamigo",
+        "c": "CTR-8014"
+      },
+      {
+        "de": "10015",
+        "t": "PERRO",
+        "s": "Barranquilla",
+        "fam": "Petamigo",
+        "c": "CTR-8015"
+      },
+      {
+        "de": "10016",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8016"
+      },
+      {
+        "de": "10016",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8016"
+      },
+      {
+        "de": "10017",
+        "t": "PERRO",
+        "s": "Bogotá Chapinero",
+        "fam": "Petfiel",
+        "c": "CTR-8017"
+      },
+      {
+        "de": "10017",
+        "t": "PERRO",
+        "s": "Bogotá Chapinero",
+        "fam": "Petfiel",
+        "c": "CTR-8017"
+      },
+      {
+        "de": "10017",
+        "t": "GATO",
+        "s": "Bogotá Chapinero",
+        "fam": "Petfiel",
+        "c": "CTR-8017"
+      },
+      {
+        "de": "10018",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petamigo",
+        "c": "CTR-8018"
+      },
+      {
+        "de": "10019",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8019"
+      },
+      {
+        "de": "10019",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8019"
+      },
+      {
+        "de": "10020",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petfiel",
+        "c": "CTR-8020"
+      },
+      {
+        "de": "10021",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8021"
+      },
+      {
+        "de": "10021",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8021"
+      },
+      {
+        "de": "10022",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petamigo",
+        "c": "CTR-8022"
+      },
+      {
+        "de": "10023",
+        "t": "PERRO",
+        "s": "Bogotá Chapinero",
+        "fam": "Petfiel",
+        "c": "CTR-8023"
+      },
+      {
+        "de": "10024",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petfiel",
+        "c": "CTR-8024"
+      },
+      {
+        "de": "10024",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petfiel",
+        "c": "CTR-8024"
+      },
+      {
+        "de": "10025",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petfiel",
+        "c": "CTR-8025"
+      },
+      {
+        "de": "10026",
+        "t": "PERRO",
+        "s": "Bucaramanga",
+        "fam": "Petamigo",
+        "c": "CTR-8026"
+      },
+      {
+        "de": "10027",
+        "t": "PERRO",
+        "s": "Cali Sur",
+        "fam": "Petamigo",
+        "c": "CTR-8027"
+      },
+      {
+        "de": "10028",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8028"
+      },
+      {
+        "de": "10028",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8028"
+      },
+      {
+        "de": "10029",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petamigo",
+        "c": "CTR-8029"
+      },
+      {
+        "de": "10030",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petfiel",
+        "c": "CTR-8030"
+      },
+      {
+        "de": "10030",
+        "t": "PERRO",
+        "s": "Bogotá Norte",
+        "fam": "Petfiel",
+        "c": "CTR-8030"
+      }
+    ]
+  }
+}

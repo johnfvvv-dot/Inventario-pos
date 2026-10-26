@@ -1,10 +1,63 @@
 /** Layout del panel de Bartender: acceso operativo sin edición. */
 
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useNavigate } from "react-router-dom";
+import MenuLink from "../components/MenuLink";
+import UserMenu from "../components/UserMenu";
+import { api } from "../services/api";
 
 export default function BartenderLayout() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const usuarioId = usuario?.id;
+  // El permiso lo define el Administrador desde Usuarios y se guarda en la
+  // base. Por defecto el Bartender solo consulta el inventario.
+  const [ingresoStock, setIngresoStock] = useState<boolean>(
+    Boolean(usuario?.ingreso_stock)
+  );
+
+  useEffect(() => {
+    if (!usuarioId) return;
+    let vigente = true;
+
+    const consultarPermiso = async () => {
+      try {
+        const datos: any = await api.getUsuario(usuarioId);
+        if (!vigente) return;
+
+        const habilitado = Boolean(datos?.ingreso_stock);
+        setIngresoStock(habilitado);
+
+        // Mantiene sincronizada la sesión guardada en el navegador.
+        const sesion = JSON.parse(localStorage.getItem("user") || "{}");
+        if (Boolean(sesion.ingreso_stock) !== habilitado) {
+          localStorage.setItem(
+            "user",
+            JSON.stringify({ ...sesion, ingreso_stock: habilitado })
+          );
+        }
+      } catch {
+        // Si el servidor no responde, se conserva el último estado conocido.
+      }
+    };
+
+    consultarPermiso();
+    // Refresco periódico para reflejar cambios del Administrador sin recargar.
+    const intervalo = window.setInterval(consultarPermiso, 5000);
+
+    const alVolverALaVentana = () => {
+      if (document.visibilityState === "visible") consultarPermiso();
+    };
+    document.addEventListener("visibilitychange", alVolverALaVentana);
+    window.addEventListener("focus", consultarPermiso);
+
+    return () => {
+      vigente = false;
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", alVolverALaVentana);
+      window.removeEventListener("focus", consultarPermiso);
+    };
+  }, [usuarioId]);
 
   const cerrarSesion = () => {
     localStorage.removeItem("user");
@@ -19,23 +72,26 @@ export default function BartenderLayout() {
           <p className="muted">Panel de Bartender</p>
         </div>
         <div className="user-info">
-          <span>{usuario.alias || usuario.nombre || "Bartender"}</span>
-          <button className="btn-logout" onClick={cerrarSesion}>
-            Cerrar sesión
-          </button>
+          <UserMenu
+            nombre={usuario.alias || usuario.nombre || "Bartender"}
+            rol={usuario.rol || "bartender"}
+            onCerrarSesion={cerrarSesion}
+          />
         </div>
       </header>
 
       <div className="admin-body">
         <nav className="admin-nav">
-          <Link to="/bartender/pedidos">Pedidos</Link>
-          <Link to="/bartender/mesas">Mesas</Link>
-          <Link to="/bartender/inventario">Inventario</Link>
-          <Link to="/bartender/corte-caja">Corte de caja</Link>
+          <MenuLink to="/bartender/pedidos" rutas={["/bartender"]}>
+            Pedidos
+          </MenuLink>
+          <MenuLink to="/bartender/mesas">Mesas</MenuLink>
+          <MenuLink to="/bartender/inventario">Inventario</MenuLink>
+          <MenuLink to="/bartender/corte-caja">Corte de caja</MenuLink>
         </nav>
 
         <main className="admin-content">
-          <Outlet />
+          <Outlet context={{ ingresoStockHabilitado: ingresoStock }} />
         </main>
       </div>
     </div>

@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { FORMAS_PAGO } from "../services/api";
+import { formatearPrecio } from "../utils/format";
 
 interface Props {
   titulo: string;
@@ -39,7 +40,7 @@ export default function CobroModal({
 
         <div className="cobro-total">
           <span>Total a cobrar</span>
-          <strong>${total.toFixed(2)}</strong>
+          <strong>{formatearPrecio(total)}</strong>
         </div>
 
         {extra && <p className="muted small">{extra}</p>}

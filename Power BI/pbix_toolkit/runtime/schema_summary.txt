@@ -1,0 +1,17 @@
+Catálogo: 9f8fbffa-0d5d-4219-8b30-921cc7720a8b
+
+TABLAS:
+- Beneficiarios (57 filas)
+    columnas: DocEntry, Estado del Contrato, Nombre Convenio, Numero Contrato, Sucursal, Parentesco, Valor Mensual, Tipo de Beneficiario, Nombre Beneficiario, Edad, Parentesco_Mascota, Proteccion
+    medidas: (ninguna definida en el modelo)
+- Cttes (30 filas)
+    columnas: Doc entry actual, Doc entry anterior, Nombre UEN, Nombre Convenio, Fecha creacion SAP, Tipo de Documento, Numero Contrato, Estado del Contrato, Valor Mensual, Codigo plan, Nombre Plan, Sucursal, Mobile Phone, E-Mail, Proteccion
+    medidas: (ninguna definida en el modelo)
+- Estados (11 filas)
+    columnas: Estado del Contrato, Nombre, Tipificacion
+    medidas: (ninguna definida en el modelo)
+
+RELACIONES:
+- Beneficiarios[DocEntry] -> Cttes[Doc entry actual] [Many->One, OneDirection]
+- Cttes[Estado del Contrato] -> Estados[Estado del Contrato] [Many->One, OneDirection]
+- Cttes[Fecha creacion SAP] -> LocalDateTable_4ef96158-6100-4d7e-a7cc-17a7760b9ea4[Date] [Many->One, OneDirection]

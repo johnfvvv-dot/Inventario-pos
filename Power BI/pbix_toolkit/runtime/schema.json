@@ -1,0 +1,531 @@
+{
+  "catalog": "9f8fbffa-0d5d-4219-8b30-921cc7720a8b",
+  "tables": [
+    {
+      "name": "Beneficiarios",
+      "isHidden": false,
+      "description": "",
+      "rowCount": 57,
+      "columns": [
+        {
+          "name": "RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "Default",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "DocEntry",
+          "dataType": "Int64",
+          "isHidden": false,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Estado del Contrato",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre Convenio",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Numero Contrato",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Sucursal",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Parentesco",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Valor Mensual",
+          "dataType": "Int64",
+          "isHidden": false,
+          "formatString": "0",
+          "summarizeBy": "Sum",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Tipo de Beneficiario",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre Beneficiario",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Edad",
+          "dataType": "Int64",
+          "isHidden": false,
+          "formatString": "0",
+          "summarizeBy": "Sum",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Parentesco_Mascota",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Proteccion",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        }
+      ],
+      "measures": []
+    },
+    {
+      "name": "DateTableTemplate_b87eb757-92d3-471e-ae25-7b63b941bfbd",
+      "isHidden": true,
+      "description": "",
+      "rowCount": null,
+      "columns": [
+        {
+          "name": "RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "Default",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Date",
+          "dataType": "DateTime",
+          "isHidden": true,
+          "formatString": "General Date",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Año",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "NroMes",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Mes",
+          "dataType": "String",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "NroTrimestre",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Trimestre",
+          "dataType": "String",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Día",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        }
+      ],
+      "measures": []
+    },
+    {
+      "name": "Cttes",
+      "isHidden": false,
+      "description": "",
+      "rowCount": 30,
+      "columns": [
+        {
+          "name": "RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "Default",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Doc entry actual",
+          "dataType": "Int64",
+          "isHidden": false,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Doc entry anterior",
+          "dataType": "Int64",
+          "isHidden": false,
+          "formatString": "0",
+          "summarizeBy": "Sum",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre UEN",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre Convenio",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Fecha creacion SAP",
+          "dataType": "DateTime",
+          "isHidden": false,
+          "formatString": "Long Date",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Tipo de Documento",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Numero Contrato",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Estado del Contrato",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Valor Mensual",
+          "dataType": "Decimal",
+          "isHidden": false,
+          "formatString": "\\$\\ #,0.###############;-\\$\\ #,0.###############;\\$\\ #,0.###############",
+          "summarizeBy": "Sum",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Codigo plan",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre Plan",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Sucursal",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Mobile Phone",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "E-Mail",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Proteccion",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        }
+      ],
+      "measures": []
+    },
+    {
+      "name": "Estados",
+      "isHidden": false,
+      "description": "",
+      "rowCount": 11,
+      "columns": [
+        {
+          "name": "RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "Default",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Estado del Contrato",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Nombre",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Tipificacion",
+          "dataType": "String",
+          "isHidden": false,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        }
+      ],
+      "measures": []
+    },
+    {
+      "name": "LocalDateTable_4ef96158-6100-4d7e-a7cc-17a7760b9ea4",
+      "isHidden": true,
+      "description": "",
+      "rowCount": null,
+      "columns": [
+        {
+          "name": "RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "Default",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Date",
+          "dataType": "DateTime",
+          "isHidden": true,
+          "formatString": "General Date",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Año",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "NroMes",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Mes",
+          "dataType": "String",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "NroTrimestre",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Trimestre",
+          "dataType": "String",
+          "isHidden": true,
+          "formatString": null,
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        },
+        {
+          "name": "Día",
+          "dataType": "Int64",
+          "isHidden": true,
+          "formatString": "0",
+          "summarizeBy": "None",
+          "displayFolder": "",
+          "description": ""
+        }
+      ],
+      "measures": []
+    }
+  ],
+  "relationships": [
+    {
+      "name": "7e543089-2bdb-c174-a82f-268315461e83",
+      "fromTable": "Beneficiarios",
+      "fromColumn": "DocEntry",
+      "toTable": "Cttes",
+      "toColumn": "Doc entry actual",
+      "cardinality": "Many->One",
+      "type": "SingleColumn",
+      "crossFilteringBehavior": "OneDirection",
+      "securityFilteringBehavior": "OneDirection",
+      "isActive": true
+    },
+    {
+      "name": "0f17da80-2c7b-10ea-ea5f-d8e425ebc44a",
+      "fromTable": "Cttes",
+      "fromColumn": "Estado del Contrato",
+      "toTable": "Estados",
+      "toColumn": "Estado del Contrato",
+      "cardinality": "Many->One",
+      "type": "SingleColumn",
+      "crossFilteringBehavior": "OneDirection",
+      "securityFilteringBehavior": "OneDirection",
+      "isActive": true
+    },
+    {
+      "name": "acb9b107-da70-4988-9964-18a9a4ff1b24",
+      "fromTable": "Cttes",
+      "fromColumn": "Fecha creacion SAP",
+      "toTable": "LocalDateTable_4ef96158-6100-4d7e-a7cc-17a7760b9ea4",
+      "toColumn": "Date",
+      "cardinality": "Many->One",
+      "type": "SingleColumn",
+      "crossFilteringBehavior": "OneDirection",
+      "securityFilteringBehavior": "OneDirection",
+      "isActive": true
+    }
+  ],
+  "generatedAt": "2026-10-16 19:35:57",
+  "pbixSource": "C:\\Users\\XR-18\\Desktop\\Python\\Power BI\\Visión Ejecutiva - Portafolio de Mascotas1.pbix"
+}
