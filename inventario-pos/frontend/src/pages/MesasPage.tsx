@@ -97,24 +97,17 @@ export default function MesasPage() {
     }
   };
 
-  /** Asigna un cliente: en una mesa la ocupa, en una barra toma un puesto libre */
+  /** Asigna un cliente: en una mesa la ocupa, en una barra toma un puesto libre.
+   *  Solo cambia el estado; no abre la ventana de pedidos. */
   const ocupar = async (mesa: Mesa) => {
     try {
       if (mesa.tipo === "barra") {
-        const res: any = await api.ocuparMesa(mesa.id);
-        await cargarMesas();
-        navigate(`/admin/pedidos?mesa=${res.mesa_id}`);
+        // La tarjeta agregada usa la posicion activa; el backend asigna la
+        // primera plaza libre del grupo y no redirige.
+        await api.ocuparMesa(mesa.id);
       } else {
-        await cambiarEstado(mesa, "ocupada");
+        await api.updateMesaEstado(mesa.id, "ocupada");
       }
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const cambiarEstado = async (mesa: Mesa, estado: string) => {
-    try {
-      await api.updateMesaEstado(mesa.id, estado);
       await cargarMesas();
     } catch (err: any) {
       setError(err.message);
@@ -260,7 +253,7 @@ export default function MesasPage() {
           />
         </div>
         <div className="form-group">
-          <label>Capacidad (clientes)</label>
+          <label>Capacidad</label>
           <input
             type="number"
             min="1"
@@ -273,9 +266,6 @@ export default function MesasPage() {
         <button type="submit" className="btn-primary">
           + Crear barra
         </button>
-        <span className="muted small">
-          Cada plaza de la barra es una cuenta independiente.
-        </span>
       </form>
 
       <div className="mesas-grid">
