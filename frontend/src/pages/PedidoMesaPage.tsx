@@ -349,7 +349,19 @@ export default function PedidoMesaPage() {
                   <tr key={p.id}>
                     <td>{p.nombre}</td>
                     <td>{formatearPrecio(p.precio)}</td>
-                    <td>{p.stock}</td>
+                    <td>
+                      <span
+                        className={
+                          p.stock === 0
+                            ? "badge badge-danger"
+                            : p.stock < 10
+                            ? "badge badge-warning"
+                            : "badge badge-success"
+                        }
+                      >
+                        {p.stock}
+                      </span>
+                    </td>
                     <td>
                       <div className="producto-acciones">
                         <input
