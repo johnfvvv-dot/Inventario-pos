@@ -251,7 +251,9 @@ export const api = {
     nombre: string;
     descripcion?: string;
     precio: number;
+    precio_compra: number;
     stock: number;
+    categoria_id?: number | null;
   }) =>
     request("/inventario/", {
       method: "POST",
@@ -278,6 +280,7 @@ export const api = {
     nombre: string;
     descripcion?: string;
     precio: number;
+    precio_compra: number;
     stock: number;
     categoria_id?: number | null;
   }) =>
@@ -377,10 +380,36 @@ export const api = {
 
   getTurnos: (limite = 20) => request(`/caja/turnos?limite=${limite}`),
 
-  getResumenCaja: (dias = 1, offsetDias = 0) =>
-    request(`/caja/resumen?dias=${dias}&offset_dias=${offsetDias}`),
+  /** Turno abierto ayer (se identifica por fecha de apertura). */
+  getTurnoAyer: () => request("/caja/turno-ayer"),
 
-  getVentasPorDia: (dias = 14) => request(`/caja/ventas-por-dia?dias=${dias}`),
+  /** Años que tienen ventas registradas (para el filtro de Reportes). */
+  getAniosVentas: (): Promise<number[]> => request("/caja/anios-ventas"),
+
+  getResumenCaja: (dias = 1, offsetDias = 0, desde?: string, hasta?: string) => {
+    const params = new URLSearchParams({
+      dias: String(dias),
+      offset_dias: String(offsetDias),
+    });
+    if (desde) params.append("desde", desde);
+    if (hasta) params.append("hasta", hasta);
+    return request(`/caja/resumen?${params.toString()}`);
+  },
+
+  getVentasPorDia: (
+    dias = 14,
+    offsetDias = 0,
+    desde?: string,
+    hasta?: string
+  ) => {
+    const params = new URLSearchParams({
+      dias: String(dias),
+      offset_dias: String(offsetDias),
+    });
+    if (desde) params.append("desde", desde);
+    if (hasta) params.append("hasta", hasta);
+    return request(`/caja/ventas-por-dia?${params.toString()}`);
+  },
 
   /** Historial de ventas con filtros */
   getHistorial: (filtros: {

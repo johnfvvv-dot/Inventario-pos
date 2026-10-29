@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
+import AvisoTurnoModal from "../components/AvisoTurnoModal";
 import { api } from "../services/api";
 
 export default function BartenderLayout() {
@@ -66,6 +67,9 @@ export default function BartenderLayout() {
 
   return (
     <div className="mesero-layout">
+      {/* Pregunta por la apertura del turno solo la primera vez del día */}
+      <AvisoTurnoModal />
+
       <header className="admin-header">
         <div>
           <h1>Inventario POS</h1>

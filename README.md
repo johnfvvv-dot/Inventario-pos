@@ -411,6 +411,9 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
+6. **Despliegue público:** publicar el frontend y el backend en internet sigue
+   pendiente. Ver [Despliegue en la nube](#despliegue-en-la-nube-pendiente) para
+   las opciones gratuitas sugeridas.
 
 ## Git
 
@@ -436,11 +439,51 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 | `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 
-## Escalado a la nube
+## Despliegue en la nube (pendiente)
 
-1. Crear una base PostgreSQL (Supabase, Neon, Railway, etc.).
-2. Definir la variable de entorno `DATABASE_URL=postgresql://...`.
-3. Desplegar el backend en Render/Railway/Fly.io.
-4. Desplegar el frontend en Vercel/Netlify apuntando `REACT_APP_API_URL` al
-   backend público.
-5. Migrar los datos de SQLite con un script de exportación/importación.
+El despliegue público **todavía no se ha realizado**. La aplicación funciona en
+local y en red WiFi; publicarla en internet queda como tarea pendiente.
+
+### Antes de desplegar
+
+- **No usar SQLite en hosting efímero.** Render, Koyeb y Cloud Run borran el
+  disco al reiniciar o redeployar. Migrar a PostgreSQL (Neon o Supabase) o usar
+  un servidor con disco persistente (Oracle Cloud Always Free).
+- Compilar el frontend con `REACT_APP_API_URL` apuntando a la URL pública del
+  backend. Si cambia el backend, hay que volver a compilar.
+- Agregar el dominio del frontend a la lista de CORS del backend.
+- Configurar `TZ=America/Bogota`, respaldos periódicos y HTTPS.
+
+### Opciones gratuitas sugeridas
+
+> Los planes gratuitos cambian con frecuencia; verificar límites y condiciones
+> vigentes antes de decidir.
+
+| Componente | Opción gratuita | Notas |
+|---|---|---|
+| Frontend (React) | **Cloudflare Pages** | Ancho de banda ilimitado, HTTPS y dominio `*.pages.dev`; recomendado. |
+| Frontend (React) | Vercel / Netlify | Plan Hobby gratuito; despliegue automático desde GitHub. |
+| Frontend (React) | GitHub Pages | Gratis; requiere ajustar `homepage` y las rutas SPA. |
+| Backend (FastAPI) | **Render Free** | Servicio web gratuito; se suspende tras unos minutos de inactividad. |
+| Backend (FastAPI) | Koyeb Free | Un servicio gratuito con scale-to-zero; útil para demos. |
+| Backend (FastAPI) | Google Cloud Run | Cuota gratuita mensual; requiere tarjeta y contenedor Docker. |
+| Backend + disco | Oracle Cloud Always Free | VM ARM siempre gratis; más configuración (Docker + Caddy). |
+| Base de datos | **Neon Free** | PostgreSQL gratuito con auto-suspensión; recomendado para empezar. |
+| Base de datos | Supabase Free | PostgreSQL con panel; el proyecto se pausa por inactividad. |
+| Base de datos | Turso | SQLite/libSQL distribuido; requiere adaptar SQLAlchemy. |
+| Todo en uno | Railway / Fly.io | Crédito inicial o pago por uso; sin capa gratuita permanente. |
+
+**Combinación recomendada sin costo:** Cloudflare Pages (frontend) + Render Free
+(backend) + Neon Free (PostgreSQL). Sirve para una demo o un negocio pequeño;
+para uso intensivo, considerar un plan pago o la VM de Oracle.
+
+### Pasos
+
+1. Crear la base PostgreSQL en Neon o Supabase y copiar su `DATABASE_URL`.
+2. Desplegar el backend en Render o Koyeb con `DATABASE_URL` y
+   `TZ=America/Bogota`; comprobar `/health`.
+3. Compilar el frontend con `REACT_APP_API_URL=https://<backend>/api` y publicar
+   `frontend/build` en Cloudflare Pages.
+4. Agregar el dominio del frontend a CORS y probar login, pedidos, cobro,
+   reportes e historial en el entorno público.
+5. Exportar/importar los datos de SQLite y programar respaldos.

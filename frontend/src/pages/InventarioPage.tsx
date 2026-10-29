@@ -11,6 +11,7 @@ interface Producto {
   nombre: string;
   descripcion?: string;
   precio: number;
+  precio_compra?: number;
   stock: number;
   categoria_id?: number | null;
 }
@@ -37,6 +38,13 @@ const parseNumero = (valor: string): number => {
   }
   const numero = Number(texto);
   return isNaN(numero) ? 0 : numero;
+};
+
+/** Formatea solo dígitos con separador de miles: "3800" -> "3.800". */
+const formatearMiles = (valor: string): string => {
+  const digitos = valor.replace(/\D/g, "");
+  if (!digitos) return "";
+  return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 export default function InventarioPage() {
@@ -66,6 +74,7 @@ export default function InventarioPage() {
     nombre: "",
     descripcion: "",
     precio: "",
+    precio_compra: "",
     stock: "",
     categoria_id: "" as number | "",
   });
@@ -100,43 +109,54 @@ export default function InventarioPage() {
   };
 
   useEffect(() => {
-    cargar();
-  }, [pagina, categoriaFiltro]);
-
-  useEffect(() => {
     cargarCategorias();
   }, []);
 
-  // Búsqueda con retardo (evita una petición por cada tecla)
+  // Una sola carga por cambio: la búsqueda espera 350 ms para no consultar
+  // en cada tecla, mientras que la paginación y la categoría son inmediatas.
   useEffect(() => {
-    const t = setTimeout(() => {
-      setPagina(0);
-      cargar();
-    }, 350);
+    const t = setTimeout(cargar, buscar ? 350 : 0);
     return () => clearTimeout(t);
-  }, [buscar]);
+  }, [pagina, categoriaFiltro, buscar]);
+
+  /**
+   * Precio escrito con separador de miles ("3.800"). Se eliminan los puntos
+   * y cualquier símbolo antes de convertirlo, para no guardar 3.8 por error.
+   */
+  const parsePrecio = (valor: string): number => {
+    const digitos = valor.replace(/\D/g, "");
+    return digitos ? Number(digitos) : 0;
+  };
 
   const guardarProducto = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const datos = {
+      const precio = parsePrecio(nuevoProducto.precio);
+      if (precio <= 0) {
+        setError("El precio debe ser mayor a cero");
+        return;
+      }
+      const datos: any = {
         nombre: nuevoProducto.nombre.trim(),
         descripcion: nuevoProducto.descripcion.trim() || undefined,
-        precio: parseNumero(nuevoProducto.precio),
+        precio,
+        // El precio de compra se registra/actualiza tanto al crear como al editar.
+        precio_compra: parsePrecio(nuevoProducto.precio_compra),
         stock: parseNumero(nuevoProducto.stock || "0"),
         categoria_id: nuevoProducto.categoria_id || null,
       };
       if (editando) {
-        await api.updateProducto(editando.id, datos as any);
+        await api.updateProducto(editando.id, datos);
         setMensaje(`Producto "${datos.nombre}" actualizado`);
       } else {
-        await api.createProducto(datos as any);
+        await api.createProducto(datos);
         setMensaje(`Producto "${datos.nombre}" agregado`);
       }
       setNuevoProducto({
         nombre: "",
         descripcion: "",
         precio: "",
+        precio_compra: "",
         stock: "",
         categoria_id: "",
       });
@@ -150,11 +170,15 @@ export default function InventarioPage() {
   };
 
   const abrirEdicion = (p: Producto) => {
+    setError(null);
     setEditando(p);
     setNuevoProducto({
       nombre: p.nombre,
       descripcion: p.descripcion || "",
-      precio: String(p.precio),
+      precio: formatearMiles(String(Math.round(p.precio))),
+      precio_compra: p.precio_compra
+        ? formatearMiles(String(Math.round(p.precio_compra)))
+        : "",
       stock: String(p.stock),
       categoria_id: p.categoria_id || "",
     });
@@ -260,11 +284,13 @@ export default function InventarioPage() {
           <button
             className="btn-primary"
             onClick={() => {
+              setError(null);
               setEditando(null);
               setNuevoProducto({
                 nombre: "",
                 descripcion: "",
                 precio: "",
+                precio_compra: "",
                 stock: "",
                 categoria_id: "",
               });
@@ -287,7 +313,10 @@ export default function InventarioPage() {
           className="input-busqueda"
           placeholder="Buscar producto..."
           value={buscar}
-          onChange={(e) => setBuscar(e.target.value)}
+          onChange={(e) => {
+            setBuscar(e.target.value);
+            setPagina(0);
+          }}
         />
         <select
           value={categoriaFiltro}
@@ -476,7 +505,11 @@ export default function InventarioPage() {
           <div className="modal-box modal-producto" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>{editando ? `Editar: ${editando.nombre}` : "Nuevo producto"}</h3>
-              <button className="btn-icon" onClick={() => setMostrarForm(false)}>
+              <button
+                className="btn-icon"
+                onClick={() => setMostrarForm(false)}
+                title="Cerrar"
+              >
                 ×
               </button>
             </div>
@@ -495,13 +528,15 @@ export default function InventarioPage() {
                 <div className="form-group">
                   <label>Precio *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    inputMode="decimal"
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="$1.000"
                     value={nuevoProducto.precio}
                     onChange={(e) =>
-                      setNuevoProducto((p) => ({ ...p, precio: e.target.value }))
+                      setNuevoProducto((p) => ({
+                        ...p,
+                        precio: formatearMiles(e.target.value),
+                      }))
                     }
                     required
                   />
@@ -539,6 +574,23 @@ export default function InventarioPage() {
                   </select>
                 </div>
               </div>
+              {/* El precio de compra se pide al crear y al editar, nunca en el listado */}
+              <div className="form-group">
+                <label>Precio de compra *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="$1.000"
+                  value={nuevoProducto.precio_compra}
+                  onChange={(e) =>
+                    setNuevoProducto((p) => ({
+                      ...p,
+                      precio_compra: formatearMiles(e.target.value),
+                    }))
+                  }
+                  required
+                />
+              </div>
               <div className="form-group">
                 <label>Descripción</label>
                 <input
@@ -548,6 +600,7 @@ export default function InventarioPage() {
                   }
                 />
               </div>
+              {error && <p className="error-msg">{error}</p>}
               <div className="modal-actions">
                 <button type="submit" className="btn-primary">
                   Guardar
@@ -574,7 +627,11 @@ export default function InventarioPage() {
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>Categorías</h3>
-              <button className="btn-icon" onClick={() => setMostrarCategorias(false)}>
+              <button
+                className="btn-icon"
+                onClick={() => setMostrarCategorias(false)}
+                title="Cerrar"
+              >
                 ×
               </button>
             </div>

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Usuario
+from app.models import Division, Pedido, TurnoCaja, Usuario
 from app.schemas import (
     CLAVE_INICIAL,
     ROLES,
@@ -78,6 +78,9 @@ def crear_usuario(datos: UsuarioCreate, db: Session = Depends(get_db)):
             status_code=400, detail=f"Rol inválido. Use: {', '.join(ROLES)}"
         )
 
+    if not alias:
+        raise HTTPException(status_code=400, detail="El alias no puede estar vacío")
+
     existente = db.query(Usuario).filter(Usuario.alias == alias).first()
     if existente:
         raise HTTPException(status_code=400, detail="El alias ya está en uso")
@@ -107,6 +110,10 @@ def actualizar_usuario(
 
     if datos.alias is not None:
         alias = datos.alias.strip()
+        if not alias:
+            raise HTTPException(
+                status_code=400, detail="El alias no puede estar vacío"
+            )
         repetido = (
             db.query(Usuario)
             .filter(Usuario.alias == alias, Usuario.id != usuario_id)
@@ -118,6 +125,36 @@ def actualizar_usuario(
 
     if datos.nombre is not None:
         usuario.nombre = datos.nombre.strip()
+
+    # Un administrador activo no puede degradarse ni desactivarse si es el
+    # único que queda: la aplicación se quedaría sin acceso al panel.
+    pierde_admin = (
+        usuario.rol == "admin"
+        and usuario.activo
+        and (
+            (datos.rol is not None and datos.rol != "admin")
+            or datos.activo is False
+        )
+    )
+    if pierde_admin:
+        otros_admins = (
+            db.query(Usuario)
+            .filter(
+                Usuario.rol == "admin",
+                Usuario.id != usuario_id,
+                Usuario.activo == 1,
+            )
+            .count()
+        )
+        if otros_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No se puede quitar el último administrador activo. "
+                    "Crea o activa otro administrador primero."
+                ),
+            )
+
     if datos.rol is not None:
         if datos.rol not in ROLES:
             raise HTTPException(
@@ -167,6 +204,22 @@ def eliminar_usuario(usuario_id: int, db: Session = Depends(get_db)):
                 status_code=400,
                 detail="No se puede eliminar el último administrador",
             )
+
+    # El historial guarda el usuario de cada venta y turno. Borrar la cuenta
+    # dejaría esos registros sin responsable, así que se conserva desactivada.
+    tiene_historial = (
+        db.query(Pedido).filter(Pedido.usuario_id == usuario_id).first()
+        or db.query(TurnoCaja).filter(TurnoCaja.usuario_id == usuario_id).first()
+        or db.query(Division).filter(Division.usuario_id == usuario_id).first()
+    )
+    if tiene_historial:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No se puede eliminar: el usuario tiene ventas, turnos o "
+                "divisiones registradas. Desactívalo para conservar el historial."
+            ),
+        )
 
     alias = usuario.alias
     db.delete(usuario)

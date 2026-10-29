@@ -31,6 +31,10 @@ interface Mesa {
 
 export default function MesasPage() {
   const navigate = useNavigate();
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  // El panel de mesas lo comparten Administrador y Bartender; cada uno debe
+  // volver a su propia ruta de pedidos, no siempre a /admin.
+  const basePedidos = usuario?.rol === "bartender" ? "/bartender" : "/admin";
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
   const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "2" });
@@ -143,7 +147,7 @@ export default function MesasPage() {
   };
 
   const abrirPedido = (mesa: Mesa) => {
-    navigate(`/admin/pedidos?mesa=${mesa.id}`);
+    navigate(`${basePedidos}/pedidos?mesa=${mesa.id}`);
   };
 
   const claseEstado = (estado: string) =>
@@ -396,7 +400,7 @@ export default function MesasPage() {
                         : porEliminar.id;
                     setPorEliminar(null);
                     setErrorEliminar(null);
-                    navigate(`/admin/pedidos?mesa=${id}`);
+                    navigate(`${basePedidos}/pedidos?mesa=${id}`);
                   }}
                 >
                   Ver el pedido abierto
