@@ -7,3 +7,13 @@ Listado de pendientes por corregir
      - Librerías necesarias de Python
      - Dependencias del frontend
    - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.
+
+2. Despliegue público (pendiente):
+   - Publicar el frontend y el backend en internet y migrar SQLite a PostgreSQL.
+   - Opciones gratuitas sugeridas (verificar límites vigentes):
+     - Frontend: Cloudflare Pages, Vercel, Netlify o GitHub Pages.
+     - Backend: Render Free, Koyeb Free o Google Cloud Run (cuota gratuita, requiere tarjeta).
+     - Base de datos: Neon Free o Supabase Free (PostgreSQL).
+     - Con disco persistente: Oracle Cloud Always Free (VM + Docker).
+   - Combinación recomendada: Cloudflare Pages + Render Free + Neon Free.
+   - Ver "Despliegue en la nube (pendiente)" en README.md.

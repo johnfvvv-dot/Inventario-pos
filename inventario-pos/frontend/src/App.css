@@ -699,6 +699,30 @@ select:focus {
   align-items: center;
 }
 
+/* Botones del panel de filtros de Reportes */
+.filtros-acciones {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.filtros-nota {
+  margin: 0.35rem 0 0;
+}
+
+.filtros-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.filtros-alerta {
+  color: var(--danger);
+}
+
 .mesas-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -1313,6 +1337,16 @@ select:focus {
   color: var(--accent-dark);
 }
 
+/* Indicador de ganancias: mismos verdes que una mesa disponible */
+.kpi-ganancia {
+  background: #e5f7ed;
+  border: 1px solid #b7e4c9;
+}
+
+.kpi-ganancia h2 {
+  color: var(--success);
+}
+
 /* -------------------- FILTROS / PAGINACIÓN -------------------- */
 
 .filtros-barra {
@@ -1594,6 +1628,10 @@ select:focus {
   .page-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .filtros-acciones {
+    width: 100%;
   }
 
   .form-row {

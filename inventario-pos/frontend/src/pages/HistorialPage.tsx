@@ -33,6 +33,14 @@ interface Mesa {
 }
 
 const POR_PAGINA = 25;
+const FILTROS_VACIOS = {
+  desde: "",
+  hasta: "",
+  mesa: "" as number | "",
+  producto: "" as number | "",
+  forma_pago: "" as string | "",
+};
+type Filtros = typeof FILTROS_VACIOS;
 
 const etiquetaMesa = (m: Mesa) =>
   m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
@@ -60,23 +68,20 @@ export default function HistorialPage() {
   const [pagina, setPagina] = useState(0);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [mesas, setMesas] = useState<Mesa[]>([]);
-  const [filtros, setFiltros] = useState({
-    desde: "",
-    hasta: "",
-    mesa: "" as number | "",
-    producto: "" as number | "",
-    forma_pago: "" as string | "",
-  });
+  const [filtros, setFiltros] = useState<Filtros>({ ...FILTROS_VACIOS });
+  // Filtros que están aplicados a la tabla (pueden diferir del formulario).
+  const [aplicados, setAplicados] = useState<Filtros>({ ...FILTROS_VACIOS });
+  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cargar = async () => {
     try {
       const data: any = await api.getHistorial({
-        desde: filtros.desde || undefined,
-        hasta: filtros.hasta || undefined,
-        mesa: filtros.mesa || undefined,
-        producto: filtros.producto || undefined,
-        forma_pago: filtros.forma_pago || undefined,
+        desde: aplicados.desde || undefined,
+        hasta: aplicados.hasta || undefined,
+        mesa: aplicados.mesa || undefined,
+        producto: aplicados.producto || undefined,
+        forma_pago: aplicados.forma_pago || undefined,
         limite: POR_PAGINA,
         offset: pagina * POR_PAGINA,
       });
@@ -90,7 +95,7 @@ export default function HistorialPage() {
 
   useEffect(() => {
     cargar();
-  }, [pagina]);
+  }, [aplicados, pagina]);
 
   useEffect(() => {
     (async () => {
@@ -109,38 +114,78 @@ export default function HistorialPage() {
 
   const aplicar = () => {
     setPagina(0);
-    cargar();
+    // Un objeto nuevo dispara la consulta aunque los valores no cambien.
+    setAplicados({ ...filtros });
   };
 
   const limpiar = () => {
-    setFiltros({ desde: "", hasta: "", mesa: "", producto: "", forma_pago: "" });
+    const vacios = { ...FILTROS_VACIOS };
+    setFiltros(vacios);
     setPagina(0);
+    // Siempre se vuelve a consultar, incluso si ya se estaba en la página 0.
+    setAplicados({ ...vacios });
   };
 
-  const exportarCSV = () => {
-    const filas: string[][] = [
-      ["HISTORIAL DE VENTAS"],
-      ["Pedido", "Fecha", "Mesa / Barra", "Usuario", "Forma de pago", "Total", "Productos"],
-      ...items.map((p) => [
-        String(p.id),
-        formatearFechaHora(p.fecha),
-        etiquetaOrigen(p),
-        p.usuario_nombre,
-        p.forma_pago,
-        String(p.total),
-        p.productos.join(" | "),
-      ]),
-    ];
-    const csv = filas
-      .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))
-      .join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = url;
-    enlace.download = `historial-ventas-${fechaParaArchivo()}.csv`;
-    enlace.click();
-    URL.revokeObjectURL(url);
+  const exportarCSV = async () => {
+    setExportando(true);
+    setError(null);
+    try {
+      // Se exportan TODAS las ventas del filtro aplicado, no solo la página
+      // visible. Se recorre el endpoint por bloques de 500.
+      const todos: PedidoHistorial[] = [];
+      const limite = 500;
+      let offset = 0;
+
+      while (true) {
+        const data: any = await api.getHistorial({
+          desde: aplicados.desde || undefined,
+          hasta: aplicados.hasta || undefined,
+          mesa: aplicados.mesa || undefined,
+          producto: aplicados.producto || undefined,
+          forma_pago: aplicados.forma_pago || undefined,
+          limite,
+          offset,
+        });
+        const bloque = Array.isArray(data.items) ? data.items : [];
+        todos.push(...bloque);
+        if (
+          bloque.length === 0 ||
+          todos.length >= Number(data.total || 0) ||
+          offset > 20000
+        ) {
+          break;
+        }
+        offset += limite;
+      }
+
+      const filas: string[][] = [
+        ["HISTORIAL DE VENTAS"],
+        ["Pedido", "Fecha", "Mesa / Barra", "Usuario", "Forma de pago", "Total", "Productos"],
+        ...todos.map((p) => [
+          String(p.id),
+          formatearFechaHora(p.fecha),
+          etiquetaOrigen(p),
+          p.usuario_nombre,
+          p.forma_pago,
+          String(p.total),
+          p.productos.join(" | "),
+        ]),
+      ];
+      const csv = filas
+        .map((f) => f.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";"))
+        .join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `historial-ventas-${fechaParaArchivo()}.csv`;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message || "No se pudo exportar el CSV");
+    } finally {
+      setExportando(false);
+    }
   };
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -156,8 +201,12 @@ export default function HistorialPage() {
           <button className="btn-secondary" onClick={limpiar}>
             Limpiar
           </button>
-          <button className="btn-primary" onClick={exportarCSV}>
-            ⬇ Exportar CSV
+          <button
+            className="btn-primary"
+            onClick={exportarCSV}
+            disabled={exportando}
+          >
+            {exportando ? "Exportando..." : "⬇ Exportar CSV"}
           </button>
         </div>
       </div>

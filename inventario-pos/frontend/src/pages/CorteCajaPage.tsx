@@ -25,12 +25,14 @@ interface Turno {
   observaciones: string | null;
   estado: string;
   totales: Totales;
+  ganancia: number;
 }
 
 interface Resumen {
   desde: string;
   hasta: string;
   totales: Totales;
+  ganancia: number;
   pedidos_cerrados: number;
   mesas_atendidas: number;
   por_forma_pago: Record<string, number>;
@@ -181,6 +183,10 @@ export default function CorteCajaPage() {
                 <h3>Total del turno</h3>
                 <h2>{formatearPrecio(turno.totales.total)}</h2>
               </div>
+              <div className="kpi-card kpi-ganancia">
+                <h3>Ganancia del turno</h3>
+                <h2>{formatearPrecio(turno.ganancia || 0)}</h2>
+              </div>
             </div>
           </>
         ) : (
@@ -215,6 +221,10 @@ export default function CorteCajaPage() {
               <h3>Total</h3>
               <h2>{formatearPrecio(resumen.totales.total)}</h2>
             </div>
+            <div className="kpi-card kpi-ganancia">
+              <h3>Ganancia</h3>
+              <h2>{formatearPrecio(resumen.ganancia || 0)}</h2>
+            </div>
           </div>
           <p className="muted small">
             {resumen.pedidos_cerrados} pedidos cerrados · {resumen.mesas_atendidas} mesas atendidas ·{" "}
@@ -239,6 +249,7 @@ export default function CorteCajaPage() {
                 <th>Tarjeta</th>
                 <th>Transfer.</th>
                 <th>Total</th>
+                <th>Ganancia</th>
                 <th>Observaciones</th>
               </tr>
             </thead>
@@ -256,12 +267,13 @@ export default function CorteCajaPage() {
                   <td>
                     <strong>{formatearPrecio(t.totales.total)}</strong>
                   </td>
+                  <td>{formatearPrecio(t.ganancia || 0)}</td>
                   <td className="obs-cell">{t.observaciones || "—"}</td>
                 </tr>
               ))}
               {turnos.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="empty-state">
+                  <td colSpan={11} className="empty-state">
                     Todavía no hay turnos registrados.
                   </td>
                 </tr>

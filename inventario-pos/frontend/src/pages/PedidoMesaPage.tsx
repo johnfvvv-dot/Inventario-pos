@@ -135,10 +135,6 @@ export default function PedidoMesaPage() {
     }
   };
 
-  useEffect(() => {
-    cargarCatalogos();
-  }, []);
-
   // Mesa seleccionada automáticamente al venir desde el panel de Mesas
   useEffect(() => {
     const mesaParam = searchParams.get("mesa");

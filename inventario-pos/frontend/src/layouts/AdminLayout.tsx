@@ -1,6 +1,7 @@
 /** Layout del panel de administración. */
 
 import { Outlet, useNavigate } from "react-router-dom";
+import AvisoTurnoModal from "../components/AvisoTurnoModal";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
 
@@ -15,6 +16,9 @@ export default function AdminLayout() {
 
   return (
     <div className="admin-layout">
+      {/* Pregunta por la apertura del turno solo la primera vez del día */}
+      <AvisoTurnoModal />
+
       <header className="admin-header">
         <div>
           <h1>Inventario POS</h1>

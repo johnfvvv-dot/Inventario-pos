@@ -56,6 +56,9 @@ class Producto(Base):
     nombre = Column(String(150), nullable=False)
     descripcion = Column(String(255), nullable=True)
     precio = Column(Float, nullable=False)
+    # Precio de compra (costo). Se registra al crear el producto, no se
+    # muestra en el listado y alimenta el cálculo de ganancias.
+    precio_compra = Column(Float, nullable=False, default=0.0)
     stock = Column(Integer, nullable=False, default=0)
     categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
 
