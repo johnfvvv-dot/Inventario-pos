@@ -11,6 +11,8 @@ from app.database import get_db
 from app.models import (
     Mesa,
     Pedido,
+    PedidoItem,
+    Producto,
     TurnoCaja,
     Usuario,
     etiqueta_desde_numero_historico,
@@ -63,6 +65,41 @@ def _totales_por_forma_pago(
     )
 
 
+def _ganancia_periodo(
+    db: Session, desde: Optional[datetime] = None, hasta: Optional[datetime] = None
+) -> float:
+    """Ganancia de los pedidos cerrados del periodo.
+
+    Ganancia = (precio de venta - precio de compra) x cantidad vendida.
+    El precio de venta es el guardado en el ítem al momento de la venta y el
+    de compra el registrado en el producto (0 si es anterior a esta versión).
+    """
+    consulta = (
+        db.query(
+            func.coalesce(
+                func.sum(
+                    (
+                        PedidoItem.precio_unitario
+                        - func.coalesce(Producto.precio_compra, 0.0)
+                    )
+                    * PedidoItem.cantidad
+                ),
+                0.0,
+            )
+        )
+        .select_from(PedidoItem)
+        .join(Pedido, Pedido.id == PedidoItem.pedido_id)
+        .outerjoin(Producto, Producto.id == PedidoItem.producto_id)
+        .filter(Pedido.estado == "cerrado")
+    )
+    if desde:
+        consulta = consulta.filter(Pedido.fecha_cierre >= desde)
+    if hasta:
+        consulta = consulta.filter(Pedido.fecha_cierre <= hasta)
+
+    return round(float(consulta.scalar() or 0.0), 2)
+
+
 def _turno_out(db: Session, turno: TurnoCaja) -> TurnoCajaOut:
     hasta = turno.fecha_cierre or ahora_local()
     totales = _totales_por_forma_pago(db, turno.fecha_apertura, hasta)
@@ -75,7 +112,51 @@ def _turno_out(db: Session, turno: TurnoCaja) -> TurnoCajaOut:
         observaciones=turno.observaciones,
         estado=turno.estado,
         totales=totales,
+        ganancia=_ganancia_periodo(db, turno.fecha_apertura, hasta),
     )
+
+
+@router.get("/anios-ventas")
+def anios_ventas(db: Session = Depends(get_db)):
+    """Años con ventas registradas (pedidos cerrados).
+
+    Se genera dinámicamente desde los datos, de modo que un año sin ventas
+    no aparece como opción en el filtro de Reportes.
+    """
+    anios = (
+        db.query(func.extract("year", Pedido.fecha_cierre))
+        .filter(Pedido.estado == "cerrado", Pedido.fecha_cierre.isnot(None))
+        .distinct()
+        .all()
+    )
+    return sorted(
+        {int(fila[0]) for fila in anios if fila[0] is not None}, reverse=True
+    )
+
+
+@router.get("/turno-ayer", response_model=Optional[TurnoCajaOut])
+def turno_ayer(db: Session = Depends(get_db)):
+    """Turno cuyo día de apertura fue ayer.
+
+    Se identifica por ``fecha_apertura``, no por ``fecha_cierre``, de modo
+    que un turno abierto ayer por la noche y cerrado de madrugada hoy sigue
+    contando como el turno de ayer. Si hubiera varios, se devuelve el último
+    abierto ese día.
+    """
+    ayer = (ahora_local() - timedelta(days=1)).date()
+    inicio = datetime.combine(ayer, datetime.min.time())
+    fin = inicio + timedelta(days=1)
+
+    turno = (
+        db.query(TurnoCaja)
+        .filter(
+            TurnoCaja.fecha_apertura >= inicio,
+            TurnoCaja.fecha_apertura < fin,
+        )
+        .order_by(TurnoCaja.fecha_apertura.desc(), TurnoCaja.id.desc())
+        .first()
+    )
+    return _turno_out(db, turno) if turno else None
 
 
 @router.get("/turno-actual", response_model=Optional[TurnoCajaOut])
@@ -145,14 +226,21 @@ def listar_turnos(limite: int = 20, db: Session = Depends(get_db)):
 
 @router.get("/resumen", response_model=ResumenCajaOut)
 def resumen_caja(
-    dias: int = 1, offset_dias: int = 0, db: Session = Depends(get_db)
+    dias: int = 1,
+    offset_dias: int = 0,
+    desde: Optional[datetime] = None,
+    hasta: Optional[datetime] = None,
+    db: Session = Depends(get_db),
 ):
-    """Resumen de ventas por forma de pago de un rango de días calendario.
+    """Resumen de ventas y ganancias de un rango de días calendario.
 
     ``dias=1`` y ``offset_dias=0`` abarcan únicamente el día actual desde las
     00:00 hasta ahora. ``offset_dias=1`` permite consultar ayer completo
     (00:00 a 23:59:59.999999). Para N días se incluyen días completos desde la
     medianoche, de modo que no se mezclan ventas de fechas distintas.
+
+    Si se envían ``desde`` y ``hasta`` (ISO), se usa ese rango exacto; es lo
+    que permite consultar un mes concreto desde Reportes.
     """
     dias = max(1, min(dias, 365))
     offset_dias = max(0, min(offset_dias, 365))
@@ -160,26 +248,28 @@ def resumen_caja(
     ahora = ahora_local()
     hoy_inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    if offset_dias:
-        desde = hoy_inicio - timedelta(days=offset_dias + dias - 1)
-        hasta = (
+    if desde is not None and hasta is not None:
+        rango_desde, rango_hasta = desde, hasta
+    elif offset_dias:
+        rango_desde = hoy_inicio - timedelta(days=offset_dias + dias - 1)
+        rango_hasta = (
             hoy_inicio
             - timedelta(days=offset_dias - 1)
             - timedelta(microseconds=1)
         )
     else:
-        desde = hoy_inicio - timedelta(days=dias - 1)
-        hasta = ahora
+        rango_desde = hoy_inicio - timedelta(days=dias - 1)
+        rango_hasta = ahora
 
-    totales = _totales_por_forma_pago(db, desde, hasta)
+    totales = _totales_por_forma_pago(db, rango_desde, rango_hasta)
 
     cerrados = (
         db.query(Pedido)
         .filter(
             Pedido.estado == "cerrado",
             Pedido.fecha_cierre.isnot(None),
-            Pedido.fecha_cierre >= desde,
-            Pedido.fecha_cierre <= hasta,
+            Pedido.fecha_cierre >= rango_desde,
+            Pedido.fecha_cierre <= rango_hasta,
         )
         .all()
     )
@@ -192,9 +282,10 @@ def resumen_caja(
     }
 
     return ResumenCajaOut(
-        desde=desde,
-        hasta=hasta,
+        desde=rango_desde,
+        hasta=rango_hasta,
         totales=totales,
+        ganancia=_ganancia_periodo(db, rango_desde, rango_hasta),
         pedidos_cerrados=len(cerrados),
         mesas_atendidas=len(mesas),
         por_forma_pago=por_forma,
@@ -202,23 +293,82 @@ def resumen_caja(
 
 
 @router.get("/ventas-por-dia")
-def ventas_por_dia(dias: int = 14, db: Session = Depends(get_db)):
-    """Serie diaria de ventas (para el gráfico de líneas) y top de productos."""
-    dias = max(1, min(dias, 90))
-    desde = (ahora_local() - timedelta(days=dias - 1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+def ventas_por_dia(
+    dias: int = 14,
+    offset_dias: int = 0,
+    desde: Optional[datetime] = None,
+    hasta: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+):
+    """Serie diaria de ventas y ganancias + top de productos.
+
+    Acepta ``dias``/``offset_dias`` (misma semántica que el resumen) o un
+    rango explícito ``desde``/``hasta`` en ISO, que es lo que usa Reportes
+    para los filtros de día, semana y mes.
+    """
+    ahora = ahora_local()
+
+    if desde is not None and hasta is not None:
+        inicio, fin = desde, hasta
+    else:
+        dias = max(1, min(dias, 90))
+        offset_dias = max(0, min(offset_dias, 365))
+        hoy_inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+        if offset_dias:
+            inicio = hoy_inicio - timedelta(days=offset_dias + dias - 1)
+            fin = (
+                hoy_inicio
+                - timedelta(days=offset_dias - 1)
+                - timedelta(microseconds=1)
+            )
+        else:
+            inicio = hoy_inicio - timedelta(days=dias - 1)
+            fin = ahora
+
+    if fin < inicio:
+        inicio, fin = fin, inicio
+    if (fin.date() - inicio.date()).days > 366:
+        inicio = fin - timedelta(days=366)
+
+    dias_rango = (fin.date() - inicio.date()).days + 1
 
     cerrados = (
         db.query(Pedido)
-        .filter(Pedido.estado == "cerrado", Pedido.fecha_cierre >= desde)
+        .filter(
+            Pedido.estado == "cerrado",
+            Pedido.fecha_cierre.isnot(None),
+            Pedido.fecha_cierre >= inicio,
+            Pedido.fecha_cierre <= fin,
+        )
         .all()
     )
 
     serie: dict = {}
-    for i in range(dias):
-        dia = (desde + timedelta(days=i)).date()
-        serie[dia] = {"efectivo": 0.0, "tarjeta": 0.0, "transferencia": 0.0, "total": 0.0}
+    for i in range(dias_rango):
+        dia = (inicio + timedelta(days=i)).date()
+        serie[dia] = {
+            "efectivo": 0.0,
+            "tarjeta": 0.0,
+            "transferencia": 0.0,
+            "total": 0.0,
+            "ganancia": 0.0,
+        }
+
+    pedidos_ids = [p.id for p in cerrados]
+    items = (
+        db.query(PedidoItem).filter(PedidoItem.pedido_id.in_(pedidos_ids)).all()
+        if pedidos_ids
+        else []
+    )
+
+    # Costo actual por producto (0 si el producto ya no existe).
+    costos = {
+        p.id: float(p.precio_compra or 0.0) for p in db.query(Producto).all()
+    }
+
+    items_por_pedido: dict = {}
+    for item in items:
+        items_por_pedido.setdefault(item.pedido_id, []).append(item)
 
     for pedido in cerrados:
         if not pedido.fecha_cierre:
@@ -230,28 +380,39 @@ def ventas_por_dia(dias: int = 14, db: Session = Depends(get_db)):
         serie[clave][forma] = round(serie[clave][forma] + (pedido.total or 0), 2)
         serie[clave]["total"] = round(serie[clave]["total"] + (pedido.total or 0), 2)
 
+        for item in items_por_pedido.get(pedido.id, []):
+            costo = costos.get(item.producto_id, 0.0)
+            serie[clave]["ganancia"] = round(
+                serie[clave]["ganancia"]
+                + (item.precio_unitario - costo) * item.cantidad,
+                2,
+            )
+
     etiquetas = [str(d) for d in sorted(serie.keys())]
     datos = [serie[d] for d in sorted(serie.keys())]
 
     # Top de productos vendidos en el periodo
-    from app.models import PedidoItem
-
     conteo: dict = {}
-    pedidos_ids = [p.id for p in cerrados]
-    if pedidos_ids:
-        items = db.query(PedidoItem).filter(PedidoItem.pedido_id.in_(pedidos_ids)).all()
-        for item in items:
-            clave = item.producto_id
-            if clave not in conteo:
-                conteo[clave] = {"producto_id": clave, "cantidad": 0, "total": 0.0}
-            conteo[clave]["cantidad"] += item.cantidad
-            conteo[clave]["total"] = round(conteo[clave]["total"] + (item.subtotal or 0), 2)
+    for item in items:
+        clave = item.producto_id
+        if clave not in conteo:
+            conteo[clave] = {"producto_id": clave, "cantidad": 0, "total": 0.0}
+        conteo[clave]["cantidad"] += item.cantidad
+        conteo[clave]["total"] = round(
+            conteo[clave]["total"] + (item.subtotal or 0), 2
+        )
 
-        from app.models import Producto
+    nombres = {}
+    if conteo:
+        nombres = {
+            p.id: p.nombre
+            for p in db.query(Producto)
+            .filter(Producto.id.in_(list(conteo.keys())))
+            .all()
+        }
 
-        for clave in conteo:
-            producto = db.query(Producto).filter(Producto.id == clave).first()
-            conteo[clave]["nombre"] = producto.nombre if producto else f"#{clave}"
+    for clave in conteo:
+        conteo[clave]["nombre"] = nombres.get(clave, f"#{clave}")
 
     top = sorted(conteo.values(), key=lambda x: x["cantidad"], reverse=True)[:10]
 
@@ -259,7 +420,10 @@ def ventas_por_dia(dias: int = 14, db: Session = Depends(get_db)):
         "etiquetas": etiquetas,
         "serie": datos,
         "top_productos": top,
-        "dias": dias,
+        "dias": dias_rango,
+        "desde": inicio.isoformat(),
+        "hasta": fin.isoformat(),
+        "total_ganancia": round(sum(d["ganancia"] for d in datos), 2),
     }
 
 

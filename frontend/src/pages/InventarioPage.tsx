@@ -11,6 +11,7 @@ interface Producto {
   nombre: string;
   descripcion?: string;
   precio: number;
+  precio_compra?: number;
   stock: number;
   categoria_id?: number | null;
 }
@@ -37,6 +38,13 @@ const parseNumero = (valor: string): number => {
   }
   const numero = Number(texto);
   return isNaN(numero) ? 0 : numero;
+};
+
+/** Formatea solo dígitos con separador de miles: "3800" -> "3.800". */
+const formatearMiles = (valor: string): string => {
+  const digitos = valor.replace(/\D/g, "");
+  if (!digitos) return "";
+  return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 export default function InventarioPage() {
@@ -66,6 +74,7 @@ export default function InventarioPage() {
     nombre: "",
     descripcion: "",
     precio: "",
+    precio_compra: "",
     stock: "",
     categoria_id: "" as number | "",
   });
@@ -119,24 +128,27 @@ export default function InventarioPage() {
   const guardarProducto = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      const datos = {
+      const datos: any = {
         nombre: nuevoProducto.nombre.trim(),
         descripcion: nuevoProducto.descripcion.trim() || undefined,
         precio: parseNumero(nuevoProducto.precio),
+        // El precio de compra se registra/actualiza tanto al crear como al editar.
+        precio_compra: Number(nuevoProducto.precio_compra.replace(/\./g, "") || 0),
         stock: parseNumero(nuevoProducto.stock || "0"),
         categoria_id: nuevoProducto.categoria_id || null,
       };
       if (editando) {
-        await api.updateProducto(editando.id, datos as any);
+        await api.updateProducto(editando.id, datos);
         setMensaje(`Producto "${datos.nombre}" actualizado`);
       } else {
-        await api.createProducto(datos as any);
+        await api.createProducto(datos);
         setMensaje(`Producto "${datos.nombre}" agregado`);
       }
       setNuevoProducto({
         nombre: "",
         descripcion: "",
         precio: "",
+        precio_compra: "",
         stock: "",
         categoria_id: "",
       });
@@ -155,6 +167,9 @@ export default function InventarioPage() {
       nombre: p.nombre,
       descripcion: p.descripcion || "",
       precio: String(p.precio),
+      precio_compra: p.precio_compra
+        ? formatearMiles(String(Math.round(p.precio_compra)))
+        : "",
       stock: String(p.stock),
       categoria_id: p.categoria_id || "",
     });
@@ -265,6 +280,7 @@ export default function InventarioPage() {
                 nombre: "",
                 descripcion: "",
                 precio: "",
+                precio_compra: "",
                 stock: "",
                 categoria_id: "",
               });
@@ -499,6 +515,7 @@ export default function InventarioPage() {
                     step="0.01"
                     min="0.01"
                     inputMode="decimal"
+                    placeholder="$1.000"
                     value={nuevoProducto.precio}
                     onChange={(e) =>
                       setNuevoProducto((p) => ({ ...p, precio: e.target.value }))
@@ -538,6 +555,23 @@ export default function InventarioPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+              {/* El precio de compra se pide al crear y al editar, nunca en el listado */}
+              <div className="form-group">
+                <label>Precio de compra *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="$1.000"
+                  value={nuevoProducto.precio_compra}
+                  onChange={(e) =>
+                    setNuevoProducto((p) => ({
+                      ...p,
+                      precio_compra: formatearMiles(e.target.value),
+                    }))
+                  }
+                  required
+                />
               </div>
               <div className="form-group">
                 <label>Descripción</label>

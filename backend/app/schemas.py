@@ -89,11 +89,20 @@ class ProductoBase(BaseModel):
 
 
 class ProductoCreate(ProductoBase):
-    pass
+    """Alta de producto: el precio de compra es obligatorio."""
+
+    precio_compra: float = Field(..., ge=0)
+
+
+class ProductoUpdate(ProductoBase):
+    """Edición: incluye el precio de compra para poder corregirlo."""
+
+    precio_compra: float = Field(..., ge=0)
 
 
 class ProductoOut(ProductoBase):
     id: int
+    precio_compra: Optional[float] = 0.0
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -111,6 +120,7 @@ class ProductoFiltroOut(BaseModel):
     """Respuesta paginada del inventario."""
     items: List[ProductoOut]
     total: int
+    stock_total: int = 0
     limite: int
     offset: int
     paginas: int
@@ -223,6 +233,7 @@ class TurnoCajaOut(BaseModel):
     observaciones: Optional[str] = None
     estado: str
     totales: TotalesFormaPago
+    ganancia: float = 0.0
 
 
 class AbrirTurnoOut(BaseModel):
@@ -238,6 +249,7 @@ class ResumenCajaOut(BaseModel):
     desde: Optional[datetime] = None
     hasta: Optional[datetime] = None
     totales: TotalesFormaPago
+    ganancia: float = 0.0
     pedidos_cerrados: int
     mesas_atendidas: int
     por_forma_pago: dict = {}

@@ -12,6 +12,7 @@ from app.schemas import (
     ProductoCreate,
     ProductoFiltroOut,
     ProductoOut,
+    ProductoUpdate,
     StockAjuste,
     StockUpdate,
 )
@@ -26,6 +27,7 @@ def crear_producto(datos: ProductoCreate, db: Session = Depends(get_db)):
         nombre=datos.nombre,
         descripcion=datos.descripcion,
         precio=datos.precio,
+        precio_compra=datos.precio_compra,
         stock=datos.stock,
         categoria_id=datos.categoria_id,
     )
@@ -62,6 +64,10 @@ def listar_productos(
         query = query.filter(Producto.categoria_id == categoria_id)
 
     total = query.count()
+    # Stock de todo el inventario (sin filtros), usado por reportes.
+    stock_total = int(
+        db.query(func.coalesce(func.sum(Producto.stock), 0)).scalar() or 0
+    )
     items = (
         query.order_by(Producto.nombre).offset(offset).limit(limite).all()
     )
@@ -69,6 +75,7 @@ def listar_productos(
     return ProductoFiltroOut(
         items=items,
         total=total,
+        stock_total=stock_total,
         limite=limite,
         offset=offset,
         paginas=max(1, (total + limite - 1) // limite),
@@ -112,9 +119,9 @@ def ajustar_stock(
 
 @router.put("/{producto_id}", response_model=ProductoOut)
 def actualizar_producto(
-    producto_id: int, datos: ProductoCreate, db: Session = Depends(get_db)
+    producto_id: int, datos: ProductoUpdate, db: Session = Depends(get_db)
 ):
-    """Editar un producto (nombre, precio, categoría...)."""
+    """Editar un producto (nombre, precio, precio de compra, stock, categoría)."""
     producto = db.query(Producto).filter(Producto.id == producto_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
@@ -122,6 +129,7 @@ def actualizar_producto(
     producto.nombre = datos.nombre
     producto.descripcion = datos.descripcion
     producto.precio = datos.precio
+    producto.precio_compra = datos.precio_compra
     producto.stock = datos.stock          # <- el stock SI se guarda (bug corregido)
     producto.categoria_id = datos.categoria_id
     db.commit()
