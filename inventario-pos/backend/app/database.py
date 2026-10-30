@@ -30,18 +30,39 @@ def _data_dir() -> Path:
     return carpeta
 
 
+def _normalizar_url(url: str) -> str:
+    """Acepta el formato ``postgres://`` que usan algunos proveedores."""
+    url = url.strip()
+    if url.startswith("postgres://"):
+        return "postgresql://" + url[len("postgres://") :]
+    return url
+
+
 # SQLite local por defecto. Para PostgreSQL en la nube, definir DATABASE_URL.
 DATABASE_URL_ENV = os.getenv("DATABASE_URL")
 if DATABASE_URL_ENV:
-    SQLALCHEMY_DATABASE_URL = DATABASE_URL_ENV
+    SQLALCHEMY_DATABASE_URL = _normalizar_url(DATABASE_URL_ENV)
 else:
     SQLALCHEMY_DATABASE_URL = f"sqlite:///{(_data_dir() / 'inventario.db').as_posix()}"
 
 connect_args = {}
+engine_options = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+else:
+    # PostgreSQL gestionado (Neon): valida la conexión antes de usarla y
+    # recíclala antes de que el proveedor cierre las conexiones ociosas.
+    connect_args = {"connect_timeout": 10}
+    engine_options = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 5,
+        "max_overflow": 5,
+    }
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args=connect_args, **engine_options
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

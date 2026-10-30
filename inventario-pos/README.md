@@ -411,9 +411,9 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
-6. **Despliegue público:** publicar el frontend y el backend en internet sigue
-   pendiente. Ver [Despliegue en la nube](#despliegue-en-la-nube-pendiente) para
-   las opciones gratuitas sugeridas.
+6. **Despliegue público:** la base ya se migró a Neon y se validó; falta
+   autenticar Cloudflare y el hosting del backend para publicar las URLs
+   finales. Ver [Despliegue en la nube](#despliegue-en-la-nube).
 
 ## Git
 
@@ -439,51 +439,126 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 | `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 
-## Despliegue en la nube (pendiente)
+## Despliegue en la nube
 
-El despliegue público **todavía no se ha realizado**. La aplicación funciona en
-local y en red WiFi; publicarla en internet queda como tarea pendiente.
+**Estado (29/10/2026):** la base SQLite ya se migró a Neon y el sistema se
+validó contra esa base con 29/29 pruebas (login, inventario, reportes, filtros,
+venta, historial y turno). Falta publicar el backend y el frontend; para eso se
+necesita autenticar las cuentas de los proveedores.
 
-### Antes de desplegar
+### Arquitectura
 
-- **No usar SQLite en hosting efímero.** Render, Koyeb y Cloud Run borran el
-  disco al reiniciar o redeployar. Migrar a PostgreSQL (Neon o Supabase) o usar
-  un servidor con disco persistente (Oracle Cloud Always Free).
-- Compilar el frontend con `REACT_APP_API_URL` apuntando a la URL pública del
-  backend. Si cambia el backend, hay que volver a compilar.
-- Agregar el dominio del frontend a la lista de CORS del backend.
-- Configurar `TZ=America/Bogota`, respaldos periódicos y HTTPS.
+| Componente | Servicio | Plan | Estado |
+|---|---|---|---|
+| Base de datos | Neon PostgreSQL | Free | Migrada y validada |
+| Backend | Northflank Sandbox (recomendado) / Google Cloud Run / Oracle Always Free | Gratis | Pendiente de credenciales |
+| Frontend | Cloudflare Pages | Free | Pendiente de credenciales |
 
-### Opciones gratuitas sugeridas
+- **Koyeb** ya no tiene capa gratuita para servicios web (octubre 2026).
+- **Render y Railway** no se usan en este despliegue.
+- **Cloud Run** tiene cuota gratuita, pero exige cuenta de facturación con
+  tarjeta y puede tener cold starts con `min-instances=0`.
+- **Oracle Always Free** no tiene costo mensual, pero exige tarjeta y
+  administrar una VM.
+- **Northflank Sandbox** es la alternativa sin tarjeta: 2 servicios always-on,
+  Docker y hasta USD 20/mes de recursos.
 
-> Los planes gratuitos cambian con frecuencia; verificar límites y condiciones
-> vigentes antes de decidir.
+### Variables del backend
 
-| Componente | Opción gratuita | Notas |
-|---|---|---|
-| Frontend (React) | **Cloudflare Pages** | Ancho de banda ilimitado, HTTPS y dominio `*.pages.dev`; recomendado. |
-| Frontend (React) | Vercel / Netlify | Plan Hobby gratuito; despliegue automático desde GitHub. |
-| Frontend (React) | GitHub Pages | Gratis; requiere ajustar `homepage` y las rutas SPA. |
-| Backend (FastAPI) | **Render Free** | Servicio web gratuito; se suspende tras unos minutos de inactividad. |
-| Backend (FastAPI) | Koyeb Free | Un servicio gratuito con scale-to-zero; útil para demos. |
-| Backend (FastAPI) | Google Cloud Run | Cuota gratuita mensual; requiere tarjeta y contenedor Docker. |
-| Backend + disco | Oracle Cloud Always Free | VM ARM siempre gratis; más configuración (Docker + Caddy). |
-| Base de datos | **Neon Free** | PostgreSQL gratuito con auto-suspensión; recomendado para empezar. |
-| Base de datos | Supabase Free | PostgreSQL con panel; el proyecto se pausa por inactividad. |
-| Base de datos | Turso | SQLite/libSQL distribuido; requiere adaptar SQLAlchemy. |
-| Todo en uno | Railway / Fly.io | Crédito inicial o pago por uso; sin capa gratuita permanente. |
+| Variable | Valor |
+|---|---|
+| `DATABASE_URL` | Cadena de Neon (usar la *pooled connection string*, `sslmode=require`) |
+| `TZ` | `America/Bogota` |
+| `APP_TIMEZONE` | `America/Bogota` |
+| `CORS_ORIGINS` | URL del frontend, p. ej. `https://inventario-pos.pages.dev` |
+| `PORT` | `8000` (Cloud Run lo inyecta) |
 
-**Combinación recomendada sin costo:** Cloudflare Pages (frontend) + Render Free
-(backend) + Neon Free (PostgreSQL). Sirve para una demo o un negocio pequeño;
-para uso intensivo, considerar un plan pago o la VM de Oracle.
+`ADMIN_PASSWORD` solo se usa al ejecutar la migración; no debe quedar como
+variable permanente del hosting.
 
-### Pasos
+### 1. Base de datos Neon
 
-1. Crear la base PostgreSQL en Neon o Supabase y copiar su `DATABASE_URL`.
-2. Desplegar el backend en Render o Koyeb con `DATABASE_URL` y
-   `TZ=America/Bogota`; comprobar `/health`.
-3. Compilar el frontend con `REACT_APP_API_URL=https://<backend>/api` y publicar
-   `frontend/build` en Cloudflare Pages.
-4. Agregar el dominio del frontend a CORS y probar login, pedidos, cobro,
-   reportes e historial en el entorno público.
-5. Exportar/importar los datos de SQLite y programar respaldos.
+1. Crear un proyecto en [Neon](https://neon.tech) (plan Free) en la región
+   `aws-us-east-1` o la más cercana.
+2. Copiar la cadena **pooled** de conexión.
+3. Desde `backend/`, ejecutar la migración (no modifica la SQLite original):
+
+   ```bash
+   export DATABASE_URL="postgresql://...@...-pooler.../neondb?sslmode=require"
+   export ADMIN_PASSWORD="una-clave-segura"
+   python scripts/migrate_sqlite_to_postgres.py --reset
+   ```
+
+4. Verificar que los conteos coincidan. El script conserva IDs y ajusta las
+   secuencias.
+5. Cambiar también la clave de los demás usuarios antes de publicar. Las
+   claves de la SQLite local no se modifican.
+
+### 2. Backend
+
+El backend ya incluye `backend/Dockerfile` y `backend/Procfile`. Expone
+`/health` y escucha en `$PORT`.
+
+**Northflank Sandbox (recomendado si no se quiere tarjeta):**
+
+1. Crear cuenta y conectar el repositorio de GitHub.
+2. Crear un servicio tipo *Dockerfile* con contexto `backend/`.
+3. Puerto `8000`, health check `/health`.
+4. Agregar las variables de la tabla anterior.
+5. Anotar la URL pública `https://...code.run`.
+
+**Google Cloud Run:**
+
+```bash
+gcloud run deploy inventario-pos-api \
+  --source backend \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --min-instances 0 \
+  --max-instances 1 \
+  --memory 512Mi \
+  --set-env-vars DATABASE_URL="...",TZ=America/Bogota,APP_TIMEZONE=America/Bogota,CORS_ORIGINS="https://<frontend>.pages.dev"
+```
+
+`min-instances=0` mantiene el costo dentro de la cuota gratuita; la primera
+petición después de un periodo inactivo puede tardar unos segundos.
+
+**Oracle Cloud Always Free:** crear una VM ARM, instalar Docker, ejecutar la
+imagen y poner Caddy o Nginx delante para HTTPS. Es la opción siempre activa,
+pero requiere cuenta, tarjeta y administración de la VM.
+
+### 3. Frontend en Cloudflare Pages
+
+1. Conectar el repositorio en Cloudflare Pages.
+2. Configuración:
+   - **Root directory:** `frontend`
+   - **Build command:** `npm run build`
+   - **Build output:** `build`
+   - **Variable:** `REACT_APP_API_URL=https://<backend>/api`
+3. El archivo `frontend/public/_redirects` ya incluye el fallback de la SPA.
+4. Si se publica con Wrangler:
+
+   ```bash
+   cd frontend
+   REACT_APP_API_URL=https://<backend>/api npm run build
+   npx wrangler pages deploy build --project-name inventario-pos
+   ```
+
+5. Agregar la URL de Pages a `CORS_ORIGINS` del backend y redeployar el backend.
+
+### 4. Pruebas después de publicar
+
+- `GET https://<backend>/health` responde `200`.
+- Login con el usuario administrador.
+- Inventario: 4 productos y stock 159.
+- Reportes: filtros Hoy/Semana/Mes/Último turno, gráficas y CSV.
+- Crear una venta de prueba, cobrarla y verificar stock, historial y turno.
+- Revisar la consola del navegador: sin errores CORS ni HTTP 5xx.
+
+### URLs finales
+
+| Servicio | URL |
+|---|---|
+| Frontend | Pendiente de publicar |
+| Backend | Pendiente de publicar |
+| Neon | Proyecto creado y migrado (claim pendiente) |

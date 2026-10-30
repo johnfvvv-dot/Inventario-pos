@@ -29,7 +29,7 @@ from app.routes.mesas import router as mesas_router
 from app.routes.pedidos import router as pedidos_router
 from app.routes.usuarios import router as usuarios_router
 from app.schemas import CLAVE_INICIAL
-from app.tiempo import utc_a_local
+from app.tiempo import ahora_local, utc_a_local
 
 VERSION = "1.1.0"
 
@@ -41,10 +41,25 @@ app = FastAPI(
     version=VERSION,
 )
 
-# CORS: permite que el frontend React (localhost:3000 o IP de la red) consuma la API
+def _cors_origins() -> list[str]:
+    """Orígenes permitidos, configurables en el despliegue público.
+
+    Sin ``CORS_ORIGINS`` se mantiene el comportamiento local permisivo. En
+    producción se recomienda una lista separada por comas con la URL del
+    frontend, por ejemplo:
+    ``CORS_ORIGINS=https://inventario-pos.pages.dev``.
+    """
+    origenes = os.getenv("CORS_ORIGINS", "*").strip()
+    if not origenes or origenes == "*":
+        return ["*"]
+    return [origen.strip().rstrip("/") for origen in origenes.split(",") if origen.strip()]
+
+
+# CORS: permite que el frontend React (localhost:3000, IP de la red o el
+# dominio público de Cloudflare Pages) consuma la API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -210,12 +225,21 @@ def _migrar_alias_usuarios() -> None:
 
         # Usuarios antiguos sin fecha de creacion
         try:
-            conexion.execute(
-                text(
-                    "UPDATE usuarios SET creado_en = datetime('now', 'localtime') "
-                    "WHERE creado_en IS NULL"
+            if engine.dialect.name == "sqlite":
+                conexion.execute(
+                    text(
+                        "UPDATE usuarios SET creado_en = datetime('now', 'localtime') "
+                        "WHERE creado_en IS NULL"
+                    )
                 )
-            )
+            else:
+                conexion.execute(
+                    text(
+                        "UPDATE usuarios SET creado_en = :ahora "
+                        "WHERE creado_en IS NULL"
+                    ),
+                    {"ahora": ahora_local()},
+                )
         except Exception:
             pass
 

@@ -161,10 +161,10 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
-6. **Despliegue público:** pendiente. Publicar el frontend y el backend en
-   servicios gratuitos (combinación sugerida: Cloudflare Pages + Render Free +
-   Neon Free) y migrar SQLite a PostgreSQL. Ver la sección "Despliegue en la
-   nube (pendiente)" en `README.md`.
+6. **Despliegue público:** base migrada a Neon y validada con 29/29 pruebas;
+   falta autenticar Cloudflare y el hosting del backend (Northflank Sandbox,
+   Cloud Run u Oracle Always Free) para publicar las URLs finales. Ver la
+   sección "Despliegue en la nube" en `README.md`.
 
 ## 5. Reglas de trabajo
 
