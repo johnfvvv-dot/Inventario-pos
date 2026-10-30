@@ -49,11 +49,13 @@ export default function CorteCajaPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
+  const [cargando, setCargando] = useState(true);
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
 
   const cargar = async () => {
+    setCargando(true);
     try {
       const [t, hist, res]: any = await Promise.all([
         api.getTurnoActual(),
@@ -66,6 +68,8 @@ export default function CorteCajaPage() {
       setError(null);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setCargando(false);
     }
   };
 
@@ -150,8 +154,20 @@ export default function CorteCajaPage() {
         <div className="page-head">
           <h3>Turno actual</h3>
           {turno ? (
-            <button className="btn-warning" onClick={abrirModalCierre} disabled={procesando}>
-              {procesando ? "Cerrando..." : "Cerrar turno"}
+            <button
+              className="btn-warning"
+              onClick={abrirModalCierre}
+              disabled={procesando || cargando}
+            >
+              {procesando
+                ? "Cerrando..."
+                : cargando
+                ? "Actualizando..."
+                : "Cerrar turno"}
+            </button>
+          ) : cargando ? (
+            <button className="btn-secondary" disabled>
+              Cargando...
             </button>
           ) : (
             <button className="btn-primary" onClick={abrirTurno} disabled={procesando}>
@@ -189,6 +205,8 @@ export default function CorteCajaPage() {
               </div>
             </div>
           </>
+        ) : cargando ? (
+          <p className="empty-state">Cargando turno...</p>
         ) : (
           <p className="empty-state">
             No hay un turno abierto. Abre un turno para empezar a registrar la caja del día.

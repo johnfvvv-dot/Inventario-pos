@@ -8,12 +8,12 @@ Listado de pendientes por corregir
      - Dependencias del frontend
    - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.
 
-2. Despliegue público (pendiente):
-   - Publicar el frontend y el backend en internet y migrar SQLite a PostgreSQL.
-   - Opciones gratuitas sugeridas (verificar límites vigentes):
-     - Frontend: Cloudflare Pages, Vercel, Netlify o GitHub Pages.
-     - Backend: Render Free, Koyeb Free o Google Cloud Run (cuota gratuita, requiere tarjeta).
-     - Base de datos: Neon Free o Supabase Free (PostgreSQL).
-     - Con disco persistente: Oracle Cloud Always Free (VM + Docker).
-   - Combinación recomendada: Cloudflare Pages + Render Free + Neon Free.
-   - Ver "Despliegue en la nube (pendiente)" en README.md.
+2. Despliegue público (en curso):
+   - Base SQLite migrada a Neon PostgreSQL y validada con 29/29 pruebas.
+   - Backend y frontend listos para publicar (Dockerfile, CORS configurable,
+     zona horaria, `_redirects` de Cloudflare Pages).
+   - Falta autenticar Cloudflare y el hosting del backend. Opciones evaluadas:
+     Northflank Sandbox (gratis, sin tarjeta), Google Cloud Run (cuota gratuita,
+     requiere tarjeta) u Oracle Cloud Always Free (requiere tarjeta y VM).
+   - Koyeb ya no ofrece capa gratuita para servicios web (octubre 2026).
+   - Ver "Despliegue en la nube" en README.md para los pasos y variables.
