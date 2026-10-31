@@ -115,11 +115,13 @@ const isoLocal = (d: Date, finDelDia = false) =>
 
 const isoAhora = () => {
   const d = new Date();
+  // Incluye milisegundos: si una venta se cierra en el mismo segundo en que
+  // se carga Reportes, truncar a segundos dejaría la venta fuera del rango.
   return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(
     d.getDate()
   )}T${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}:${dosDigitos(
     d.getSeconds()
-  )}`;
+  )}.${String(d.getMilliseconds()).padStart(3, "0")}`;
 };
 
 /** Rango del período seleccionado (día / semana / mes). */
