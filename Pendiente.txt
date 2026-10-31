@@ -8,12 +8,20 @@ Listado de pendientes por corregir
      - Dependencias del frontend
    - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.
 
-2. Despliegue público (en curso):
-   - Base SQLite migrada a Neon PostgreSQL y validada con 29/29 pruebas.
-   - Backend y frontend listos para publicar (Dockerfile, CORS configurable,
-     zona horaria, `_redirects` de Cloudflare Pages).
-   - Falta autenticar Cloudflare y el hosting del backend. Opciones evaluadas:
-     Northflank Sandbox (gratis, sin tarjeta), Google Cloud Run (cuota gratuita,
-     requiere tarjeta) u Oracle Cloud Always Free (requiere tarjeta y VM).
-   - Koyeb ya no ofrece capa gratuita para servicios web (octubre 2026).
-   - Ver "Despliegue en la nube" en README.md para los pasos y variables.
+2. Despliegue público (completado el 30/10/2026):
+   - Base SQLite migrada a Neon PostgreSQL (Free, aws-us-east-2).
+   - Backend en Render Free (Docker, Ohio) con CORS restringido al frontend.
+   - Frontend en Cloudflare Pages.
+   - Frontend: https://inventario-pos-bfw.pages.dev
+   - API: https://inventario-pos-api-pqju.onrender.com
+   - Validado con 29/29 pruebas públicas (login, inventario, reportes,
+     filtros, venta, stock, historial y turno).
+   - La base quedó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios,
+     1 turno abierto y 0 pedidos.
+
+3. Tareas opcionales después del despliegue:
+   - Enviar un ping cada 10 minutos a Render para evitar el arranque en frío
+     (el plan Free duerme tras 15 min sin tráfico).
+   - Eliminar el servicio Render antiguo `Inventario-pos` (rama `main`) cuando
+     se confirme que el nuevo despliegue es el definitivo.
+   - Recompilar el APK de Android con los últimos ajustes.

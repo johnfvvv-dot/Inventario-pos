@@ -2,7 +2,7 @@
 
 **Versión actual:** 1.1.0
 
-**Última actualización:** 23/10/2026
+**Última actualización:** 30/10/2026
 
 ## 1. Propósito del sistema
 
@@ -39,6 +39,11 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `/health`; configuración de red en `/api/config`.
 - **Empaquetado:** PyInstaller (`dist/InventarioPOS.exe`) y Capacitor
   (`frontend/android/`).
+- **Despliegue público (30/10/2026):** Neon PostgreSQL (Free, `aws-us-east-2`) +
+  Render (Docker, Free, Ohio) + Cloudflare Pages. Frontend:
+  https://inventario-pos-bfw.pages.dev; API:
+  https://inventario-pos-api-pqju.onrender.com. Ver
+  "Despliegue en la nube" en `README.md`.
 
 ## 3. Estado actual y ajustes recientes
 
@@ -147,6 +152,32 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   (`migraciones_sistema.fechas_locales_v1`).
 - El filtro "Hasta" del historial incluye el día completo.
 
+### Despliegue público
+
+- **Base:** Neon Free en `aws-us-east-2`, cadena *pooled* con
+  `sslmode=require&channel_binding=require`. La SQLite local
+  (`backend/data/inventario.db`) sigue intacta como respaldo.
+- **Backend:** Render Free (Docker, Ohio, rama `deploy/neon`, root `backend`,
+  health check `/health`). Variables: `DATABASE_URL`, `TZ=America/Bogota`,
+  `APP_TIMEZONE=America/Bogota`, `CORS_ORIGINS` con el origen exacto de Pages.
+  El plan Free se suspende a los 15 min sin tráfico; el arranque en frío tarda
+  30–60 s. No se usa SQLite ni disco persistente en Render.
+- **Frontend:** Cloudflare Pages (`inventario-pos`), build con
+  `REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api` y
+  `_redirects` para la SPA.
+- **Validación:** 29/29 pruebas públicas (login, inventario, reportes,
+  filtros, venta, stock, historial, turno y consola sin errores). La base quedó
+  limpia: 4 productos (stock 159), 9 mesas, 2 usuarios, 1 turno abierto y 0
+  pedidos.
+- **Corrección de Reportes:** `isoAhora()` en `ReportesPage.tsx` ahora incluye
+  milisegundos. Antes truncaba a segundos y una venta cobrada en el mismo
+  segundo en que se cargaba la página podía quedar fuera del rango
+  `desde`/`hasta` (los KPIs mostraban `$0` aunque el historial y el turno sí
+  reflejaban la venta).
+- **Alternativas descartadas:** Northflank Sandbox exige tarjeta para
+  verificar identidad; Hugging Face Docker Spaces responde `402` y requiere
+  PRO; Cloud Run y Oracle Always Free también piden tarjeta.
+
 ## 4. Pendientes por corregir / completar
 
 1. **Recompilar el APK**: el `.exe` ya incluye los últimos ajustes, pero el APK
@@ -161,10 +192,10 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
-6. **Despliegue público:** base migrada a Neon y validada con 29/29 pruebas;
-   falta autenticar Cloudflare y el hosting del backend (Northflank Sandbox,
-   Cloud Run u Oracle Always Free) para publicar las URLs finales. Ver la
-   sección "Despliegue en la nube" en `README.md`.
+6. **Despliegue público:** completado el 30/10/2026 con Neon + Render Free +
+   Cloudflare Pages y 29/29 pruebas. Quedan dos tareas opcionales: enviar un
+   ping cada 10 min para evitar el arranque en frío de Render y eliminar el
+   servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo.
 
 ## 5. Reglas de trabajo
 

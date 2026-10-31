@@ -241,8 +241,9 @@ el campo `usuario` al endpoint `POST /api/usuarios/login`.
 |---|---|---|
 | `Admin` | `1234` | Administrador |
 
-> Cambia la clave desde **Usuarios → Cambiar clave** en cuanto arranques en
-> producción.
+> `1234` es solo la clave inicial de una instalación local nueva. El despliegue
+> público usa claves fuertes para `Admin` y `Yeison`; cámbialas desde
+> **Usuarios → Cambiar clave** si alguna vez se comparten.
 
 ### Permisos
 
@@ -411,9 +412,14 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
-6. **Despliegue público:** la base ya se migró a Neon y se validó; falta
-   autenticar Cloudflare y el hosting del backend para publicar las URLs
-   finales. Ver [Despliegue en la nube](#despliegue-en-la-nube).
+6. **Despliegue público:** completado el 30/10/2026 con Neon + Render Free +
+   Cloudflare Pages, validado con 29/29 pruebas. Ver
+   [Despliegue en la nube](#despliegue-en-la-nube).
+7. **Mantener despierto Render (opcional):** enviar un ping cada 10 minutos si
+   se quiere evitar el arranque en frío de 30–60 s.
+8. **Retirar el servicio Render antiguo (opcional):** `Inventario-pos` (rama
+   `main`) sigue activo; eliminarlo cuando se confirme que el nuevo despliegue
+   es el definitivo.
 
 ## Git
 
@@ -441,124 +447,150 @@ git push -u origin feature/nueva-funcionalidad
 
 ## Despliegue en la nube
 
-**Estado (29/10/2026):** la base SQLite ya se migró a Neon y el sistema se
-validó contra esa base con 29/29 pruebas (login, inventario, reportes, filtros,
-venta, historial y turno). Falta publicar el backend y el frontend; para eso se
-necesita autenticar las cuentas de los proveedores.
+**Estado (30/10/2026):** publicado y validado de punta a punta con **29/29**
+pruebas en la URL pública (login, inventario, reportes, filtros, venta,
+historial y turno).
 
 ### Arquitectura
 
-| Componente | Servicio | Plan | Estado |
-|---|---|---|---|
-| Base de datos | Neon PostgreSQL | Free | Migrada y validada |
-| Backend | Northflank Sandbox (recomendado) / Google Cloud Run / Oracle Always Free | Gratis | Pendiente de credenciales |
-| Frontend | Cloudflare Pages | Free | Pendiente de credenciales |
+| Componente | Servicio | Plan | Región | URL |
+|---|---|---|---|---|
+| Base de datos | Neon PostgreSQL | Free | `aws-us-east-2` | Cadena *pooled* privada |
+| Backend | Render (Docker) | Free | Ohio | https://inventario-pos-api-pqju.onrender.com |
+| Frontend | Cloudflare Pages | Free | Global | https://inventario-pos-bfw.pages.dev |
 
-- **Koyeb** ya no tiene capa gratuita para servicios web (octubre 2026).
-- **Render y Railway** no se usan en este despliegue.
-- **Cloud Run** tiene cuota gratuita, pero exige cuenta de facturación con
-  tarjeta y puede tener cold starts con `min-instances=0`.
-- **Oracle Always Free** no tiene costo mensual, pero exige tarjeta y
-  administrar una VM.
-- **Northflank Sandbox** es la alternativa sin tarjeta: 2 servicios always-on,
-  Docker y hasta USD 20/mes de recursos.
+- **Neon Free:** 0.5 GB, sin tarjeta. Se usa la cadena *pooled* con
+  `sslmode=require&channel_binding=require`. La cadena completa vive en la
+  variable `DATABASE_URL` de Render, no en el repositorio.
+- **Render Free:** sin tarjeta. El servicio se suspende a los 15 minutos sin
+  tráfico y despierta en 30–60 s; incluye 750 horas-instancia/mes. La base de
+  datos **no** se guarda en Render: todo persiste en Neon.
+- **Cloudflare Pages:** build `npm run build`, salida `build`, fallback de SPA
+  con `frontend/public/_redirects`.
 
 ### Variables del backend
 
-| Variable | Valor |
+| Variable | Valor actual |
 |---|---|
-| `DATABASE_URL` | Cadena de Neon (usar la *pooled connection string*, `sslmode=require`) |
+| `DATABASE_URL` | Cadena *pooled* de Neon (`sslmode=require&channel_binding=require`) |
 | `TZ` | `America/Bogota` |
 | `APP_TIMEZONE` | `America/Bogota` |
-| `CORS_ORIGINS` | URL del frontend, p. ej. `https://inventario-pos.pages.dev` |
-| `PORT` | `8000` (Cloud Run lo inyecta) |
+| `CORS_ORIGINS` | `https://inventario-pos-bfw.pages.dev` |
+| `PORT` | Lo inyecta Render; el Dockerfile usa `${PORT:-8000}` |
+
+`CORS_ORIGINS` debe llevar el origen exacto del frontend, sin `/` final. Si se
+publica un dominio nuevo o un preview de Cloudflare Pages, se agrega separado
+por comas y se redeploya el backend.
 
 `ADMIN_PASSWORD` solo se usa al ejecutar la migración; no debe quedar como
 variable permanente del hosting.
 
 ### 1. Base de datos Neon
 
-1. Crear un proyecto en [Neon](https://neon.tech) (plan Free) en la región
-   `aws-us-east-1` o la más cercana.
+1. Crear un proyecto en [Neon](https://neon.tech) (plan Free) en
+   `aws-us-east-2` (Ohio).
 2. Copiar la cadena **pooled** de conexión.
 3. Desde `backend/`, ejecutar la migración (no modifica la SQLite original):
 
    ```bash
-   export DATABASE_URL="postgresql://...@...-pooler.../neondb?sslmode=require"
+   export DATABASE_URL="postgresql://...-pooler.../neondb?sslmode=require"
    export ADMIN_PASSWORD="una-clave-segura"
    python scripts/migrate_sqlite_to_postgres.py --reset
    ```
 
 4. Verificar que los conteos coincidan. El script conserva IDs y ajusta las
    secuencias.
-5. Cambiar también la clave de los demás usuarios antes de publicar. Las
-   claves de la SQLite local no se modifican.
+5. Cambiar también la clave de los demás usuarios antes de publicar. En este
+   despliegue `Admin` y `Yeison` usan claves fuertes; sus hashes están en Neon y
+   las claves no se guardan en el repositorio. La SQLite local no se modifica.
 
-### 2. Backend
+### 2. Backend en Render
 
-El backend ya incluye `backend/Dockerfile` y `backend/Procfile`. Expone
-`/health` y escucha en `$PORT`.
+1. Crear una cuenta en [Render](https://dashboard.render.com) con GitHub (no
+   pide tarjeta para el plan Free).
+2. **New → Web Service** y conectar el repositorio
+   `johnfvvv-dot/Inventario-pos`.
+3. Configurar:
+   - **Branch:** `deploy/neon`
+   - **Root Directory:** `backend`
+   - **Runtime:** Docker
+   - **Dockerfile Path:** `./Dockerfile`
+   - **Plan:** Free
+   - **Region:** Ohio
+   - **Health Check Path:** `/health`
+4. Agregar las variables de la tabla anterior y desplegar.
+5. Anotar la URL `https://<servicio>.onrender.com`.
 
-**Northflank Sandbox (recomendado si no se quiere tarjeta):**
+La rama `deploy/neon` tiene el proyecto en la raíz del repositorio para que
+Render encuentre `backend/`; la rama `master` conserva la carpeta
+`inventario-pos/`.
 
-1. Crear cuenta y conectar el repositorio de GitHub.
-2. Crear un servicio tipo *Dockerfile* con contexto `backend/`.
-3. Puerto `8000`, health check `/health`.
-4. Agregar las variables de la tabla anterior.
-5. Anotar la URL pública `https://...code.run`.
-
-**Google Cloud Run:**
-
-```bash
-gcloud run deploy inventario-pos-api \
-  --source backend \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --min-instances 0 \
-  --max-instances 1 \
-  --memory 512Mi \
-  --set-env-vars DATABASE_URL="...",TZ=America/Bogota,APP_TIMEZONE=America/Bogota,CORS_ORIGINS="https://<frontend>.pages.dev"
-```
-
-`min-instances=0` mantiene el costo dentro de la cuota gratuita; la primera
-petición después de un periodo inactivo puede tardar unos segundos.
-
-**Oracle Cloud Always Free:** crear una VM ARM, instalar Docker, ejecutar la
-imagen y poner Caddy o Nginx delante para HTTPS. Es la opción siempre activa,
-pero requiere cuenta, tarjeta y administración de la VM.
+**Nota sobre el plan Free:** tras 15 minutos sin tráfico la instancia se
+suspende. La primera petición tarda 30–60 s y las siguientes responden normal.
+Para evitar el arranque en frío se puede enviar un ping cada 10 minutos
+(consume horas-instancia, dentro de las 750 h/mes). No se recomienda para
+producción crítica.
 
 ### 3. Frontend en Cloudflare Pages
 
-1. Conectar el repositorio en Cloudflare Pages.
+1. Crear el proyecto `inventario-pos` en Cloudflare Pages.
 2. Configuración:
    - **Root directory:** `frontend`
    - **Build command:** `npm run build`
    - **Build output:** `build`
-   - **Variable:** `REACT_APP_API_URL=https://<backend>/api`
+   - **Variable:** `REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api`
 3. El archivo `frontend/public/_redirects` ya incluye el fallback de la SPA.
-4. Si se publica con Wrangler:
+4. Publicar con Wrangler:
 
    ```bash
    cd frontend
-   REACT_APP_API_URL=https://<backend>/api npm run build
-   npx wrangler pages deploy build --project-name inventario-pos
+   REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api npm run build
+   npx wrangler pages deploy build --project-name inventario-pos --branch main
    ```
 
-5. Agregar la URL de Pages a `CORS_ORIGINS` del backend y redeployar el backend.
+5. Agregar la URL de Pages a `CORS_ORIGINS` del backend y redeployar Render.
 
 ### 4. Pruebas después de publicar
 
-- `GET https://<backend>/health` responde `200`.
-- Login con el usuario administrador.
+- `GET https://inventario-pos-api-pqju.onrender.com/health` responde `200`.
+- Login con `Admin` y con `Yeison`.
 - Inventario: 4 productos y stock 159.
-- Reportes: filtros Hoy/Semana/Mes/Último turno, gráficas y CSV.
-- Crear una venta de prueba, cobrarla y verificar stock, historial y turno.
+- Reportes: filtros Hoy/Semana/Mes/Turno de ayer, gráficas y CSV.
+- Crear una venta de prueba, cobrarla y verificar stock (158), historial,
+  turno y ganancia (`$1.600`).
 - Revisar la consola del navegador: sin errores CORS ni HTTP 5xx.
+
+Resultado de la última ejecución: **29/29 pruebas OK**. Después de validar, la
+base se dejó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios, 1 turno
+abierto y 0 pedidos.
+
+### 5. Operación
+
+- **Cold start:** la primera visita tras 15 minutos de inactividad puede tardar
+  hasta un minuto. El health check de Render despierta el servicio.
+- **CORS:** si el frontend cambia de dominio, actualizar `CORS_ORIGINS` y
+  redeployar.
+- **Datos:** la SQLite local `backend/data/inventario.db` sigue intacta como
+  respaldo; Render no la usa.
+- **Servicio antiguo:** el servicio Render `Inventario-pos` (rama `main`,
+  Python, Oregón) se conserva sin cambios hasta confirmar que ya no se necesita.
+
+### Alternativas descartadas (30/10/2026)
+
+- **Northflank Sandbox:** aunque el plan es gratis, exige agregar una tarjeta
+  para verificar identidad antes de crear servicios.
+- **Hugging Face Docker Spaces:** responde `402 Payment Required`; los Spaces
+  Docker en `cpu-basic` requieren suscripción PRO.
+- **Koyeb:** ya no ofrece capa gratuita para servicios web (octubre 2026).
+- **Google Cloud Run y Oracle Always Free:** tienen cuota gratuita, pero exigen
+  cuenta de facturación o tarjeta.
 
 ### URLs finales
 
 | Servicio | URL |
 |---|---|
-| Frontend | Pendiente de publicar |
-| Backend | Pendiente de publicar |
-| Neon | Proyecto creado y migrado (claim pendiente) |
+| Frontend | https://inventario-pos-bfw.pages.dev |
+| Backend (API) | https://inventario-pos-api-pqju.onrender.com |
+| Documentación API | https://inventario-pos-api-pqju.onrender.com/docs |
+| Salud | https://inventario-pos-api-pqju.onrender.com/health |
+| Neon | Proyecto Free en `aws-us-east-2` (host *pooled* privado) |
