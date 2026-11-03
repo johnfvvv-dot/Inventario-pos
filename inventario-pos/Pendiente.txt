@@ -8,20 +8,22 @@ Listado de pendientes por corregir
      - Dependencias del frontend
    - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.
 
-2. Despliegue público (completado el 30/10/2026):
+2. Despliegue público e híbrido (completado):
    - Base SQLite migrada a Neon PostgreSQL (Free, aws-us-east-2).
    - Backend en Render Free (Docker, Ohio) con CORS restringido al frontend.
    - Frontend en Cloudflare Pages.
+   - Ejecutable híbrido `InventarioPOS.exe` con backend local, frontend
+     incluido y conexión directa a Neon.
    - Frontend: https://inventario-pos-bfw.pages.dev
    - API: https://inventario-pos-api-pqju.onrender.com
-   - Validado con 29/29 pruebas públicas (login, inventario, reportes,
-     filtros, venta, stock, historial y turno).
-   - La base quedó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios,
-     1 turno abierto y 0 pedidos.
+   - Validado con 29/29 pruebas públicas y 27/27 pruebas híbridas
+     (local, LAN, Pages->local y Pages->Render).
+   - La base quedó sin ventas de prueba: 4 productos (stock 159), 9 mesas,
+     2 usuarios y 0 pedidos.
 
 3. Tareas opcionales después del despliegue:
-   - Enviar un ping cada 10 minutos a Render para evitar el arranque en frío
-     (el plan Free duerme tras 15 min sin tráfico).
+   - No se envía ping a Render: la operación interna usa el `.exe` y Render
+     solo atiende accesos externos (puede tardar 30-60 s en despertar).
    - Eliminar el servicio Render antiguo `Inventario-pos` (rama `main`) cuando
      se confirme que el nuevo despliegue es el definitivo.
    - Recompilar el APK de Android con los últimos ajustes.

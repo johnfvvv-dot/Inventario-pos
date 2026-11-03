@@ -7,6 +7,11 @@ venv/
 data/
 *.db-journal
 
+# Configuracion local del ejecutable hibrido (contiene la clave de Neon)
+inventario-pos.env
+backend/app/_build_defaults.py
+neon_url.txt
+
 # Node.js
 node_modules/
 build/

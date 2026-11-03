@@ -1,15 +1,38 @@
 /** Pantalla de Login - Acceso por usuario. */
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../services/api";
+import {
+  api,
+  ApiInfo,
+  getApiInfo,
+  redetectarApiLocal,
+  resolverApiBase,
+} from "../services/api";
 
 export default function LoginPage() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [servidor, setServidor] = useState<ApiInfo | null>(getApiInfo());
+  const [buscandoLocal, setBuscandoLocal] = useState(false);
+  const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let vigente = true;
+    resolverApiBase()
+      .then((info) => {
+        if (vigente) setServidor(info);
+      })
+      .catch(() => {
+        /* si falla la sonda, el login mostrará el error correspondiente */
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -24,6 +47,24 @@ export default function LoginPage() {
       setError(err.message || "No se pudo iniciar sesión");
     } finally {
       setCargando(false);
+    }
+  };
+
+  const buscarServidorLocal = async () => {
+    setBuscandoLocal(true);
+    setAvisoLocal(null);
+    try {
+      const info = await redetectarApiLocal();
+      if (info) {
+        setServidor(info);
+        setAvisoLocal("Servidor local conectado. Ya puedes iniciar sesión.");
+      } else {
+        setAvisoLocal(
+          "No se encontró el servidor local. Verifica que InventarioPOS.exe esté abierto."
+        );
+      }
+    } finally {
+      setBuscandoLocal(false);
     }
   };
 
@@ -67,6 +108,33 @@ export default function LoginPage() {
 
           {error && <p className="error-msg">{error}</p>}
         </form>
+
+        <p className="muted api-servidor" title={servidor?.base}>
+          {servidor
+            ? servidor.mode === "local"
+              ? "Servidor local activo"
+              : "Servidor en la nube (Render)"
+            : "Detectando servidor..."}
+        </p>
+
+        {servidor?.mode === "cloud" && (
+          <div className="api-local-retry">
+            <button
+              type="button"
+              className="btn-link"
+              onClick={buscarServidorLocal}
+              disabled={buscandoLocal}
+            >
+              {buscandoLocal
+                ? "Buscando servidor local..."
+                : "¿Estás en el PC del negocio? Conectar al servidor local"}
+            </button>
+            <p className="muted small">
+              Si Chrome lo solicita, permite el acceso a la red local.
+            </p>
+            {avisoLocal && <p className="muted small">{avisoLocal}</p>}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -6,11 +6,11 @@ import socket
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.database import Base, SessionLocal, engine, _data_dir
+from app.database import Base, SessionLocal, engine, _data_dir, tipo_database
 from app.models import (
     Division,
     Mesa,
@@ -31,7 +31,7 @@ from app.routes.usuarios import router as usuarios_router
 from app.schemas import CLAVE_INICIAL
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
@@ -63,7 +63,21 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_private_network=True,
 )
+
+
+@app.middleware("http")
+async def permitir_red_privada(request: Request, call_next):
+    """Permite que el frontend público (HTTPS) consulte el backend local.
+
+    Chrome exige la cabecera ``Access-Control-Allow-Private-Network`` en las
+    peticiones desde un origen público hacia ``localhost`` o una IP LAN. Sin
+    ella, la detección automática del servidor local fallaría solo en Chrome.
+    """
+    respuesta = await call_next(request)
+    respuesta.headers["Access-Control-Allow-Private-Network"] = "true"
+    return respuesta
 
 # Routers
 app.include_router(usuarios_router, prefix="/api/usuarios", tags=["usuarios"])
@@ -401,20 +415,32 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "version": VERSION}
+    """Sonda usada por el frontend para elegir backend local o Render."""
+    return {
+        "status": "healthy",
+        "version": VERSION,
+        "database": tipo_database(),
+        "modo": "ejecutable" if getattr(sys, "frozen", False) else "desarrollo",
+    }
 
 
 @app.get("/api/config")
 def config():
     """Información de la instalación (la usan el móvil y la APK)."""
     build = _build_dir()
+    puerto = int(os.getenv("PUERTO", os.getenv("PORT", "8000")))
     return {
         "version": VERSION,
         "ip": _ip_local(),
-        "puerto": int(os.getenv("PORT", "8000")),
+        "puerto": puerto,
         "modo": "ejecutable" if getattr(sys, "frozen", False) else "desarrollo",
         "frontend_incorporado": (build / "index.html").exists(),
         "datos": str(_data_dir()),
+        "base_datos": tipo_database(),
+        "api_local": f"http://{_ip_local()}:{puerto}/api",
+        "api_nube": os.getenv(
+            "CLOUD_API_URL", "https://inventario-pos-api-pqju.onrender.com/api"
+        ),
     }
 
 

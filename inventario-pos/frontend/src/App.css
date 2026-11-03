@@ -78,6 +78,37 @@ a {
   font-size: 0.9rem;
 }
 
+.login-card .api-servidor {
+  margin: 0.9rem 0 0;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.api-local-retry {
+  margin-top: 0.35rem;
+  text-align: center;
+}
+
+.api-local-retry .btn-link {
+  background: none;
+  border: none;
+  color: var(--success);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.15rem;
+  text-decoration: underline;
+}
+
+.api-local-retry .btn-link:disabled {
+  color: var(--muted);
+  cursor: wait;
+}
+
+.api-local-retry .small {
+  margin: 0.35rem 0 0;
+  line-height: 1.35;
+}
+
 .login-form .form-group {
   margin-bottom: 1rem;
 }

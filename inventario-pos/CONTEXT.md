@@ -1,8 +1,8 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.1.0
+**Versión actual:** 1.2.0
 
-**Última actualización:** 30/10/2026
+**Última actualización:** 03/11/2026
 
 ## 1. Propósito del sistema
 
@@ -24,10 +24,13 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 - **Backend:** Python 3.10+, FastAPI, SQLAlchemy, Pydantic.
   Código en `backend/app/` (`main.py`, `models.py`, `schemas.py`, `routes/`).
-- **Base de datos:** SQLite por defecto.
-  - Desarrollo: `backend/data/inventario.db`.
-  - Ejecutable: `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
-  - Nube: PostgreSQL definiendo `DATABASE_URL`.
+- **Base de datos:** Neon PostgreSQL en el modo híbrido.
+  - `.exe` híbrido y Render: misma cadena *pooled* de Neon.
+  - Respaldo/desarrollo: SQLite en `backend/data/inventario.db` o
+    `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
+  - La cadena del `.exe` se incrusta al compilar (`_build_defaults.py`) y se
+    puede sobrescribir con `DATABASE_URL` o `inventario-pos.env` junto al
+    ejecutable.
 - **Frontend:** React 18 + TypeScript (Create React App), React Router y Chart.js.
   Código en `frontend/src/`.
 - **Autenticación:** usuario + clave con hash SHA-256. El login valida el campo
@@ -39,6 +42,12 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `/health`; configuración de red en `/api/config`.
 - **Empaquetado:** PyInstaller (`dist/InventarioPOS.exe`) y Capacitor
   (`frontend/android/`).
+- **Modo híbrido (03/11/2026):** el `.exe` levanta FastAPI en `0.0.0.0:8000`,
+  sirve el frontend y conecta a Neon. El frontend detecta el backend local en
+  orígenes privados/LAN; en Pages usa Render salvo que Chrome tenga concedido
+  el permiso *Local Network Access*, en cuyo caso prueba `localhost:8000`.
+  Incluye botón manual "Conectar al servidor local" y fallback seguro solo para
+  `GET`, `HEAD` y login.
 - **Despliegue público (30/10/2026):** Neon PostgreSQL (Free, `aws-us-east-2`) +
   Render (Docker, Free, Ohio) + Cloudflare Pages. Frontend:
   https://inventario-pos-bfw.pages.dev; API:
@@ -161,14 +170,18 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   health check `/health`). Variables: `DATABASE_URL`, `TZ=America/Bogota`,
   `APP_TIMEZONE=America/Bogota`, `CORS_ORIGINS` con el origen exacto de Pages.
   El plan Free se suspende a los 15 min sin tráfico; el arranque en frío tarda
-  30–60 s. No se usa SQLite ni disco persistente en Render.
+  30–60 s. No se usa SQLite ni disco persistente en Render. No se configura ping.
 - **Frontend:** Cloudflare Pages (`inventario-pos`), build con
-  `REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api` y
-  `_redirects` para la SPA.
-- **Validación:** 29/29 pruebas públicas (login, inventario, reportes,
-  filtros, venta, stock, historial, turno y consola sin errores). La base quedó
-  limpia: 4 productos (stock 159), 9 mesas, 2 usuarios, 1 turno abierto y 0
-  pedidos.
+  `REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api` y
+  `_redirects` para la SPA. `REACT_APP_API_URL` ya no se usa en producción
+  porque desactiva la detección híbrida.
+- **Ejecutable híbrido:** `scripts/build_hybrid_exe.ps1` (y `.bat`) genera
+  `backend/app/_build_defaults.py` desde `DATABASE_URL`/`inventario-pos.env`,
+  compila el frontend, ejecuta PyInstaller y borra el archivo temporal. El
+  `.exe` resultante usa Neon y sirve el frontend en el mismo puerto.
+- **Validación:** 29/29 pruebas públicas (30/10/2026) y 27/27 pruebas híbridas
+  (03/11/2026: 6 local, 6 LAN, 8 Pages→local, 7 Pages→Render). La base quedó
+  sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios.
 - **Corrección de Reportes:** `isoAhora()` en `ReportesPage.tsx` ahora incluye
   milisegundos. Antes truncaba a segundos y una venta cobrada en el mismo
   segundo en que se cargaba la página podía quedar fuera del rango
@@ -192,10 +205,10 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
-6. **Despliegue público:** completado el 30/10/2026 con Neon + Render Free +
-   Cloudflare Pages y 29/29 pruebas. Quedan dos tareas opcionales: enviar un
-   ping cada 10 min para evitar el arranque en frío de Render y eliminar el
-   servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo.
+6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. Queda opcional eliminar
+   el servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo. No
+   se envía ping a Render: la operación interna usa el `.exe`.
 
 ## 5. Reglas de trabajo
 
