@@ -113,6 +113,23 @@ def _ip_local() -> str:
         return "127.0.0.1"
 
 
+def _en_render() -> bool:
+    """True cuando el backend corre en Render (no en el PC del negocio)."""
+    return bool(
+        os.getenv("RENDER")
+        or os.getenv("RENDER_SERVICE_ID")
+        or os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    )
+
+
+def _modo_ejecucion() -> str:
+    if getattr(sys, "frozen", False):
+        return "ejecutable"
+    if _en_render():
+        return "nube"
+    return "desarrollo"
+
+
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
@@ -420,7 +437,7 @@ def health_check():
         "status": "healthy",
         "version": VERSION,
         "database": tipo_database(),
-        "modo": "ejecutable" if getattr(sys, "frozen", False) else "desarrollo",
+        "modo": _modo_ejecucion(),
     }
 
 
@@ -429,15 +446,16 @@ def config():
     """Información de la instalación (la usan el móvil y la APK)."""
     build = _build_dir()
     puerto = int(os.getenv("PUERTO", os.getenv("PORT", "8000")))
+    ip = "" if _en_render() else _ip_local()
     return {
         "version": VERSION,
-        "ip": _ip_local(),
+        "ip": ip,
         "puerto": puerto,
-        "modo": "ejecutable" if getattr(sys, "frozen", False) else "desarrollo",
+        "modo": _modo_ejecucion(),
         "frontend_incorporado": (build / "index.html").exists(),
         "datos": str(_data_dir()),
         "base_datos": tipo_database(),
-        "api_local": f"http://{_ip_local()}:{puerto}/api",
+        "api_local": f"http://{ip}:{puerto}/api" if ip else "",
         "api_nube": os.getenv(
             "CLOUD_API_URL", "https://inventario-pos-api-pqju.onrender.com/api"
         ),
