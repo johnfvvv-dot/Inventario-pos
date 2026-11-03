@@ -1,26 +1,229 @@
 /**
  * Servicios de conexión con el backend FastAPI.
  *
- * La URL base se deduce del host con el que se abrió la app:
- *  - Desarrollo (React :3000) → http://localhost:8000/api
- *  - Ejecutable (.exe)         → http://localhost:8000/api
- *  - Móvil / APK               → http://192.168.1.6:8000/api
- * Para fijar una IP concreta: REACT_APP_API_URL=http://IP:8000/api
+ * Modo híbrido:
+ *  1. Si la app se abre desde el ejecutable o desde la IP LAN del PC, usa el
+ *     backend local (mismo origen). Así la operación interna no depende de
+ *     Render ni de su arranque en frío.
+ *  2. Si el backend local no responde, usa automáticamente el backend público
+ *     de Render.
+ *  3. La detección se hace al cargar la página. Para fijar una URL concreta
+ *     (pruebas o instalaciones especiales) se puede definir
+ *     REACT_APP_API_URL=http://IP:8000/api.
+ *
+ * Variables de compilación:
+ *  - REACT_APP_CLOUD_API_URL: URL pública de Render (respaldo).
+ *  - REACT_APP_LOCAL_API_URL: URL local explícita (opcional).
+ *  - REACT_APP_API_URL: fuerza una única URL y desactiva la detección.
  */
-const detectApiBase = (): string => {
-  const envUrl = process.env.REACT_APP_API_URL;
-  if (envUrl) return envUrl;
+export type ApiMode = "local" | "cloud";
 
-  if (typeof window !== "undefined" && window.location.hostname) {
-    return `http://${window.location.hostname}:8000/api`;
+export interface ApiInfo {
+  base: string;
+  mode: ApiMode;
+}
+
+const CLOUD_API_FALLBACK = "https://inventario-pos-api-pqju.onrender.com/api";
+
+function normalizarBase(url: string): string {
+  const limpia = url.trim().replace(/\/+$/, "");
+  return /\/api$/i.test(limpia) ? limpia : `${limpia}/api`;
+}
+
+const CLOUD_API_URL = normalizarBase(
+  process.env.REACT_APP_CLOUD_API_URL || CLOUD_API_FALLBACK
+);
+const FORCED_API_URL = process.env.REACT_APP_API_URL
+  ? normalizarBase(process.env.REACT_APP_API_URL)
+  : "";
+const LOCAL_API_OVERRIDE = process.env.REACT_APP_LOCAL_API_URL
+  ? normalizarBase(process.env.REACT_APP_LOCAL_API_URL)
+  : "";
+
+/** La sonda local debe ser rápida: no queremos retrasar el login. */
+const LOCAL_PROBE_TIMEOUT_MS = 2500;
+/** Sonda manual: Chrome puede mostrar el permiso de red local y esperar. */
+const LOCAL_MANUAL_PROBE_TIMEOUT_MS = 30000;
+/** Peticiones al backend local (mismo PC o LAN). */
+const LOCAL_REQUEST_TIMEOUT_MS = 15000;
+/** Render Free puede tardar 30–60 s en despertar; damos margen. */
+const CLOUD_REQUEST_TIMEOUT_MS = 75000;
+
+function esIPPrivada(host: string): boolean {
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host.endsWith(".local") ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+function urlHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
   }
-  return "http://localhost:8000/api";
-};
+}
 
-export const API_BASE = detectApiBase();
+function origenDeApi(base: string): string {
+  return base.replace(/\/api\/?$/i, "");
+}
 
-/** Timeout de la petición: evita que la interfaz se quede cargando eternamente */
-const REQUEST_TIMEOUT_MS = 10000;
+type EstadoPermisoRed = "granted" | "denied" | "prompt" | "unsupported";
+
+/**
+ * Estado del permiso "Local Network Access" (Chrome 142+).
+ *
+ * Una página pública (HTTPS) necesita permiso para consultar localhost. No
+ * disparamos la sonda automática si el permiso aún no se concedió: así los
+ * visitantes externos van directo a Render y no ven un aviso de red local.
+ * El botón "Conectar al servidor local" del login sí puede solicitarlo.
+ */
+async function estadoPermisoRedLocal(): Promise<EstadoPermisoRed> {
+  try {
+    const estado = await navigator.permissions.query({
+      name: "local-network-access" as PermissionName,
+    });
+    return estado.state as EstadoPermisoRed;
+  } catch {
+    // Navegador sin Local Network Access: se intenta la sonda normal.
+    return "unsupported";
+  }
+}
+
+/** Candidatos locales, en orden de preferencia. */
+function candidatosLocales(): string[] {
+  const { protocol, hostname, port } = window.location;
+  const lista: string[] = [];
+  const agregar = (base: string) => {
+    const normalizada = normalizarBase(base);
+    if (!lista.includes(normalizada)) lista.push(normalizada);
+  };
+
+  if (LOCAL_API_OVERRIDE) agregar(LOCAL_API_OVERRIDE);
+
+  if (esIPPrivada(hostname)) {
+    // Mismo origen: el .exe sirve frontend y API en el mismo puerto.
+    agregar(`${protocol}//${hostname}${port ? `:${port}` : ""}/api`);
+    agregar(`http://${hostname}:8000/api`);
+  }
+
+  // En el PC del negocio, el backend local escucha en localhost:8000.
+  if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1") {
+    agregar("http://localhost:8000/api");
+  }
+
+  return lista;
+}
+
+/** Comprueba que el backend responde y que es realmente Inventario POS. */
+async function probarSalud(
+  base: string,
+  timeoutMs: number = LOCAL_PROBE_TIMEOUT_MS
+): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const respuesta = await fetch(`${origenDeApi(base)}/health`, {
+      method: "GET",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!respuesta.ok) return false;
+    const datos: any = await respuesta.json();
+    return datos?.status === "healthy";
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+let apiInfo: ApiInfo | null = null;
+let deteccionEnCurso: Promise<ApiInfo> | null = null;
+
+/** Última elección de backend (null mientras se está detectando). */
+export function getApiInfo(): ApiInfo | null {
+  return apiInfo;
+}
+
+/**
+ * Resuelve una sola vez por carga de página qué backend usar.
+ * La detección se puede repetir recargando la página.
+ */
+export function resolverApiBase(): Promise<ApiInfo> {
+  if (apiInfo) return Promise.resolve(apiInfo);
+  if (deteccionEnCurso) return deteccionEnCurso;
+
+  deteccionEnCurso = (async () => {
+    if (FORCED_API_URL) {
+      apiInfo = {
+        base: FORCED_API_URL,
+        mode: esIPPrivada(urlHost(FORCED_API_URL)) ? "local" : "cloud",
+      };
+      return apiInfo;
+    }
+
+    const enRedLocal = esIPPrivada(window.location.hostname);
+    const permiso = enRedLocal ? "granted" : await estadoPermisoRedLocal();
+
+    if (enRedLocal || permiso === "granted" || permiso === "unsupported") {
+      for (const base of candidatosLocales()) {
+        if (await probarSalud(base)) {
+          apiInfo = { base, mode: "local" };
+          console.info(`[API] Backend local detectado: ${base}`);
+          return apiInfo;
+        }
+      }
+    } else {
+      console.info(
+        `[API] Origen público sin permiso de red local (${permiso}); usando Render.`
+      );
+    }
+
+    apiInfo = { base: CLOUD_API_URL, mode: "cloud" };
+    console.info(`[API] Usando Render: ${CLOUD_API_URL}`);
+    return apiInfo;
+  })().finally(() => {
+    deteccionEnCurso = null;
+  });
+
+  return deteccionEnCurso;
+}
+
+function usarNube(): ApiInfo {
+  apiInfo = { base: CLOUD_API_URL, mode: "cloud" };
+  return apiInfo;
+}
+
+/**
+ * Reintenta la detección local desde un clic del usuario.
+ *
+ * Chrome 142+ exige el permiso "Local Network Access" para que una página
+ * pública (HTTPS) consulte localhost o la red local. El clic del usuario
+ * permite mostrar ese aviso y esperar a que lo conceda.
+ */
+export async function redetectarApiLocal(): Promise<ApiInfo | null> {
+  for (const base of candidatosLocales()) {
+    if (await probarSalud(base, LOCAL_MANUAL_PROBE_TIMEOUT_MS)) {
+      apiInfo = { base, mode: "local" };
+      console.info(`[API] Backend local detectado manualmente: ${base}`);
+      return apiInfo;
+    }
+  }
+  return null;
+}
+
+/** Error de red (no de negocio): permite reintentar contra Render. */
+class ErrorRed extends Error {
+  readonly esErrorRed = true;
+}
 
 /** Convierte los errores de validación de FastAPI en un texto legible. */
 function detalleError(detail: unknown): string {
@@ -57,37 +260,48 @@ function idPositivo(valor: number, nombre: string): number {
   return numero;
 }
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+async function ejecutarFetch<T>(
+  info: ApiInfo,
+  url: string,
+  options: RequestInit
+): Promise<T> {
+  const timeout =
+    info.mode === "cloud" ? CLOUD_REQUEST_TIMEOUT_MS : LOCAL_REQUEST_TIMEOUT_MS;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = window.setTimeout(() => controller.abort(), timeout);
 
   let response: Response;
   try {
-    // Garantiza que la API_BASE no termine en slash y que url siempre empiece con uno
-    const cleanBase = API_BASE.replace(/\/$/, "");
+    // Garantiza que la base no termine en slash y que url empiece con uno.
+    const cleanBase = info.base.replace(/\/$/, "");
     const cleanUrl = url.startsWith("/") ? url : `/${url}`;
 
     response = await fetch(`${cleanBase}${cleanUrl}`, {
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "69420"
+        "ngrok-skip-browser-warning": "69420",
       },
       signal: controller.signal,
       ...options,
     });
   } catch (err: any) {
     if (err?.name === "AbortError") {
-      throw new Error(
-        `El backend no respondió en ${REQUEST_TIMEOUT_MS / 1000}s. ` +
-          `Verifica que esté corriendo en ${API_BASE}`
+      throw new ErrorRed(
+        `El backend no respondió en ${Math.round(timeout / 1000)} s ` +
+          `(${info.base}).` +
+          (info.mode === "cloud"
+            ? " Render puede tardar 30–60 s en despertar; intenta de nuevo."
+            : " Verifica que InventarioPOS.exe siga abierto.")
       );
     }
-    throw new Error(
-      `No se pudo conectar con el backend (${API_BASE}). ` +
-        `Revisa que el servidor esté levantado y que la IP ${API_BASE} sea correcta.`
+    throw new ErrorRed(
+      `No se pudo conectar con el backend (${info.base}).` +
+        (info.mode === "cloud"
+          ? " Revisa la conexión a internet e intenta de nuevo."
+          : " Verifica que InventarioPOS.exe esté abierto y que el celular esté en la misma WiFi.")
     );
   } finally {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
   }
 
   if (!response.ok) {
@@ -102,6 +316,34 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  let info = await resolverApiBase();
+
+  try {
+    return await ejecutarFetch<T>(info, url, options);
+  } catch (err: any) {
+    // Solo reintentamos operaciones seguras (lectura y login). Un POST de
+    // venta no se repite automáticamente para no duplicar cobros.
+    const metodo = (options.method || "GET").toUpperCase();
+    const reintentable =
+      metodo === "GET" || metodo === "HEAD" || url === "/usuarios/login";
+
+    if (
+      info.mode === "local" &&
+      err?.esErrorRed === true &&
+      reintentable
+    ) {
+      console.warn(
+        "[API] El backend local dejó de responder; reintentando con Render."
+      );
+      info = usarNube();
+      return ejecutarFetch<T>(info, url, options);
+    }
+
+    throw err;
+  }
 }
 
 export const FORMAS_PAGO = [

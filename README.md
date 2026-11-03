@@ -4,14 +4,54 @@ Sistema web y de escritorio de inventario y punto de venta para pequeños
 negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
 pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
-**Versión actual:** 1.1.0
+**Versión actual:** 1.2.0
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
 - **Frontend:** React 18 + TypeScript
-- **Base de datos:** SQLite (local) / PostgreSQL (nube)
-- **Ejecución inicial:** local en la PC, sin costos de servidor
+- **Base de datos:** Neon PostgreSQL (modo híbrido) / SQLite (respaldo local)
+- **Ejecución:** `.exe` local + Render Free como respaldo + Cloudflare Pages
 
-## Funcionalidades (v1.1.0)
+## Modo híbrido (v1.2.0)
+
+El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador:
+
+- El `.exe` levanta FastAPI en `http://localhost:8000`, sirve el frontend React
+  y conecta directamente con **Neon** (la misma base que Render).
+- Mientras la ventana del `.exe` siga abierta, la operación interna no depende
+  de Render ni de su arranque en frío.
+- Los celulares/tablets de la misma WiFi abren `http://IP_DEL_PC:8000` y usan
+  el backend local (sin pasar por internet).
+- El frontend público de Cloudflare Pages se usa para accesos externos. Si el
+  backend local no está disponible, cambia automáticamente a Render.
+
+### Lógica de detección
+
+| Origen con el que se abre la app | Backend usado |
+|---|---|
+| `http://localhost:8000` (el `.exe`) | Local, mismo origen |
+| `http://192.168.x.x:8000` u otra IP LAN | Local, mismo origen |
+| `https://inventario-pos-bfw.pages.dev` en el PC del negocio | Local si Chrome ya concedió el permiso de red local; si no, Render |
+| `https://inventario-pos-bfw.pages.dev` desde fuera de la red | Render directamente |
+
+1. Si la página se sirve desde una IP privada/LAN, el frontend prueba
+   `GET /health` contra ese mismo origen y contra `http://<host>:8000`.
+2. Si el `/health` responde `status: healthy`, usa ese backend para todas las
+   llamadas.
+3. Si no responde, usa `https://inventario-pos-api-pqju.onrender.com/api`.
+4. En una página pública (Pages), Chrome 142+ exige el permiso **Local Network
+   Access** para consultar `localhost`. El frontend no lanza ese aviso a los
+   visitantes externos: va directo a Render y muestra el botón
+   **"¿Estás en el PC del negocio? Conectar al servidor local"**. Al pulsarlo,
+   Chrome solicita el permiso y, si se concede, la sesión usa el backend local.
+5. Si el backend local se cae a mitad de una sesión, solo se reintentan
+   automáticamente operaciones seguras (`GET`, `HEAD`, login). Un `POST` de
+   venta o cobro **no** se repite para evitar duplicados.
+
+> **Importante:** una página HTTPS no puede descubrir por sí sola la IP LAN del
+> PC. Para uso interno abre siempre `http://IP_DEL_PC:8000` en el celular o
+> tablet; para uso externo usa la URL de Cloudflare Pages.
+
+## Funcionalidades (v1.2.0)
 
 ### Módulos
 
@@ -188,12 +228,25 @@ yarn start
 
 ### 4. Base de datos
 
-- En desarrollo se crea automáticamente en `backend/data/inventario.db` con
-  usuarios, productos y mesas de ejemplo la primera vez que arranca el backend.
-- El ejecutable de Windows guarda los datos en
-  `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
-- Para usar PostgreSQL, define la variable de entorno `DATABASE_URL` antes de
-  iniciar el backend.
+- En desarrollo, si no se define `DATABASE_URL`, se crea automáticamente
+  `backend/data/inventario.db` con usuarios, productos y mesas de ejemplo.
+- El `.exe` híbrido usa **Neon** por defecto: la cadena se incrusta al compilar
+  desde `inventario-pos.env`, `backend/.env` o la variable `DATABASE_URL`.
+- Orden de prioridad del `.exe`:
+  1. Variable de entorno `DATABASE_URL`.
+  2. Archivo `inventario-pos.env` junto al ejecutable.
+  3. Cadena compilada en el propio `.exe`.
+  4. SQLite local en `%LOCALAPPDATA%\InventarioPOS\inventario.db` (solo si no
+     hay ninguna cadena; la consola muestra un aviso).
+- Para cambiar la cadena sin recompilar, crea `inventario-pos.env` junto al
+  `.exe`:
+
+  ```env
+  DATABASE_URL=postgresql://usuario:clave@host-pooler.../neondb?sslmode=require
+  ```
+
+> El `.exe` contiene la cadena de Neon. No lo publiques ni lo compartas fuera
+> del negocio. Si se filtra, rota la clave del usuario de Neon y recompila.
 
 ## Ejemplos de uso básico
 
@@ -291,13 +344,17 @@ desactivado.
 
 ## Acceso desde celular o tablet (misma WiFi)
 
-1. Obtén la IP de la PC con `ipconfig` (Windows).
-2. Inicia el backend con `--host 0.0.0.0`.
-3. Abre en el dispositivo: `http://IP_DE_LA_PC:3000` (desarrollo) o
-   `http://IP_DE_LA_PC:8000` (build/ejecutable).
-4. El frontend detecta automáticamente la IP del host; si necesitas fijarla,
-   define `REACT_APP_API_URL=http://IP_DE_LA_PC:8000/api` antes de compilar.
-5. Permite los puertos 3000 y 8000 en el firewall de Windows.
+1. Ejecuta `InventarioPOS.exe` en el PC del negocio.
+2. La consola muestra la IP local, por ejemplo:
+   `http://192.168.1.14:8000`.
+3. Abre esa URL en el celular/tablet (misma red WiFi).
+4. La app detecta que está en una IP privada y usa el backend local.
+5. Si Windows lo solicita, permite el puerto **8000** en el firewall para redes
+   privadas.
+
+No uses la URL HTTPS de Cloudflare Pages para el uso interno: el navegador no
+puede descubrir la IP LAN desde un origen público y el tráfico interno acabaría
+en Render. La URL pública es para accesos desde fuera del negocio.
 
 ## Solución de problemas
 
@@ -359,20 +416,39 @@ inventario-pos/
 ## Ejecutable de escritorio (Windows)
 
 `InventarioPOS.exe` es un archivo único que incluye el backend (FastAPI) y el
-frontend (React compilado). Al ejecutarlo:
+frontend (React compilado). En modo híbrido:
 
 - Levanta el servidor en `http://localhost:8000` y abre el navegador.
-- Muestra en consola la IP local para conectar el celular.
-- Guarda los datos en `%LOCALAPPDATA%\InventarioPOS\inventario.db`.
-- Se puede copiar a otra PC y funciona sin instalar Python ni Node.js.
+- Conecta con **Neon** (la misma base que Render) usando la cadena incrustada.
+- Muestra en consola la IP local para conectar el celular/tablet.
+- Si no hay cadena de Neon, cae en SQLite
+  (`%LOCALAPPDATA%\InventarioPOS\inventario.db`) y muestra un aviso.
+- No requiere Python ni Node.js en el PC del negocio.
+- Debe permanecer abierto mientras el negocio esté operando.
 
 ```powershell
-# Construir el .exe (recompila el frontend y empaqueta)
-scripts\build_exe.bat
+# Compilar el .exe híbrido (frontend + Neon + Render)
+scripts\build_hybrid_exe.bat
+
+# También se puede pasar la cadena directamente
+scripts\build_hybrid_exe.bat -DatabaseUrl "postgresql://..."
 
 # Crear acceso directo en el escritorio
 scripts\crear_acceso_directo.bat
 ```
+
+El script de compilación:
+
+1. Lee `DATABASE_URL` desde `-DatabaseUrl`, la variable de entorno,
+   `inventario-pos.env` (raíz) o `backend/.env`.
+2. Genera temporalmente `backend/app/_build_defaults.py` con la cadena.
+3. Compila el frontend con
+   `REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api`.
+4. Ejecuta PyInstaller con `build_exe.spec`.
+5. Borra `_build_defaults.py` para no dejar la clave en el árbol de trabajo.
+
+`backend/app/_build_defaults.py`, `inventario-pos.env` y `neon_url.txt` están en
+`.gitignore`. El ejecutable final queda en `dist\InventarioPOS.exe`.
 
 ## Aplicación Android (APK)
 
@@ -412,11 +488,12 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
-6. **Despliegue público:** completado el 30/10/2026 con Neon + Render Free +
-   Cloudflare Pages, validado con 29/29 pruebas. Ver
-   [Despliegue en la nube](#despliegue-en-la-nube).
-7. **Mantener despierto Render (opcional):** enviar un ping cada 10 minutos si
-   se quiere evitar el arranque en frío de 30–60 s.
+6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. El `.exe` híbrido fue
+   validado con 6/6 pruebas locales, 6/6 LAN, 8/8 Pages→local y 7/7
+   Pages→Render. Ver [Despliegue en la nube](#despliegue-en-la-nube).
+7. **Render en frío:** ya no se envía ping. La operación interna usa el `.exe`;
+   Render solo se usa para accesos externos y puede tardar 30–60 s en despertar.
 8. **Retirar el servicio Render antiguo (opcional):** `Inventario-pos` (rama
    `main`) sigue activo; eliminarlo cuando se confirme que el nuevo despliegue
    es el definitivo.
@@ -443,30 +520,35 @@ git push -u origin feature/nueva-funcionalidad
 | Versión | Commit | Contenido |
 |---|---|---|
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
-| `v1.1.0` (actual) | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
+| `v1.1.0` | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
+| `v1.2.0` (actual) | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
 
 ## Despliegue en la nube
 
-**Estado (30/10/2026):** publicado y validado de punta a punta con **29/29**
-pruebas en la URL pública (login, inventario, reportes, filtros, venta,
-historial y turno).
+**Estado (03/11/2026):** modo híbrido implementado y validado. El `.exe`
+conecta a Neon, la detección local/Render funciona y el frontend público quedó
+desplegado en Cloudflare Pages.
 
 ### Arquitectura
 
 | Componente | Servicio | Plan | Región | URL |
 |---|---|---|---|---|
+| Operación interna | `InventarioPOS.exe` en el PC | — | Local | `http://localhost:8000` / `http://IP-LAN:8000` |
 | Base de datos | Neon PostgreSQL | Free | `aws-us-east-2` | Cadena *pooled* privada |
-| Backend | Render (Docker) | Free | Ohio | https://inventario-pos-api-pqju.onrender.com |
-| Frontend | Cloudflare Pages | Free | Global | https://inventario-pos-bfw.pages.dev |
+| Backend respaldo | Render (Docker) | Free | Ohio | https://inventario-pos-api-pqju.onrender.com |
+| Frontend externo | Cloudflare Pages | Free | Global | https://inventario-pos-bfw.pages.dev |
 
 - **Neon Free:** 0.5 GB, sin tarjeta. Se usa la cadena *pooled* con
-  `sslmode=require&channel_binding=require`. La cadena completa vive en la
-  variable `DATABASE_URL` de Render, no en el repositorio.
+  `sslmode=require&channel_binding=require`. La misma cadena la usan el `.exe`
+  y Render; la cadena completa vive en la variable `DATABASE_URL` de Render y
+  se incrusta al compilar el ejecutable, nunca en el repositorio.
 - **Render Free:** sin tarjeta. El servicio se suspende a los 15 minutos sin
-  tráfico y despierta en 30–60 s; incluye 750 horas-instancia/mes. La base de
-  datos **no** se guarda en Render: todo persiste en Neon.
+  tráfico y despierta en 30–60 s. Se usa como respaldo externo; la operación
+  interna no depende de él mientras el `.exe` esté abierto. No se configura
+  ping.
 - **Cloudflare Pages:** build `npm run build`, salida `build`, fallback de SPA
-  con `frontend/public/_redirects`.
+  con `frontend/public/_redirects`. La variable de compilación es
+  `REACT_APP_CLOUD_API_URL` (ya no `REACT_APP_API_URL`).
 
 ### Variables del backend
 
@@ -526,10 +608,11 @@ Render encuentre `backend/`; la rama `master` conserva la carpeta
 `inventario-pos/`.
 
 **Nota sobre el plan Free:** tras 15 minutos sin tráfico la instancia se
-suspende. La primera petición tarda 30–60 s y las siguientes responden normal.
-Para evitar el arranque en frío se puede enviar un ping cada 10 minutos
-(consume horas-instancia, dentro de las 750 h/mes). No se recomienda para
-producción crítica.
+suspende. La primera petición externa tarda 30–60 s y las siguientes responden
+normal. En el modo híbrido **no se envía ping**: la operación interna usa el
+`.exe` local y Render solo atiende accesos externos. Si se quisiera evitar el
+arranque en frío, un ping cada 10 minutos consumiría horas-instancia (dentro de
+las 750 h/mes), pero no es necesario.
 
 ### 3. Frontend en Cloudflare Pages
 
@@ -538,17 +621,20 @@ producción crítica.
    - **Root directory:** `frontend`
    - **Build command:** `npm run build`
    - **Build output:** `build`
-   - **Variable:** `REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api`
+   - **Variable:** `REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api`
 3. El archivo `frontend/public/_redirects` ya incluye el fallback de la SPA.
 4. Publicar con Wrangler:
 
    ```bash
    cd frontend
-   REACT_APP_API_URL=https://inventario-pos-api-pqju.onrender.com/api npm run build
+   REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api npm run build
    npx wrangler pages deploy build --project-name inventario-pos --branch main
    ```
 
 5. Agregar la URL de Pages a `CORS_ORIGINS` del backend y redeployar Render.
+
+> `REACT_APP_API_URL` fuerza una única URL y desactiva la detección híbrida.
+> Para el despliegue normal usa solo `REACT_APP_CLOUD_API_URL`.
 
 ### 4. Pruebas después de publicar
 
@@ -560,20 +646,41 @@ producción crítica.
   turno y ganancia (`$1.600`).
 - Revisar la consola del navegador: sin errores CORS ni HTTP 5xx.
 
-Resultado de la última ejecución: **29/29 pruebas OK**. Después de validar, la
-base se dejó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios, 1 turno
-abierto y 0 pedidos.
+Resultado: **29/29 pruebas públicas** (30/10/2026) y **27/27 pruebas del modo
+híbrido** (03/11/2026: local, LAN, Pages→local y Pages→Render). Después de
+validar, la base se dejó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios y
+0 pedidos de prueba.
 
 ### 5. Operación
 
-- **Cold start:** la primera visita tras 15 minutos de inactividad puede tardar
-  hasta un minuto. El health check de Render despierta el servicio.
+- **Cold start:** la primera visita externa tras 15 minutos de inactividad puede
+  tardar 30–60 s. El health check de Render despierta el servicio. No se
+  configura ping: la operación interna usa el `.exe`.
 - **CORS:** si el frontend cambia de dominio, actualizar `CORS_ORIGINS` y
-  redeployar.
-- **Datos:** la SQLite local `backend/data/inventario.db` sigue intacta como
-  respaldo; Render no la usa.
+  redeployar. El backend local responde con `Access-Control-Allow-Origin: *`
+  para que funcione desde `localhost` y desde la IP LAN.
+- **Red local:** Chrome 142+ puede mostrar el permiso **Local Network Access**
+  cuando una página pública consulta `localhost`. El botón del login permite
+  concederlo; para uso interno es más simple abrir `http://IP-LAN:8000`.
+- **Datos:** la SQLite local `backend/data/inventario.db` se conserva como
+  respaldo de desarrollo; la operación híbrida persiste en Neon.
+- **Seguridad del `.exe`:** contiene la cadena de Neon. No compartirlo, no
+  subirlo a repositorios ni enviarlo por canales públicos. Para rotar la clave,
+  actualiza Neon, Render y recompila el ejecutable.
 - **Servicio antiguo:** el servicio Render `Inventario-pos` (rama `main`,
   Python, Oregón) se conserva sin cambios hasta confirmar que ya no se necesita.
+
+### Pruebas del modo híbrido
+
+| Prueba | Resultado |
+|---|---|
+| `/health` del `.exe` con `database: postgresql` | OK |
+| Login `Admin` y `Yeison` contra Neon desde el `.exe` | OK |
+| Inventario: 4 productos, stock 159 | OK |
+| `http://localhost:8000` detecta servidor local y login | 6/6 OK |
+| `http://192.168.1.14:8000` (simulación de dispositivo LAN) | 6/6 OK |
+| Pages en el PC, permiso de red local concedido, usa localhost | 8/8 OK |
+| Pages sin backend local, usa Render y login | 7/7 OK |
 
 ### Alternativas descartadas (30/10/2026)
 
@@ -589,8 +696,9 @@ abierto y 0 pedidos.
 
 | Servicio | URL |
 |---|---|
-| Frontend | https://inventario-pos-bfw.pages.dev |
-| Backend (API) | https://inventario-pos-api-pqju.onrender.com |
+| Frontend externo | https://inventario-pos-bfw.pages.dev |
+| Backend respaldo (API) | https://inventario-pos-api-pqju.onrender.com |
 | Documentación API | https://inventario-pos-api-pqju.onrender.com/docs |
-| Salud | https://inventario-pos-api-pqju.onrender.com/health |
+| Salud (Render) | https://inventario-pos-api-pqju.onrender.com/health |
+| Operación local | `http://localhost:8000` / `http://IP-LAN:8000` |
 | Neon | Proyecto Free en `aws-us-east-2` (host *pooled* privado) |
