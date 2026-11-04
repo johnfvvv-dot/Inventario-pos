@@ -186,11 +186,11 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `backend/app/_build_defaults.py` desde `DATABASE_URL`/`inventario-pos.env`,
   compila el frontend, ejecuta PyInstaller y borra el archivo temporal. El
   `.exe` resultante usa Neon y sirve el frontend en el mismo puerto.
-- **Validación:** 29/29 pruebas públicas (30/10/2026) y 27/27 pruebas híbridas
-  (03/11/2026: 6 local, 6 LAN, 8 Pages→local, 7 Pages→Render). La base quedó
-  sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios. En la
-  1.2.1 se repiten las cuatro suites y se agrega una regresión que compila con
-  `REACT_APP_API_URL` apuntando a ngrok para confirmar que se ignora.
+- **Validación:** 29/29 pruebas públicas (30/10/2026) y 36/36 pruebas híbridas
+  en la 1.2.1 (03/11/2026: 8 local, 8 LAN, 11 Pages→local, 9 Pages→Render). La
+  base quedó sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios.
+  Se agrega una regresión que compila con `REACT_APP_API_URL` apuntando a ngrok
+  para confirmar que se ignora.
 - **Corrección de Reportes:** `isoAhora()` en `ReportesPage.tsx` ahora incluye
   milisegundos. Antes truncaba a segundos y una venta cobrada en el mismo
   segundo en que se cargaba la página podía quedar fuera del rango
