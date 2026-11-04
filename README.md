@@ -515,8 +515,8 @@ pantalla de inicio"**. Queda como una app instalada con icono propio.
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
-   03/11/2026 con Neon + Render Free + Cloudflare Pages. El `.exe` híbrido fue
-   validado con 6/6 pruebas locales, 6/6 LAN, 8/8 Pages→local y 7/7
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. El `.exe` híbrido 1.2.1
+   fue validado con 8/8 pruebas locales, 8/8 LAN, 11/11 Pages→local y 9/9
    Pages→Render. Ver [Despliegue en la nube](#despliegue-en-la-nube).
 7. **Render en frío:** ya no se envía ping. La operación interna usa el `.exe`;
    Render solo se usa para accesos externos y puede tardar 30–60 s en despertar.
@@ -675,10 +675,10 @@ las 750 h/mes), pero no es necesario.
   turno y ganancia (`$1.600`).
 - Revisar la consola del navegador: sin errores CORS ni HTTP 5xx.
 
-Resultado: **29/29 pruebas públicas** (30/10/2026) y **27/27 pruebas del modo
-híbrido** (03/11/2026: local, LAN, Pages→local y Pages→Render). Después de
-validar, la base se dejó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios y
-0 pedidos de prueba.
+Resultado: **29/29 pruebas públicas** (30/10/2026) y **36/36 pruebas del modo
+híbrido** en la versión 1.2.1 (03/11/2026: 8 local, 8 LAN, 11 Pages→local y 9
+Pages→Render). Después de validar, la base se dejó limpia: 4 productos (stock
+159), 9 mesas, 2 usuarios y 0 pedidos de prueba.
 
 ### 5. Operación
 
@@ -706,10 +706,10 @@ validar, la base se dejó limpia: 4 productos (stock 159), 9 mesas, 2 usuarios y
 | `/health` del `.exe` con `database: postgresql` | OK |
 | Login `Admin` y `Yeison` contra Neon desde el `.exe` | OK |
 | Inventario: 4 productos, stock 159 | OK |
-| `http://localhost:8000` detecta servidor local y login | 6/6 OK |
-| `http://192.168.1.14:8000` (simulación de dispositivo LAN) | 6/6 OK |
-| Pages en el PC, permiso de red local concedido, usa localhost | 8/8 OK |
-| Pages sin backend local, usa Render y login | 7/7 OK |
+| `http://localhost:8000` detecta servidor local y login | 8/8 OK |
+| `http://192.168.1.14:8000` (simulación de dispositivo LAN) | 8/8 OK |
+| Pages en el PC, permiso de red local concedido, usa localhost | 11/11 OK |
+| Pages sin backend local, usa Render y login | 9/9 OK |
 
 ### Alternativas descartadas (30/10/2026)
 
