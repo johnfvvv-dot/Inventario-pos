@@ -1,6 +1,5 @@
 """Endpoints de usuarios: login por usuario, gestión de usuarios y roles."""
 
-import hashlib
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,13 +16,10 @@ from app.schemas import (
     UsuarioOut,
     UsuarioUpdate,
 )
+from app.seguridad import hash_password, necesita_rehash, verificar_password
 from app.tiempo import ahora_local
 
 router = APIRouter(tags=["usuarios"])
-
-
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
@@ -44,10 +40,16 @@ def login(datos: UsuarioLogin, db: Session = Depends(get_db)):
     nombre_usuario = (datos.usuario or "").strip()
     usuario = db.query(Usuario).filter(Usuario.alias == nombre_usuario).first()
 
-    if not usuario or usuario.password_hash != hash_password(datos.password):
+    if not usuario or not verificar_password(datos.password, usuario.password_hash):
         raise HTTPException(status_code=401, detail="Usuario o clave incorrectos")
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="El usuario está desactivado")
+
+    # Los hashes SHA-256 antiguos se actualizan a PBKDF2 al iniciar sesión.
+    if necesita_rehash(usuario.password_hash):
+        usuario.password_hash = hash_password(datos.password)
+        db.commit()
+        db.refresh(usuario)
 
     return _a_usuario_out(usuario)
 

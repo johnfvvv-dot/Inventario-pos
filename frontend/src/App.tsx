@@ -1,7 +1,7 @@
 /** Punto de entrada y enrutamiento principal de la aplicación React. */
 
 import { ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import "./App.css";
 
 import AdminLayout from "./layouts/AdminLayout";
@@ -18,9 +18,14 @@ import UsuariosPage from "./pages/UsuariosPage";
 /** Solo el Administrador puede entrar al panel y a la gestión de usuarios. */
 function RutaAdmin({ children }: { children: ReactNode }) {
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const location = useLocation();
   if (usuario?.rol === "admin") return <>{children}</>;
   return (
-    <Navigate to={usuario?.rol === "bartender" ? "/bartender" : "/"} replace />
+    <Navigate
+      to={usuario?.rol === "bartender" ? "/bartender" : "/"}
+      state={{ from: location.pathname + location.search }}
+      replace
+    />
   );
 }
 

@@ -10,6 +10,7 @@ El ejecutable híbrido lee la cadena de Neon, en este orden:
   3. Valor compilado en app/_build_defaults.py (solo en el .exe de entrega).
 """
 
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -137,6 +138,19 @@ def descripcion_database() -> str:
         return f"SQLite local ({_data_dir() / 'inventario.db'})"
     host = urlparse(SQLALCHEMY_DATABASE_URL).hostname or "host desconocido"
     return f"PostgreSQL en {host}"
+
+
+def huella_database() -> str:
+    """Identificador no sensible de la base configurada (host + nombre).
+
+    Permite comparar si el ejecutable y Render apuntan a la misma base sin
+    exponer usuario, clave ni la cadena de conexion completa.
+    """
+    if tipo_database() == "sqlite":
+        return "sqlite-local"
+    partes = urlparse(SQLALCHEMY_DATABASE_URL)
+    base = f"{partes.hostname or ''}/{partes.path.lstrip('/')}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()[:12]
 
 
 def get_db():
