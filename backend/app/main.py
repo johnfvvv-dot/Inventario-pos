@@ -31,7 +31,7 @@ from app.routes.usuarios import router as usuarios_router
 from app.schemas import CLAVE_INICIAL
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
