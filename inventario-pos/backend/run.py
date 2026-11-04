@@ -1,14 +1,15 @@
 """Punto de entrada del ejecutable de escritorio (InventarioPOS.exe).
 
-Arranca el servidor FastAPI (que sirve también el frontend compilado), conecta
-con Neon y abre el navegador apuntando a la aplicación. Pensado para uso en el
-mostrador: doble clic -> la app queda lista para usar en el PC, tablet y
-celular mientras el equipo esté encendido.
+Arranca el backend FastAPI local (conectado a Neon), mantiene el servidor
+activo y abre el frontend fijo de Cloudflare Pages en una ventana nueva de
+Chrome o Edge. El frontend detecta este backend por localhost y, si no esta
+disponible, usa Render como respaldo.
 """
 
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -29,6 +30,9 @@ HOST = os.getenv("HOST", "0.0.0.0")
 ABRIR_NAVEGADOR = os.getenv("ABRIR_NAVEGADOR", "1") == "1"
 API_NUBE = os.getenv(
     "CLOUD_API_URL", "https://inventario-pos-api-pqju.onrender.com/api"
+)
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL", "https://inventario-pos-bfw.pages.dev/admin/usuarios"
 )
 
 ES_EJECUTABLE = bool(getattr(sys, "frozen", False))
@@ -60,16 +64,62 @@ def ip_local() -> str:
         return "127.0.0.1"
 
 
+def _buscar_navegador() -> str:
+    """Ruta de Chrome o Edge en Windows; cadena vacia si no se encuentra."""
+    if os.name != "nt":
+        return ""
+
+    def unir(base: str, resto: str) -> Path:
+        return Path(base) / resto if base else Path(resto)
+
+    programas = os.getenv("PROGRAMFILES", r"C:\Program Files")
+    programas_x86 = os.getenv("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+    local = os.getenv("LOCALAPPDATA", "")
+
+    candidatos = [
+        unir(programas, r"Google\Chrome\Application\chrome.exe"),
+        unir(programas_x86, r"Google\Chrome\Application\chrome.exe"),
+        unir(local, r"Google\Chrome\Application\chrome.exe"),
+        unir(programas, r"Microsoft\Edge\Application\msedge.exe"),
+        unir(programas_x86, r"Microsoft\Edge\Application\msedge.exe"),
+        unir(local, r"Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for ruta in candidatos:
+        try:
+            if ruta.is_file():
+                return str(ruta)
+        except OSError:
+            continue
+    return ""
+
+
 def abrir_navegador() -> None:
-    """Espera a que el servidor responda antes de abrir el navegador."""
-    for _ in range(30):
+    """Espera al backend y abre el frontend fijo en una ventana nueva.
+
+    No se abre localhost: la aplicacion siempre se sirve desde Cloudflare
+    Pages. El backend local solo responde a las llamadas /api y /health.
+    """
+    for _ in range(60):
         if salud_local(PUERTO):
             break
         time.sleep(0.5)
+
+    navegador = _buscar_navegador()
     try:
-        webbrowser.open(f"http://localhost:{PUERTO}")
+        if navegador:
+            # --new-window crea una ventana nueva con una sola pestaña en la URL.
+            subprocess.Popen(
+                [navegador, "--new-window", FRONTEND_URL],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        else:
+            webbrowser.open(FRONTEND_URL, new=1)
     except Exception:
-        pass
+        try:
+            webbrowser.open(FRONTEND_URL, new=1)
+        except Exception:
+            pass
 
 
 def pausar_si_error() -> None:
@@ -85,15 +135,17 @@ def mostrar_cabecera(ip: str, base_datos: str) -> None:
     print("=" * 64)
     print("            SISTEMA INVENTARIO - PUNTO DE VENTA")
     print("=" * 64)
-    print(f"  En esta PC     : http://localhost:{PUERTO}")
-    print(f"  En la red WiFi : http://{ip}:{PUERTO}")
-    print("  (celular/tablet debe estar en la misma red WiFi)")
+    print(f"  Frontend fijo  : {FRONTEND_URL}")
+    print(f"  API local      : http://localhost:{PUERTO}/api")
+    print(f"  API en WiFi    : http://{ip}:{PUERTO}/api")
     print("-" * 64)
     print(f"  Base de datos  : {base_datos}")
     print(f"  Respaldo nube  : {API_NUBE.replace('/api', '')}")
     print("=" * 64)
+    print("  El navegador se abre en Cloudflare Pages y usa este backend")
+    print("  local cuando responde; si no, usa Render automaticamente.")
     print("  Para detener el servidor: presiona Ctrl+C")
-    print("  Mientras esta ventana siga abierta, la app funciona en local.")
+    print("  Mientras esta ventana siga abierta, el backend local sigue activo.")
     print("=" * 64)
 
 
@@ -120,11 +172,12 @@ def main() -> None:
         if salud_local(PUERTO):
             print("=" * 64)
             print(f"  Inventario POS ya esta corriendo en el puerto {PUERTO}")
-            print(f"  Abre: http://localhost:{PUERTO}")
-            print(f"  En la red WiFi: http://{ip_local()}:{PUERTO}")
+            print(f"  Frontend: {FRONTEND_URL}")
+            print(f"  API local: http://localhost:{PUERTO}/api")
+            print(f"  API en WiFi: http://{ip_local()}:{PUERTO}/api")
             print("=" * 64)
             if ABRIR_NAVEGADOR:
-                webbrowser.open(f"http://localhost:{PUERTO}")
+                abrir_navegador()
         else:
             print("=" * 64)
             print(f"  [ERROR] El puerto {PUERTO} esta ocupado por otro programa.")

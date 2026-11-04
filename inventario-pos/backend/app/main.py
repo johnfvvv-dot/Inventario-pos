@@ -1,6 +1,5 @@
 """Punto de entrada principal de la aplicación FastAPI."""
 
-import hashlib
 import os
 import socket
 import sys
@@ -10,7 +9,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from app.database import Base, SessionLocal, engine, _data_dir, tipo_database
+from app.database import (
+    Base,
+    SessionLocal,
+    engine,
+    _data_dir,
+    huella_database,
+    tipo_database,
+)
 from app.models import (
     Division,
     Mesa,
@@ -29,6 +35,7 @@ from app.routes.mesas import router as mesas_router
 from app.routes.pedidos import router as pedidos_router
 from app.routes.usuarios import router as usuarios_router
 from app.schemas import CLAVE_INICIAL
+from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
 VERSION = "1.2.1"
@@ -128,10 +135,6 @@ def _modo_ejecucion() -> str:
     if _en_render():
         return "nube"
     return "desarrollo"
-
-
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def _migrar_columnas_faltantes() -> None:
@@ -455,6 +458,7 @@ def config():
         "frontend_incorporado": (build / "index.html").exists(),
         "datos": str(_data_dir()),
         "base_datos": tipo_database(),
+        "base_datos_id": huella_database(),
         "api_local": f"http://{ip}:{puerto}/api" if ip else "",
         "api_nube": os.getenv(
             "CLOUD_API_URL", "https://inventario-pos-api-pqju.onrender.com/api"

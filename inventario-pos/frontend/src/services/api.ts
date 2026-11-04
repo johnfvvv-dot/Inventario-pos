@@ -1,20 +1,15 @@
 /**
- * Servicios de conexión con el backend FastAPI.
+ * Selección del backend FastAPI.
  *
- * Modo híbrido:
- *  1. Si la app se abre desde el ejecutable o desde la IP LAN del PC, usa el
- *     backend local (mismo origen). Así la operación interna no depende de
- *     Render ni de su arranque en frío.
- *  2. Si el backend local no responde, usa automáticamente el backend público
- *     de Render.
- *  3. La URL del backend NO se puede forzar desde el entorno: siempre se
- *     detecta local primero y Render es el respaldo. Así un build antiguo o
- *     una variable mal configurada no puede dejar la app apuntando a un túnel
- *     temporal (ngrok) ni a una IP obsoleta.
+ * El frontend siempre se sirve desde Cloudflare Pages. Al iniciar sesión:
+ *  1. Prueba primero el backend local del PC: `localhost:8000`,
+ *     `127.0.0.1:8000` y, si se configuró al compilar, la IP LAN del PC.
+ *  2. Si ninguno responde (o el navegador bloquea la red local), usa
+ *     automáticamente el backend público de Render.
  *
  * Variables de compilación:
  *  - REACT_APP_CLOUD_API_URL: URL pública de Render (se valida).
- *  - REACT_APP_LOCAL_API_URL: URL local explícita (solo localhost/LAN).
+ *  - REACT_APP_LOCAL_API_URL: URL local/LAN explícita (opcional).
  *  - REACT_APP_API_URL: ignorada por seguridad (compatibilidad con builds viejos).
  */
 export type ApiMode = "local" | "cloud";
@@ -84,10 +79,8 @@ const LOCAL_API_OVERRIDE = (() => {
   return normalizada;
 })();
 
-/** La sonda local debe ser rápida: no queremos retrasar el login. */
-const LOCAL_PROBE_TIMEOUT_MS = 2500;
-/** Sonda manual: Chrome puede mostrar el permiso de red local y esperar. */
-const LOCAL_MANUAL_PROBE_TIMEOUT_MS = 30000;
+/** La sonda local debe ser rápida para no retrasar el login. */
+const LOCAL_PROBE_TIMEOUT_MS = 3500;
 /** Peticiones al backend local (mismo PC o LAN). */
 const LOCAL_REQUEST_TIMEOUT_MS = 15000;
 /** Render Free puede tardar 30–60 s en despertar; damos margen. */
@@ -109,28 +102,6 @@ function origenDeApi(base: string): string {
   return base.replace(/\/api\/?$/i, "");
 }
 
-type EstadoPermisoRed = "granted" | "denied" | "prompt" | "unsupported";
-
-/**
- * Estado del permiso "Local Network Access" (Chrome 142+).
- *
- * Una página pública (HTTPS) necesita permiso para consultar localhost. No
- * disparamos la sonda automática si el permiso aún no se concedió: así los
- * visitantes externos van directo a Render y no ven un aviso de red local.
- * El botón "Conectar al servidor local" del login sí puede solicitarlo.
- */
-async function estadoPermisoRedLocal(): Promise<EstadoPermisoRed> {
-  try {
-    const estado = await navigator.permissions.query({
-      name: "local-network-access" as PermissionName,
-    });
-    return estado.state as EstadoPermisoRed;
-  } catch {
-    // Navegador sin Local Network Access: se intenta la sonda normal.
-    return "unsupported";
-  }
-}
-
 /** Candidatos locales, en orden de preferencia. */
 function candidatosLocales(): string[] {
   const { protocol, hostname, port } = window.location;
@@ -140,19 +111,18 @@ function candidatosLocales(): string[] {
     if (!lista.includes(normalizada)) lista.push(normalizada);
   };
 
-  if (LOCAL_API_OVERRIDE) agregar(LOCAL_API_OVERRIDE);
-
   if (esIPPrivada(hostname)) {
-    // Mismo origen: el .exe sirve frontend y API en el mismo puerto.
+    // Mismo origen: el .exe también puede servir el frontend en la LAN.
     agregar(`${protocol}//${hostname}${port ? `:${port}` : ""}/api`);
     agregar(`http://${hostname}:8000/api`);
   }
 
-  // En el PC del negocio, el backend local escucha en localhost:8000.
-  if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1") {
-    agregar("http://localhost:8000/api");
-    agregar("http://127.0.0.1:8000/api");
-  }
+  // En el PC del negocio el backend local escucha en localhost:8000.
+  agregar("http://localhost:8000/api");
+  agregar("http://127.0.0.1:8000/api");
+
+  // IP LAN configurada al compilar (útil para celulares en la misma WiFi).
+  if (LOCAL_API_OVERRIDE) agregar(LOCAL_API_OVERRIDE);
 
   return lista;
 }
@@ -199,21 +169,20 @@ export function resolverApiBase(): Promise<ApiInfo> {
   if (deteccionEnCurso) return deteccionEnCurso;
 
   deteccionEnCurso = (async () => {
-    const enRedLocal = esIPPrivada(window.location.hostname);
-    const permiso = enRedLocal ? "granted" : await estadoPermisoRedLocal();
+    // Se prueban todos los candidatos en paralelo y se respeta su orden:
+    // el primer /health saludable gana.
+    const resultados = await Promise.all(
+      candidatosLocales().map(async (base) => ({
+        base,
+        ok: await probarSalud(base),
+      }))
+    );
+    const local = resultados.find((resultado) => resultado.ok);
 
-    if (enRedLocal || permiso === "granted" || permiso === "unsupported") {
-      for (const base of candidatosLocales()) {
-        if (await probarSalud(base)) {
-          apiInfo = { base, mode: "local" };
-          console.info(`[API] Backend local detectado: ${base}`);
-          return apiInfo;
-        }
-      }
-    } else {
-      console.info(
-        `[API] Origen público sin permiso de red local (${permiso}); usando Render.`
-      );
+    if (local) {
+      apiInfo = { base: local.base, mode: "local" };
+      console.info(`[API] Backend local detectado: ${local.base}`);
+      return apiInfo;
     }
 
     apiInfo = { base: CLOUD_API_URL, mode: "cloud" };
@@ -229,24 +198,6 @@ export function resolverApiBase(): Promise<ApiInfo> {
 function usarNube(): ApiInfo {
   apiInfo = { base: CLOUD_API_URL, mode: "cloud" };
   return apiInfo;
-}
-
-/**
- * Reintenta la detección local desde un clic del usuario.
- *
- * Chrome 142+ exige el permiso "Local Network Access" para que una página
- * pública (HTTPS) consulte localhost o la red local. El clic del usuario
- * permite mostrar ese aviso y esperar a que lo conceda.
- */
-export async function redetectarApiLocal(): Promise<ApiInfo | null> {
-  for (const base of candidatosLocales()) {
-    if (await probarSalud(base, LOCAL_MANUAL_PROBE_TIMEOUT_MS)) {
-      apiInfo = { base, mode: "local" };
-      console.info(`[API] Backend local detectado manualmente: ${base}`);
-      return apiInfo;
-    }
-  }
-  return null;
 }
 
 /** Error de red (no de negocio): permite reintentar contra Render. */
