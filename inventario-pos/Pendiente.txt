@@ -11,21 +11,42 @@ Listado de pendientes por corregir
 2. Despliegue público e híbrido (completado, versión 1.2.1):
    - Base SQLite migrada a Neon PostgreSQL (Free, aws-us-east-2).
    - Backend en Render Free (Docker, Ohio) con CORS restringido al frontend.
-   - Frontend en Cloudflare Pages.
-   - Ejecutable híbrido `InventarioPOS.exe` con backend local, frontend
-     incluido y conexión directa a Neon.
+   - Frontend en Cloudflare Pages, siempre servido desde allí.
+   - Ejecutable híbrido `InventarioPOS.exe` con backend local conectado a
+     Neon; abre Chrome/Edge en una ventana nueva con una sola pestaña en
+     https://inventario-pos-bfw.pages.dev/admin/usuarios.
    - Frontend: https://inventario-pos-bfw.pages.dev
    - API: https://inventario-pos-api-pqju.onrender.com
-   - La 1.2.1 ignora `REACT_APP_API_URL`, valida la URL de Render y elimina
-     cualquier referencia a ngrok; el login muestra la versión y la URL activa.
-   - Validado con las pruebas local, LAN, Pages->local y Pages->Render, más la
-     regresión que confirma que un `REACT_APP_API_URL` con ngrok se ignora.
+   - Detección silenciosa local -> Render: prueba localhost:8000,
+     127.0.0.1:8000 y la IP LAN compilada en paralelo; si ninguna responde,
+     usa Render. El login solo muestra "Inventario POS v1.2.1".
+   - Claves con PBKDF2-HMAC-SHA256 (260 000 iteraciones + sal); los hashes
+     SHA-256 antiguos se migran al iniciar sesión.
+   - Neon verificada con `base_datos_id`: `d22e416b6276` en local y Render.
+   - Validado con 7/7 pruebas local, 7/7 Pages->local con permiso LNA y 7/7
+     Pages->Render.
    - La base quedó sin ventas de prueba: 4 productos (stock 159), 9 mesas,
      2 usuarios y 0 pedidos.
 
-3. Tareas opcionales después del despliegue:
+3. Limitación del celular en la misma WiFi (decisión pendiente):
+   - Una página HTTPS de Cloudflare Pages no puede llamar por HTTP a
+     http://IP_LAN:8000: Chrome lo bloquea por Mixed Content aunque se conceda
+     el permiso Local Network Access. `localhost` sí funciona con ese permiso.
+   - Opción A (recomendada para uso interno): abrir http://IP_LAN:8000 en el
+     celular; usa el frontend empaquetado y el backend local.
+   - Opción B: usar Pages en el celular y aceptar que el tráfico vaya a Render.
+   - Opción C: configurar un túnel HTTPS con dominio propio para el backend
+     local. La cuenta Cloudflare actual no tiene zonas/dominio (solo pages.dev),
+     así que no hay subdominio estable disponible.
+
+4. Tareas opcionales después del despliegue:
    - No se envía ping a Render: la operación interna usa el `.exe` y Render
      solo atiende accesos externos (puede tardar 30-60 s en despertar).
    - Eliminar el servicio Render antiguo `Inventario-pos` (rama `main`) cuando
      se confirme que el nuevo despliegue es el definitivo.
    - Recompilar el APK de Android con los últimos ajustes.
+   - Si se requiere que el backend local siga activo tras reiniciar Windows,
+     crear una tarea programada (hoy vive mientras la consola del `.exe` esté
+     abierta).
+   - Decidir si se mantiene el frontend empaquetado dentro del `.exe` como
+     respaldo local o se elimina para reducir el tamaño.
