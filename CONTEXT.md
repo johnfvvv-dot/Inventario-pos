@@ -33,28 +33,39 @@ también empaquetarse como ejecutable de Windows o APK de Android.
     ejecutable.
 - **Frontend:** React 18 + TypeScript (Create React App), React Router y Chart.js.
   Código en `frontend/src/`.
-- **Autenticación:** usuario + clave con hash SHA-256. El login valida el campo
-  `usuario`; el usuario autenticado se guarda en `localStorage`; no se usa JWT.
-  Roles: `admin` y `bartender`. Las rutas `/admin` y `/bartender` están
-  protegidas en el cliente (`RutaAdmin`/`RutaBartender` en `App.tsx`); la API
-  no valida roles ni usa tokens.
+- **Autenticación:** usuario + clave con hash **PBKDF2-HMAC-SHA256** (260 000
+  iteraciones y sal aleatoria). Los hashes SHA-256 sin sal de versiones
+  anteriores se aceptan y se reemplazan automáticamente al iniciar sesión. El
+  login valida el campo `usuario`; el usuario autenticado se guarda en
+  `localStorage`; no se usa JWT. Roles: `admin` y `bartender`. Las rutas
+  `/admin` y `/bartender` están protegidas en el cliente
+  (`RutaAdmin`/`RutaBartender` en `App.tsx`); la API no valida roles ni usa
+  tokens.
 - **API:** prefijo `/api`; documentación interactiva en `/docs`; salud en
-  `/health`; configuración de red en `/api/config`.
+  `/health`; configuración de red en `/api/config` (incluye `base_datos_id`,
+  huella SHA-256 truncada de host/base para comparar local y Render sin exponer
+  credenciales).
 - **Empaquetado:** PyInstaller (`dist/InventarioPOS.exe`) y Capacitor
   (`frontend/android/`).
 - **Modo híbrido (03/11/2026):** el `.exe` levanta FastAPI en `0.0.0.0:8000`,
-  sirve el frontend y conecta a Neon. El frontend detecta el backend local en
-  orígenes privados/LAN; en Pages usa Render salvo que Chrome tenga concedido
-  el permiso *Local Network Access*, en cuyo caso prueba `localhost:8000`.
-  Incluye botón manual "Conectar al servidor local" y fallback seguro solo para
+  conecta a Neon y abre Chrome/Edge con `--new-window` en la URL fija
+  `https://inventario-pos-bfw.pages.dev/admin/usuarios`. El frontend siempre se
+  sirve desde Cloudflare Pages; al iniciar sesión prueba en paralelo
+  `localhost:8000`, `127.0.0.1:8000` y la IP LAN compilada, y si ninguna
+  responde usa Render. El login solo muestra `Inventario POS v1.2.1`; no hay
+  botón de conexión ni estado del servidor. El fallback seguro solo reintenta
   `GET`, `HEAD` y login.
 - **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
   `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
   solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
   contrario se usa la URL oficial de Render. `REACT_APP_LOCAL_API_URL` solo se
   acepta si apunta a localhost/LAN. Se retira la cabecera de ngrok, se sube el
-  service worker a `inventario-pos-v3` y el login muestra la versión y la URL
-  del backend activo.
+  service worker a `inventario-pos-v3` y el login muestra únicamente la versión.
+- **Acceso móvil (limitación):** una página HTTPS de Pages no puede llamar por
+  HTTP a `http://IP_LAN:8000`; Chrome lo bloquea por **Mixed Content** aunque se
+  conceda el permiso *Local Network Access*. `localhost` sí funciona con ese
+  permiso. Para usar el backend local desde el celular hay que abrir
+  `http://IP_LAN:8000` directamente; desde Pages el celular usa Render.
 - **Despliegue público (30/10/2026):** Neon PostgreSQL (Free, `aws-us-east-2`) +
   Render (Docker, Free, Ohio) + Cloudflare Pages. Frontend:
   https://inventario-pos-bfw.pages.dev; API:
@@ -172,25 +183,37 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 
 - **Base:** Neon Free en `aws-us-east-2`, cadena *pooled* con
   `sslmode=require&channel_binding=require`. La SQLite local
-  (`backend/data/inventario.db`) sigue intacta como respaldo.
+  (`backend/data/inventario.db`) sigue intacta como respaldo. El `.exe` y Render
+  usan la misma cadena; `GET /api/config` devuelve `base_datos_id` para
+  verificarlo. En este despliegue ambos responden `d22e416b6276`.
 - **Backend:** Render Free (Docker, Ohio, rama `deploy/neon`, root `backend`,
   health check `/health`). Variables: `DATABASE_URL`, `TZ=America/Bogota`,
   `APP_TIMEZONE=America/Bogota`, `CORS_ORIGINS` con el origen exacto de Pages.
   El plan Free se suspende a los 15 min sin tráfico; el arranque en frío tarda
   30–60 s. No se usa SQLite ni disco persistente en Render. No se configura ping.
-- **Frontend:** Cloudflare Pages (`inventario-pos`), build con
+- **Frontend:** Cloudflare Pages (`inventario-pos`). Se compila con
+  `scripts/build_pages.ps1`, que define
   `REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api` y
-  `_redirects` para la SPA. `REACT_APP_API_URL` se ignora por seguridad: la
-  única selección de backend es la detección automática local → Render.
+  `REACT_APP_LOCAL_API_URL=http://<IP_LAN>:8000/api` (IP activa detectada),
+  además de eliminar `REACT_APP_API_URL`. `frontend/public/_redirects` mantiene
+  el fallback de la SPA. La única selección de backend es la detección
+  automática local → Render.
 - **Ejecutable híbrido:** `scripts/build_hybrid_exe.ps1` (y `.bat`) genera
   `backend/app/_build_defaults.py` desde `DATABASE_URL`/`inventario-pos.env`,
-  compila el frontend, ejecuta PyInstaller y borra el archivo temporal. El
-  `.exe` resultante usa Neon y sirve el frontend en el mismo puerto.
-- **Validación:** 29/29 pruebas públicas (30/10/2026) y 36/36 pruebas híbridas
-  en la 1.2.1 (03/11/2026: 8 local, 8 LAN, 11 Pages→local, 9 Pages→Render). La
-  base quedó sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios.
-  Se agrega una regresión que compila con `REACT_APP_API_URL` apuntando a ngrok
-  para confirmar que se ignora.
+  compila el frontend de respaldo, ejecuta PyInstaller y borra el archivo
+  temporal. El `.exe` usa Neon, mantiene el backend local activo mientras la
+  consola esté abierta y lanza Chrome/Edge con `--new-window` en la URL fija de
+  Pages. No se registra como servicio de Windows.
+- **Validación:** 29/29 pruebas públicas (30/10/2026) y 21/21 pruebas del flujo
+  híbrido en la 1.2.1 (03/11/2026: 7 local, 7 Pages→local con permiso LNA y 7
+  Pages→Render sin permiso). Admin y Yeison inician sesión en local y Render con
+  hashes `pbkdf2_sha256` (longitud 118). La base quedó sin ventas de prueba:
+  4 productos (stock 159), 9 mesas y 2 usuarios.
+- **Limitación móvil:** Pages HTTPS bloquea `http://IP_LAN:8000` por Mixed
+  Content; el permiso LNA solo habilita `localhost` en el navegador de prueba.
+  Para el celular en la misma WiFi se abre `http://IP_LAN:8000`; si se usa
+  Pages, el tráfico va a Render. No hay túnel HTTPS porque la cuenta Cloudflare
+  no tiene zonas/dominio propio (solo `pages.dev`).
 - **Corrección de Reportes:** `isoAhora()` en `ReportesPage.tsx` ahora incluye
   milisegundos. Antes truncaba a segundos y una venta cobrada en el mismo
   segundo en que se cargaba la página podía quedar fuera del rango
@@ -216,10 +239,19 @@ también empaquetarse como ejecutable de Windows o APK de Android.
    volver a compilar.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
    03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.2.1
-   elimina cualquier posibilidad de forzar un endpoint temporal (ngrok) y
-   muestra la versión/URL activa en el login. Queda opcional eliminar el
-   servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo. No se
-   envía ping a Render: la operación interna usa el `.exe`.
+   elimina cualquier posibilidad de forzar un endpoint temporal (ngrok), abre
+   Pages en una ventana nueva y muestra solo la versión en el login. Queda
+   opcional eliminar el servicio Render antiguo `Inventario-pos` cuando se
+   confirme el nuevo. No se envía ping a Render: la operación interna usa el
+   `.exe`.
+7. **Celular en la misma WiFi:** definir si se acepta Render en el celular o se
+   monta un túnel HTTPS con dominio propio para que Pages alcance el backend
+   local. Sin túnel, la única vía local es abrir `http://IP_LAN:8000`.
+8. **Autoarranque del backend:** el `.exe` no se registra como servicio; si se
+   requiere que siga activo tras reiniciar Windows, crear una tarea programada.
+9. **Decisión pendiente:** el `.exe` conserva el frontend empaquetado como
+   respaldo para `http://IP_LAN:8000`; si no se usará, se puede retirar del
+   build y reducir el tamaño del archivo.
 
 ## 5. Reglas de trabajo
 
