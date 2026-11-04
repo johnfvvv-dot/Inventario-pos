@@ -4,14 +4,14 @@ Sistema web y de escritorio de inventario y punto de venta para pequeños
 negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
 pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
-**Versión actual:** 1.2.0
+**Versión actual:** 1.2.1
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
 - **Frontend:** React 18 + TypeScript
 - **Base de datos:** Neon PostgreSQL (modo híbrido) / SQLite (respaldo local)
 - **Ejecución:** `.exe` local + Render Free como respaldo + Cloudflare Pages
 
-## Modo híbrido (v1.2.0)
+## Modo híbrido (v1.2.1)
 
 El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador:
 
@@ -38,6 +38,8 @@ El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador:
 2. Si el `/health` responde `status: healthy`, usa ese backend para todas las
    llamadas.
 3. Si no responde, usa `https://inventario-pos-api-pqju.onrender.com/api`.
+   Esta URL se valida al compilar: se ignoran URLs HTTP, `localhost`, IP
+   privadas y cualquier túnel `ngrok`.
 4. En una página pública (Pages), Chrome 142+ exige el permiso **Local Network
    Access** para consultar `localhost`. El frontend no lanza ese aviso a los
    visitantes externos: va directo a Render y muestra el botón
@@ -46,12 +48,15 @@ El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador:
 5. Si el backend local se cae a mitad de una sesión, solo se reintentan
    automáticamente operaciones seguras (`GET`, `HEAD`, login). Un `POST` de
    venta o cobro **no** se repite para evitar duplicados.
+6. `REACT_APP_API_URL` se ignora por seguridad. Antes permitía fijar una URL
+   arbitraria; un build viejo con esa variable apuntaba a ngrok y rompía el
+   respaldo. Ahora la única forma de elegir backend es la detección automática.
 
 > **Importante:** una página HTTPS no puede descubrir por sí sola la IP LAN del
 > PC. Para uso interno abre siempre `http://IP_DEL_PC:8000` en el celular o
 > tablet; para uso externo usa la URL de Cloudflare Pages.
 
-## Funcionalidades (v1.2.0)
+## Funcionalidades (v1.2.1)
 
 ### Módulos
 
@@ -378,6 +383,27 @@ El comportamiento esperado es:
 - **Aceptar:** cobra la cuenta y la barra queda **ocupada**.
 - **Liberar barra:** cobra la cuenta y deja **todas las plazas disponibles**.
 
+### Aparece una URL de ngrok o un backend viejo
+
+Si el mensaje de error muestra `*.ngrok-free.dev`, `inventario-pos.onrender.com`
+u otra URL distinta de `https://inventario-pos-api-pqju.onrender.com/api`, el
+navegador, la PWA o el APK está ejecutando un **build anterior**. La versión
+1.2.1 ignora `REACT_APP_API_URL` y valida la URL de Render, así que un build
+nuevo no puede apuntar a ngrok.
+
+1. Abre https://inventario-pos-bfw.pages.dev y confirma al pie del login que
+   diga **Inventario POS v1.2.1**.
+2. Si aparece la versión vieja, cierra todas las pestañas, borra los datos del
+   sitio (o desinstala la PWA) y vuelve a abrir la URL.
+3. En el PC, cierra cualquier `InventarioPOS.exe` viejo y usa el nuevo de
+   `dist\InventarioPOS.exe`.
+4. En Android, el APK no se actualiza solo: hay que recompilarlo e instalarlo
+   de nuevo.
+
+> La URL correcta de Render es
+> `https://inventario-pos-api-pqju.onrender.com/api`. El host
+> `inventario-pos.onrender.com` ya no responde.
+
 ## Estructura del proyecto
 
 ```
@@ -521,7 +547,8 @@ git push -u origin feature/nueva-funcionalidad
 |---|---|---|
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 | `v1.1.0` | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
-| `v1.2.0` (actual) | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
+| `v1.2.0` | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
+| `v1.2.1` (actual) | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login |
 
 ## Despliegue en la nube
 
@@ -548,7 +575,8 @@ desplegado en Cloudflare Pages.
   ping.
 - **Cloudflare Pages:** build `npm run build`, salida `build`, fallback de SPA
   con `frontend/public/_redirects`. La variable de compilación es
-  `REACT_APP_CLOUD_API_URL` (ya no `REACT_APP_API_URL`).
+  `REACT_APP_CLOUD_API_URL`; `REACT_APP_API_URL` se ignora para evitar que un
+  build apunte a un túnel o a una IP vieja.
 
 ### Variables del backend
 
@@ -633,8 +661,9 @@ las 750 h/mes), pero no es necesario.
 
 5. Agregar la URL de Pages a `CORS_ORIGINS` del backend y redeployar Render.
 
-> `REACT_APP_API_URL` fuerza una única URL y desactiva la detección híbrida.
-> Para el despliegue normal usa solo `REACT_APP_CLOUD_API_URL`.
+> `REACT_APP_API_URL` se ignora por seguridad. Para el despliegue normal usa
+> solo `REACT_APP_CLOUD_API_URL` con la URL oficial de Render. El frontend
+> valida esa URL y descarta cualquier valor HTTP, local o con `ngrok`.
 
 ### 4. Pruebas después de publicar
 

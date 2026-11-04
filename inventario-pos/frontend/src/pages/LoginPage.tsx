@@ -9,6 +9,7 @@ import {
   redetectarApiLocal,
   resolverApiBase,
 } from "../services/api";
+import { APP_VERSION } from "../version";
 
 export default function LoginPage() {
   const [usuario, setUsuario] = useState("");
@@ -117,6 +118,13 @@ export default function LoginPage() {
             : "Detectando servidor..."}
         </p>
 
+        {servidor && (
+          <p className="muted small api-base" title={servidor.base}>
+            {servidor.base}
+          </p>
+        )}
+        <p className="muted api-version">Inventario POS v{APP_VERSION}</p>
+
         {servidor?.mode === "cloud" && (
           <div className="api-local-retry">
             <button
@@ -130,7 +138,8 @@ export default function LoginPage() {
                 : "¿Estás en el PC del negocio? Conectar al servidor local"}
             </button>
             <p className="muted small">
-              Si Chrome lo solicita, permite el acceso a la red local.
+              Si Chrome lo solicita, permite el acceso a la red local. En el
+              celular, abre http://IP_DEL_PC:8000 dentro de la misma WiFi.
             </p>
             {avisoLocal && <p className="muted small">{avisoLocal}</p>}
           </div>

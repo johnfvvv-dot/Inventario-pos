@@ -7,14 +7,15 @@
  *     Render ni de su arranque en frío.
  *  2. Si el backend local no responde, usa automáticamente el backend público
  *     de Render.
- *  3. La detección se hace al cargar la página. Para fijar una URL concreta
- *     (pruebas o instalaciones especiales) se puede definir
- *     REACT_APP_API_URL=http://IP:8000/api.
+ *  3. La URL del backend NO se puede forzar desde el entorno: siempre se
+ *     detecta local primero y Render es el respaldo. Así un build antiguo o
+ *     una variable mal configurada no puede dejar la app apuntando a un túnel
+ *     temporal (ngrok) ni a una IP obsoleta.
  *
  * Variables de compilación:
- *  - REACT_APP_CLOUD_API_URL: URL pública de Render (respaldo).
- *  - REACT_APP_LOCAL_API_URL: URL local explícita (opcional).
- *  - REACT_APP_API_URL: fuerza una única URL y desactiva la detección.
+ *  - REACT_APP_CLOUD_API_URL: URL pública de Render (se valida).
+ *  - REACT_APP_LOCAL_API_URL: URL local explícita (solo localhost/LAN).
+ *  - REACT_APP_API_URL: ignorada por seguridad (compatibilidad con builds viejos).
  */
 export type ApiMode = "local" | "cloud";
 
@@ -30,15 +31,58 @@ function normalizarBase(url: string): string {
   return /\/api$/i.test(limpia) ? limpia : `${limpia}/api`;
 }
 
-const CLOUD_API_URL = normalizarBase(
-  process.env.REACT_APP_CLOUD_API_URL || CLOUD_API_FALLBACK
-);
-const FORCED_API_URL = process.env.REACT_APP_API_URL
-  ? normalizarBase(process.env.REACT_APP_API_URL)
-  : "";
-const LOCAL_API_OVERRIDE = process.env.REACT_APP_LOCAL_API_URL
-  ? normalizarBase(process.env.REACT_APP_LOCAL_API_URL)
-  : "";
+function esUrlLocalPermitida(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (protocol === "http:" || protocol === "https:") && esIPPrivada(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function esUrlNubeValida(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (
+      protocol === "https:" &&
+      !esIPPrivada(hostname) &&
+      !/ngrok/i.test(hostname) &&
+      hostname !== "localhost"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function construirCloudApiUrl(): string {
+  const configurada = process.env.REACT_APP_CLOUD_API_URL;
+  if (!configurada) return CLOUD_API_FALLBACK;
+
+  const normalizada = normalizarBase(configurada);
+  if (!esUrlNubeValida(normalizada)) {
+    console.warn(
+      "[API] REACT_APP_CLOUD_API_URL no es una URL HTTPS válida; usando Render oficial."
+    );
+    return CLOUD_API_FALLBACK;
+  }
+  return normalizada;
+}
+
+const CLOUD_API_URL = construirCloudApiUrl();
+
+const LOCAL_API_OVERRIDE = (() => {
+  const configurada = process.env.REACT_APP_LOCAL_API_URL;
+  if (!configurada) return "";
+
+  const normalizada = normalizarBase(configurada);
+  if (!esUrlLocalPermitida(normalizada)) {
+    console.warn(
+      "[API] REACT_APP_LOCAL_API_URL no es localhost/LAN; se ignora."
+    );
+    return "";
+  }
+  return normalizada;
+})();
 
 /** La sonda local debe ser rápida: no queremos retrasar el login. */
 const LOCAL_PROBE_TIMEOUT_MS = 2500;
@@ -59,14 +103,6 @@ function esIPPrivada(host: string): boolean {
     /^192\.168\./.test(host) ||
     /^172\.(1[6-9]|2\d|3[01])\./.test(host)
   );
-}
-
-function urlHost(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return "";
-  }
 }
 
 function origenDeApi(base: string): string {
@@ -115,6 +151,7 @@ function candidatosLocales(): string[] {
   // En el PC del negocio, el backend local escucha en localhost:8000.
   if (hostname !== "localhost" && hostname !== "127.0.0.1" && hostname !== "::1") {
     agregar("http://localhost:8000/api");
+    agregar("http://127.0.0.1:8000/api");
   }
 
   return lista;
@@ -162,14 +199,6 @@ export function resolverApiBase(): Promise<ApiInfo> {
   if (deteccionEnCurso) return deteccionEnCurso;
 
   deteccionEnCurso = (async () => {
-    if (FORCED_API_URL) {
-      apiInfo = {
-        base: FORCED_API_URL,
-        mode: esIPPrivada(urlHost(FORCED_API_URL)) ? "local" : "cloud",
-      };
-      return apiInfo;
-    }
-
     const enRedLocal = esIPPrivada(window.location.hostname);
     const permiso = enRedLocal ? "granted" : await estadoPermisoRedLocal();
 
@@ -279,7 +308,6 @@ async function ejecutarFetch<T>(
     response = await fetch(`${cleanBase}${cleanUrl}`, {
       headers: {
         "Content-Type": "application/json",
-        "ngrok-skip-browser-warning": "69420",
       },
       signal: controller.signal,
       ...options,

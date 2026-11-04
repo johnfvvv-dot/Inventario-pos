@@ -84,6 +84,20 @@ a {
   text-align: center;
 }
 
+.login-card .api-base {
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
+  text-align: center;
+  word-break: break-all;
+}
+
+.login-card .api-version {
+  margin: 0.2rem 0 0;
+  font-size: 0.68rem;
+  text-align: center;
+  opacity: 0.75;
+}
+
 .api-local-retry {
   margin-top: 0.35rem;
   text-align: center;

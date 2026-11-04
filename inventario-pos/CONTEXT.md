@@ -1,6 +1,6 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.2.0
+**Versión actual:** 1.2.1
 
 **Última actualización:** 03/11/2026
 
@@ -48,6 +48,13 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   el permiso *Local Network Access*, en cuyo caso prueba `localhost:8000`.
   Incluye botón manual "Conectar al servidor local" y fallback seguro solo para
   `GET`, `HEAD` y login.
+- **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
+  `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
+  solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
+  contrario se usa la URL oficial de Render. `REACT_APP_LOCAL_API_URL` solo se
+  acepta si apunta a localhost/LAN. Se retira la cabecera de ngrok, se sube el
+  service worker a `inventario-pos-v3` y el login muestra la versión y la URL
+  del backend activo.
 - **Despliegue público (30/10/2026):** Neon PostgreSQL (Free, `aws-us-east-2`) +
   Render (Docker, Free, Ohio) + Cloudflare Pages. Frontend:
   https://inventario-pos-bfw.pages.dev; API:
@@ -173,15 +180,17 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   30–60 s. No se usa SQLite ni disco persistente en Render. No se configura ping.
 - **Frontend:** Cloudflare Pages (`inventario-pos`), build con
   `REACT_APP_CLOUD_API_URL=https://inventario-pos-api-pqju.onrender.com/api` y
-  `_redirects` para la SPA. `REACT_APP_API_URL` ya no se usa en producción
-  porque desactiva la detección híbrida.
+  `_redirects` para la SPA. `REACT_APP_API_URL` se ignora por seguridad: la
+  única selección de backend es la detección automática local → Render.
 - **Ejecutable híbrido:** `scripts/build_hybrid_exe.ps1` (y `.bat`) genera
   `backend/app/_build_defaults.py` desde `DATABASE_URL`/`inventario-pos.env`,
   compila el frontend, ejecuta PyInstaller y borra el archivo temporal. El
   `.exe` resultante usa Neon y sirve el frontend en el mismo puerto.
 - **Validación:** 29/29 pruebas públicas (30/10/2026) y 27/27 pruebas híbridas
   (03/11/2026: 6 local, 6 LAN, 8 Pages→local, 7 Pages→Render). La base quedó
-  sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios.
+  sin ventas de prueba: 4 productos (stock 159), 9 mesas y 2 usuarios. En la
+  1.2.1 se repiten las cuatro suites y se agrega una regresión que compila con
+  `REACT_APP_API_URL` apuntando a ngrok para confirmar que se ignora.
 - **Corrección de Reportes:** `isoAhora()` en `ReportesPage.tsx` ahora incluye
   milisegundos. Antes truncaba a segundos y una venta cobrada en el mismo
   segundo en que se cargaba la página podía quedar fuera del rango
@@ -206,9 +215,11 @@ también empaquetarse como ejecutable de Windows o APK de Android.
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
-   03/11/2026 con Neon + Render Free + Cloudflare Pages. Queda opcional eliminar
-   el servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo. No
-   se envía ping a Render: la operación interna usa el `.exe`.
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.2.1
+   elimina cualquier posibilidad de forzar un endpoint temporal (ngrok) y
+   muestra la versión/URL activa en el login. Queda opcional eliminar el
+   servicio Render antiguo `Inventario-pos` cuando se confirme el nuevo. No se
+   envía ping a Render: la operación interna usa el `.exe`.
 
 ## 5. Reglas de trabajo
 

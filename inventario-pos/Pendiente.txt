@@ -8,7 +8,7 @@ Listado de pendientes por corregir
      - Dependencias del frontend
    - Objetivo: que el aplicativo funcione automáticamente sin necesidad de configuraciones manuales.
 
-2. Despliegue público e híbrido (completado):
+2. Despliegue público e híbrido (completado, versión 1.2.1):
    - Base SQLite migrada a Neon PostgreSQL (Free, aws-us-east-2).
    - Backend en Render Free (Docker, Ohio) con CORS restringido al frontend.
    - Frontend en Cloudflare Pages.
@@ -16,8 +16,10 @@ Listado de pendientes por corregir
      incluido y conexión directa a Neon.
    - Frontend: https://inventario-pos-bfw.pages.dev
    - API: https://inventario-pos-api-pqju.onrender.com
-   - Validado con 29/29 pruebas públicas y 27/27 pruebas híbridas
-     (local, LAN, Pages->local y Pages->Render).
+   - La 1.2.1 ignora `REACT_APP_API_URL`, valida la URL de Render y elimina
+     cualquier referencia a ngrok; el login muestra la versión y la URL activa.
+   - Validado con las pruebas local, LAN, Pages->local y Pages->Render, más la
+     regresión que confirma que un `REACT_APP_API_URL` con ngrok se ignora.
    - La base quedó sin ventas de prueba: 4 productos (stock 159), 9 mesas,
      2 usuarios y 0 pedidos.
 
