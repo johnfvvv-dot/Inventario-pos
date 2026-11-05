@@ -82,6 +82,8 @@ class Mesa(Base):
     tipo = Column(String(20), default="mesa")  # mesa | barra
     grupo = Column(String(60), nullable=True)  # ej: "Barra 1"
     posicion = Column(Integer, default=1)
+    # Momento en que el cliente ocupó la mesa/plaza (para los tickets internos).
+    fecha_ocupacion = Column(DateTime, nullable=True)
 
     pedidos = relationship("Pedido", back_populates="mesa")
 
@@ -107,6 +109,9 @@ class Pedido(Base):
     mesa_numero_historico = Column(Integer, nullable=True)
     # Etiqueta conservada para el historial ("Mesa N" o "Barra N")
     mesa_etiqueta_historica = Column(String(60), nullable=True)
+    # Copia de la ocupación de la mesa al crear el pedido. Se conserva aunque
+    # la mesa se libere después, porque los tickets se generan al final.
+    fecha_ocupacion = Column(DateTime, nullable=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")
@@ -151,6 +156,8 @@ class Division(Base):
     total = Column(Float, default=0.0)
     estado = Column(String(20), default="pendiente")  # pendiente | pagada
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
+    # Ocupación de la mesa/plaza al momento de dividir la cuenta.
+    fecha_ocupacion = Column(DateTime, nullable=True)
 
     mesa = relationship("Mesa")
     usuario = relationship("Usuario")
@@ -170,6 +177,8 @@ class Participante(Base):
     subtotal = Column(Float, default=0.0)
     pagado = Column(Integer, default=0)  # 0 = pendiente, 1 = pagado
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
+    # Momento exacto en que este cliente pagó su parte (para los tickets).
+    fecha_pago = Column(DateTime, nullable=True)
 
     division = relationship("Division", back_populates="participantes")
     items = relationship(
@@ -206,6 +215,21 @@ class TurnoCaja(Base):
     estado = Column(String(20), default="abierto")  # abierto | cerrado
 
     usuario = relationship("Usuario")
+
+
+class ConfiguracionNegocio(Base):
+    """Personalización visual del negocio (nombre y logotipo).
+
+    Es una fila única (id=1). El nombre oficial del sistema sigue siendo
+    "Inventario POS"; estos valores solo cambian la cabecera y los tickets.
+    """
+
+    __tablename__ = "configuracion_negocio"
+
+    id = Column(Integer, primary_key=True, default=1)
+    nombre_negocio = Column(String(80), nullable=False, default="Inventario POS")
+    logo = Column(String, nullable=True)  # data URL (PNG/JPEG/WebP)
+    actualizado_en = Column(DateTime, default=ahora_local, onupdate=ahora_local)
 
 
 class MigracionSistema(Base):

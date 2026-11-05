@@ -255,6 +255,50 @@ class ResumenCajaOut(BaseModel):
     por_forma_pago: dict = {}
 
 
+# ---------- Personalización ----------
+
+class ConfiguracionNegocioIn(BaseModel):
+    nombre_negocio: str = Field(..., min_length=1, max_length=80)
+    logo: Optional[str] = Field(default=None, max_length=1_600_000)
+
+
+class ConfiguracionNegocioOut(BaseModel):
+    nombre_negocio: str = "Inventario POS"
+    logo: Optional[str] = None
+    actualizado_en: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- Tickets internos ----------
+
+class TicketItemOut(BaseModel):
+    nombre: str
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+
+
+class TicketOut(BaseModel):
+    id: str
+    tipo: str  # pedido | division
+    folio: str
+    mesa: str
+    fecha_ocupacion: datetime
+    fecha_pago: datetime
+    alias: Optional[str] = None
+    forma_pago: str = "efectivo"
+    items: List[TicketItemOut]
+
+
+class TicketsTurnoOut(BaseModel):
+    turno_id: int
+    estado: str
+    fecha_apertura: datetime
+    fecha_cierre: Optional[datetime] = None
+    nombre_negocio: str = "Inventario POS"
+    tickets: List[TicketOut]
+
+
 class EstadoUpdate(BaseModel):
     nuevo_estado: str = Field(..., max_length=20)
 

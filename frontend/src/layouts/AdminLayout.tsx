@@ -4,10 +4,12 @@ import { Outlet, useNavigate } from "react-router-dom";
 import AvisoTurnoModal from "../components/AvisoTurnoModal";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
+import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const negocio = useConfiguracionNegocio();
 
   const cerrarSesion = () => {
     localStorage.removeItem("user");
@@ -20,9 +22,18 @@ export default function AdminLayout() {
       <AvisoTurnoModal />
 
       <header className="admin-header">
-        <div>
-          <h1>Inventario POS</h1>
-          <p className="muted">Panel de Administración</p>
+        <div className="admin-brand">
+          {negocio.logo && (
+            <img
+              className="admin-brand-logo"
+              src={negocio.logo}
+              alt="Logotipo del negocio"
+            />
+          )}
+          <div>
+            <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
+            <p className="muted">Panel de Administración</p>
+          </div>
         </div>
         <div className="user-info">
           <UserMenu
@@ -43,6 +54,7 @@ export default function AdminLayout() {
           <MenuLink to="/admin/reportes">Reportes</MenuLink>
           <MenuLink to="/admin/corte-caja">Corte de caja</MenuLink>
           <MenuLink to="/admin/historial">Historial</MenuLink>
+          <MenuLink to="/admin/personalizacion">Personalización</MenuLink>
           <MenuLink to="/admin/usuarios">Usuarios</MenuLink>
         </nav>
 

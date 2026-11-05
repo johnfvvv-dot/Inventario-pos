@@ -2,7 +2,7 @@
 
 **Versión actual:** 1.2.1
 
-**Última actualización:** 03/11/2026
+**Última actualización:** 05/11/2026
 
 ## 1. Propósito del sistema
 
@@ -178,6 +178,34 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   conversión única UTC → hora local
   (`migraciones_sistema.fechas_locales_v1`).
 - El filtro "Hasta" del historial incluye el día completo.
+
+### Personalización y tickets internos (05/11/2026)
+
+- **Personalización:** nuevo ítem del menú del Administrador en
+  `/admin/personalizacion`. Cambia el nombre visible de la cabecera y agrega un
+  logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP). El nombre oficial del
+  sistema sigue siendo **Inventario POS** y el login conserva
+  `Inventario POS v1.2.1`.
+- Los valores se guardan en la tabla `configuracion_negocio` (fila única
+  `id=1`). La cabecera del Administrador y la del Bartender los leen mediante
+  `useConfiguracionNegocio`, con copia en `localStorage` y evento
+  `negocio-config-actualizada` para actualizarse sin recargar.
+- El logo mide 36 px en escritorio y 30 px en móvil; no aumenta la altura de la
+  barra superior, solo desplaza el título a la derecha.
+- **Tickets internos:** botón **Tickets** en el turno actual y **Ver tickets**
+  en el historial de turnos (abiertos o cerrados). El modal
+  `TicketsModal` llama a `GET /api/caja/tickets?turno_id=<id>` (sin `turno_id`
+  usa el turno abierto) y arma los comprobantes en memoria.
+- Un ticket por pedido cerrado y uno por cada participante pagado de una
+  división. Muestran nombre del negocio, folio, mesa/barra, alias del cliente,
+  fecha de ocupación, fecha de pago, productos (nombre, cantidad y precio) y
+  forma de pago. **No incluyen total ni impuestos** y no se guardan en la base.
+- Marcas temporales nuevas: `Mesa.fecha_ocupacion`, `Pedido.fecha_ocupacion`,
+  `Division.fecha_ocupacion` y `Participante.fecha_pago`. `Pedido.fecha_cierre`
+  sigue siendo la fecha de pago de los pedidos completos.
+- Descarga: **Imprimir / PDF** usa la impresión del navegador con estilos
+  `@media print`; cada tarjeta tiene **Descargar imagen**, que genera un PNG
+  local con canvas (`utils/ticketImagen.ts`). Al cerrar el modal desaparecen.
 
 ### Despliegue público
 

@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.routes.caja import router as caja_router
 from app.routes.categorias import router as categorias_router
+from app.routes.configuracion import router as configuracion_router
 from app.routes.cuentas import router as cuentas_router
 from app.routes.inventario import router as inventario_router
 from app.routes.mesas import router as mesas_router
@@ -94,6 +95,9 @@ app.include_router(pedidos_router, prefix="/api/pedidos", tags=["pedidos"])
 app.include_router(cuentas_router, prefix="/api/cuentas", tags=["cuentas"])
 app.include_router(caja_router, prefix="/api/caja", tags=["caja"])
 app.include_router(categorias_router, prefix="/api/categorias", tags=["categorias"])
+app.include_router(
+    configuracion_router, prefix="/api/configuracion", tags=["configuracion"]
+)
 
 
 # ------------------------------------------------------------------
