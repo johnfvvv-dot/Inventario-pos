@@ -14,6 +14,7 @@ import ReportesPage from "./pages/ReportesPage";
 import CorteCajaPage from "./pages/CorteCajaPage";
 import HistorialPage from "./pages/HistorialPage";
 import UsuariosPage from "./pages/UsuariosPage";
+import PersonalizacionPage from "./pages/PersonalizacionPage";
 
 /** Solo el Administrador puede entrar al panel y a la gestión de usuarios. */
 function RutaAdmin({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ function App() {
           <Route path="reportes" element={<ReportesPage />} />
           <Route path="corte-caja" element={<CorteCajaPage />} />
           <Route path="historial" element={<HistorialPage />} />
+          <Route path="personalizacion" element={<PersonalizacionPage />} />
           <Route path="usuarios" element={<UsuariosPage />} />
         </Route>
 

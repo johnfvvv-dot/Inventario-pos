@@ -4,12 +4,16 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.database import get_db
 from app.models import (
+    ConfiguracionNegocio,
+    Division,
     Mesa,
+    Participante,
+    ParticipanteItem,
     Pedido,
     PedidoItem,
     Producto,
@@ -21,6 +25,9 @@ from app.schemas import (
     AbrirTurnoOut,
     CerrarTurnoIn,
     ResumenCajaOut,
+    TicketItemOut,
+    TicketOut,
+    TicketsTurnoOut,
     TotalesFormaPago,
     TurnoCajaOut,
 )
@@ -512,6 +519,204 @@ def ventas_por_dia(
         "hasta": fin.isoformat(),
         "total_ganancia": round(sum(d["ganancia"] for d in datos), 2),
     }
+
+
+def _etiqueta_mesa_ticket(
+    mesa: Optional[Mesa],
+    etiqueta_historica: Optional[str],
+    numero_historico: Optional[int],
+) -> str:
+    """Nombre visible de la mesa en un ticket, incluso si ya fue eliminada."""
+    if etiqueta_historica:
+        return etiqueta_historica
+    if mesa:
+        return mesa.etiqueta_historial()
+    if numero_historico is not None:
+        return etiqueta_desde_numero_historico(numero_historico)
+    return "Sin mesa"
+
+
+@router.get("/tickets", response_model=TicketsTurnoOut)
+def tickets_turno(
+    turno_id: Optional[int] = None, db: Session = Depends(get_db)
+):
+    """Genera los tickets internos de un turno bajo demanda.
+
+    No se almacenan en la base de datos: se construyen desde los pedidos
+    cerrados y los participantes pagados dentro del rango del turno. Al
+    cerrar la ventana emergente del navegador desaparecen.
+    """
+    if turno_id is not None:
+        turno = db.query(TurnoCaja).filter(TurnoCaja.id == turno_id).first()
+        if not turno:
+            raise HTTPException(status_code=404, detail="Turno no encontrado")
+    else:
+        turno = (
+            db.query(TurnoCaja)
+            .filter(TurnoCaja.estado == "abierto")
+            .order_by(TurnoCaja.id.desc())
+            .first()
+        )
+        if not turno:
+            raise HTTPException(
+                status_code=404, detail="No hay un turno de caja abierto"
+            )
+
+    desde = turno.fecha_apertura
+    hasta = turno.fecha_cierre or ahora_local()
+    tickets: List[TicketOut] = []
+
+    # Un ticket por cada pedido cerrado (pago completo de una cuenta).
+    pedidos = (
+        db.query(Pedido)
+        .options(
+            joinedload(Pedido.mesa),
+            selectinload(Pedido.items).joinedload(PedidoItem.producto),
+        )
+        .filter(
+            Pedido.estado == "cerrado",
+            Pedido.fecha_cierre.isnot(None),
+            Pedido.fecha_cierre >= desde,
+            Pedido.fecha_cierre <= hasta,
+        )
+        .order_by(Pedido.fecha_cierre, Pedido.id)
+        .all()
+    )
+    for pedido in pedidos:
+        items = [
+            TicketItemOut(
+                nombre=item.producto.nombre if item.producto else "Producto eliminado",
+                cantidad=item.cantidad,
+                precio_unitario=item.precio_unitario,
+                subtotal=item.subtotal,
+            )
+            for item in sorted(pedido.items, key=lambda i: i.id)
+        ]
+        if not items:
+            continue
+        tickets.append(
+            TicketOut(
+                id=f"pedido-{pedido.id}",
+                tipo="pedido",
+                folio=f"P-{pedido.id:05d}",
+                mesa=_etiqueta_mesa_ticket(
+                    pedido.mesa,
+                    pedido.mesa_etiqueta_historica,
+                    pedido.mesa_numero_historico,
+                ),
+                fecha_ocupacion=pedido.fecha_ocupacion or pedido.fecha or desde,
+                fecha_pago=pedido.fecha_cierre or hasta,
+                forma_pago=pedido.forma_pago or "efectivo",
+                items=items,
+            )
+        )
+
+    # Un ticket por cada cliente que pagó su parte de una división.
+    participantes = (
+        db.query(Participante)
+        .join(Division, Division.id == Participante.division_id)
+        .options(
+            joinedload(Participante.division).joinedload(Division.mesa),
+            selectinload(Participante.items).joinedload(ParticipanteItem.producto),
+        )
+        .filter(
+            Participante.pagado == 1,
+            or_(
+                and_(
+                    Participante.fecha_pago.isnot(None),
+                    Participante.fecha_pago >= desde,
+                    Participante.fecha_pago <= hasta,
+                ),
+                # Divisiones pagadas antes de existir fecha_pago: se usa la
+                # fecha de creación de la división como respaldo.
+                and_(
+                    Participante.fecha_pago.is_(None),
+                    Division.fecha >= desde,
+                    Division.fecha <= hasta,
+                ),
+            ),
+        )
+        .order_by(Participante.division_id, Participante.id)
+        .all()
+    )
+
+    # Correlativo estable de cada alias dentro de su división (D-0001-01).
+    indices: dict = {}
+    ids_divisiones = {p.division_id for p in participantes}
+    if ids_divisiones:
+        contador: dict = {}
+        for pid, did in (
+            db.query(Participante.id, Participante.division_id)
+            .filter(Participante.division_id.in_(ids_divisiones))
+            .order_by(Participante.division_id, Participante.id)
+            .all()
+        ):
+            contador[did] = contador.get(did, 0) + 1
+            indices[pid] = contador[did]
+
+    for participante in participantes:
+        division = participante.division
+        items = [
+            TicketItemOut(
+                nombre=item.producto.nombre if item.producto else "Producto eliminado",
+                cantidad=item.cantidad,
+                precio_unitario=item.precio_unitario,
+                subtotal=item.subtotal,
+            )
+            for item in sorted(participante.items, key=lambda i: i.id)
+        ]
+        if not items:
+            continue
+        tickets.append(
+            TicketOut(
+                id=f"participante-{participante.id}",
+                tipo="division",
+                folio=(
+                    f"D-{division.id:04d}-"
+                    f"{indices.get(participante.id, 1):02d}"
+                ),
+                mesa=_etiqueta_mesa_ticket(
+                    division.mesa if division else None,
+                    None,
+                    None,
+                ),
+                fecha_ocupacion=(
+                    (division.fecha_ocupacion if division else None)
+                    or (division.fecha if division else None)
+                    or desde
+                ),
+                fecha_pago=participante.fecha_pago
+                or (division.fecha if division else None)
+                or desde,
+                alias=participante.alias,
+                forma_pago=participante.forma_pago
+                or (division.forma_pago if division else None)
+                or "efectivo",
+                items=items,
+            )
+        )
+
+    tickets.sort(key=lambda t: (t.fecha_pago, t.id))
+
+    config = (
+        db.query(ConfiguracionNegocio)
+        .filter(ConfiguracionNegocio.id == 1)
+        .first()
+    )
+    nombre_negocio = (
+        config.nombre_negocio
+        if config and config.nombre_negocio
+        else "Inventario POS"
+    )
+
+    return TicketsTurnoOut(
+        turno_id=turno.id,
+        estado=turno.estado,
+        fecha_apertura=turno.fecha_apertura,
+        fecha_cierre=turno.fecha_cierre,
+        nombre_negocio=nombre_negocio,
+        tickets=tickets,
+    )
 
 
 @router.get("/historial")

@@ -335,6 +335,18 @@ export const api = {
   // ---------- Configuración ----------
   getConfig: () => request("/config"),
 
+  // ---------- Personalización del negocio ----------
+  getConfiguracionNegocio: () => request("/configuracion/"),
+
+  updateConfiguracionNegocio: (datos: {
+    nombre_negocio: string;
+    logo: string | null;
+  }) =>
+    request("/configuracion/", {
+      method: "PUT",
+      body: JSON.stringify(datos),
+    }),
+
   // ---------- Usuarios ----------
   login: (usuario: string, password: string) =>
     request("/usuarios/login", {
@@ -603,6 +615,12 @@ export const api = {
 
   /** Turno abierto ayer (se identifica por fecha de apertura). */
   getTurnoAyer: () => request("/caja/turno-ayer"),
+
+  /** Tickets internos del turno (por defecto, el turno abierto). */
+  getTicketsTurno: (turnoId?: number) =>
+    request(
+      `/caja/tickets${turnoId ? `?turno_id=${idPositivo(turnoId, "Turno")}` : ""}`
+    ),
 
   /** Años que tienen ventas registradas (para el filtro de Reportes). */
   getAniosVentas: (): Promise<number[]> => request("/caja/anios-ventas"),

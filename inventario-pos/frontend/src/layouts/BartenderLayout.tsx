@@ -5,12 +5,14 @@ import { Outlet, useNavigate } from "react-router-dom";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
 import AvisoTurnoModal from "../components/AvisoTurnoModal";
+import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
 import { api } from "../services/api";
 
 export default function BartenderLayout() {
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId = usuario?.id;
+  const negocio = useConfiguracionNegocio();
   // El permiso lo define el Administrador desde Usuarios y se guarda en la
   // base. Por defecto el Bartender solo consulta el inventario.
   const [ingresoStock, setIngresoStock] = useState<boolean>(
@@ -71,9 +73,18 @@ export default function BartenderLayout() {
       <AvisoTurnoModal />
 
       <header className="admin-header">
-        <div>
-          <h1>Inventario POS</h1>
-          <p className="muted">Panel de Bartender</p>
+        <div className="admin-brand">
+          {negocio.logo && (
+            <img
+              className="admin-brand-logo"
+              src={negocio.logo}
+              alt="Logotipo del negocio"
+            />
+          )}
+          <div>
+            <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
+            <p className="muted">Panel de Bartender</p>
+          </div>
         </div>
         <div className="user-info">
           <UserMenu

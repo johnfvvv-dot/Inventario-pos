@@ -1619,6 +1619,8 @@ select:focus {
   }
 }
 
+/* -------------------- PERSONALIZACIÓN DEL NEGOCIO -------------------- */
+
 @media (max-width: 600px) {
   .admin-header {
     padding: 0.85rem 1rem;
@@ -1661,5 +1663,355 @@ select:focus {
   .btn-primary,
   .btn-secondary {
     min-height: 44px;
+  }
+}
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.admin-brand > div {
+  min-width: 0;
+}
+
+.admin-brand h1 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(52vw, 540px);
+}
+
+.admin-brand-logo {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  object-fit: cover;
+}
+
+.personalizacion-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.logo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.logo-input-oculto {
+  display: none;
+}
+
+.logo-vista {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.logo-vista img {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  object-fit: cover;
+  background: #fff;
+}
+
+.personalizacion-preview {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7f9fb;
+}
+
+.personalizacion-preview > p {
+  margin: 0;
+}
+
+.preview-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.preview-cabecera .admin-brand h1 {
+  max-width: none;
+  white-space: normal;
+}
+
+.preview-usuario {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.acciones-turno {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .personalizacion-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -------------------- TICKETS INTERNOS -------------------- */
+
+.tickets-modal {
+  gap: 0.4rem;
+}
+
+.tickets-modal-head {
+  gap: 1rem;
+}
+
+.tickets-modal-head h3 {
+  margin: 0 0 0.15rem;
+}
+
+.tickets-modal-head p {
+  margin: 0;
+}
+
+.tickets-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tickets-acciones .btn-icon {
+  margin-right: 0;
+}
+
+.tickets-nota {
+  margin: 0 0 0.65rem;
+  flex-shrink: 0;
+}
+
+.tickets-print-area {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  align-items: start;
+  overflow-y: auto;
+  padding: 0.25rem 0.35rem 1rem 0.25rem;
+}
+
+.ticket-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(28, 40, 51, 0.06);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.ticket-cabecera {
+  padding-bottom: 0.55rem;
+  border-bottom: 1px dashed var(--border);
+  text-align: center;
+}
+
+.ticket-negocio {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.ticket-subtitulo {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin: 0.6rem 0;
+}
+
+.ticket-meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ticket-meta dt {
+  color: var(--muted);
+}
+
+.ticket-meta dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.ticket-separador {
+  margin: 0.65rem 0;
+  border-top: 1px dashed var(--border);
+}
+
+.ticket-items-titulo {
+  margin-bottom: 0.3rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.22rem 0;
+  border-bottom: 1px dotted #eef2f5;
+}
+
+.ticket-item:last-child {
+  border-bottom: none;
+}
+
+.ticket-item-nombre {
+  flex: 1;
+  word-break: break-word;
+}
+
+.ticket-item-precio {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ticket-pago {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.ticket-pie {
+  margin: 0.55rem 0 0;
+  color: var(--muted);
+  font-size: 0.63rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.ticket-descarga {
+  align-self: center;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 600px) {
+  .admin-brand-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .admin-brand h1 {
+    max-width: 48vw;
+    font-size: 1rem;
+  }
+
+  .tickets-modal-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .tickets-acciones {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .tickets-print-area {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .tickets-print-area,
+  .tickets-print-area * {
+    visibility: visible;
+  }
+
+  .tickets-print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+  }
+
+  .ticket-card {
+    width: 80mm;
+    max-width: 100%;
+    margin: 0 auto 8mm;
+    border: 1px dashed #999;
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .ticket-descarga,
+  .tickets-modal-head,
+  .tickets-nota,
+  .tickets-modal .error-msg,
+  .tickets-modal .empty-state {
+    display: none !important;
+  }
+
+  .modal-overlay {
+    position: static;
+    display: block;
+    padding: 0;
+    background: none;
+  }
+
+  .tickets-modal {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    padding: 0;
+    box-shadow: none;
   }
 }

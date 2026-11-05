@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import CierreTurnoModal from "../components/CierreTurnoModal";
+import TicketsModal from "../components/TicketsModal";
 import { api } from "../services/api";
 import {
   formatearDiaSemana,
@@ -45,6 +46,7 @@ export default function CorteCajaPage() {
   const [periodo, setPeriodo] = useState(1);
   const [offsetDias, setOffsetDias] = useState(0);
   const [modalCierre, setModalCierre] = useState(false);
+  const [ticketsTurnoId, setTicketsTurnoId] = useState<number | null>(null);
   const [errorCierre, setErrorCierre] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -154,17 +156,26 @@ export default function CorteCajaPage() {
         <div className="page-head">
           <h3>Turno actual</h3>
           {turno ? (
-            <button
-              className="btn-warning"
-              onClick={abrirModalCierre}
-              disabled={procesando || cargando}
-            >
-              {procesando
-                ? "Cerrando..."
-                : cargando
-                ? "Actualizando..."
-                : "Cerrar turno"}
-            </button>
+            <div className="acciones-turno">
+              <button
+                className="btn-secondary"
+                onClick={() => setTicketsTurnoId(turno.id)}
+                disabled={cargando}
+              >
+                Tickets
+              </button>
+              <button
+                className="btn-warning"
+                onClick={abrirModalCierre}
+                disabled={procesando || cargando}
+              >
+                {procesando
+                  ? "Cerrando..."
+                  : cargando
+                  ? "Actualizando..."
+                  : "Cerrar turno"}
+              </button>
+            </div>
           ) : cargando ? (
             <button className="btn-secondary" disabled>
               Cargando...
@@ -269,6 +280,7 @@ export default function CorteCajaPage() {
                 <th>Total</th>
                 <th>Ganancia</th>
                 <th>Observaciones</th>
+                <th>Tickets</th>
               </tr>
             </thead>
             <tbody>
@@ -287,11 +299,19 @@ export default function CorteCajaPage() {
                   </td>
                   <td>{formatearPrecio(t.ganancia || 0)}</td>
                   <td className="obs-cell">{t.observaciones || "—"}</td>
+                  <td>
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => setTicketsTurnoId(t.id)}
+                    >
+                      Ver tickets
+                    </button>
+                  </td>
                 </tr>
               ))}
               {turnos.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="empty-state">
+                  <td colSpan={12} className="empty-state">
                     Todavía no hay turnos registrados.
                   </td>
                 </tr>
@@ -300,6 +320,13 @@ export default function CorteCajaPage() {
           </table>
         </div>
       </section>
+
+      {ticketsTurnoId !== null && (
+        <TicketsModal
+          turnoId={ticketsTurnoId}
+          onCerrar={() => setTicketsTurnoId(null)}
+        />
+      )}
 
       {modalCierre && turno && (
         <CierreTurnoModal

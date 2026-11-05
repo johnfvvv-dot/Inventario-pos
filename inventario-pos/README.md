@@ -129,6 +129,17 @@ Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
   **Ayer** el día completo y **7/30 días** incluyen hoy. Su **TOTAL** es la suma
   de efectivo + tarjeta + transferencia de los pedidos cerrados en ese rango.
   El historial muestra el **día de la semana de apertura** de cada turno.
+- **Tickets internos:** desde **Corte de caja** (turno abierto o cerrado) se
+  abre una ventana emergente con un comprobante por cada pedido cobrado y por
+  cada alias que pagó su parte de una división. Incluye nombre del negocio,
+  mesa/barra, fecha de ocupación, fecha de pago, alias del cliente, productos
+  (nombre, cantidad y precio) y forma de pago. No incluye total ni impuestos,
+  no se guarda en el servidor y puede imprimirse/guardarse como PDF o
+  descargarse como imagen PNG.
+- **Personalización (solo Administrador):** permite cambiar el nombre del
+  negocio y agregar un logotipo cuadrado en la cabecera. El nombre oficial del
+  sistema sigue siendo **Inventario POS**; los valores se guardan en la tabla
+  `configuracion_negocio` y también identifican los tickets internos.
 - **Reportes:** gráficos (ventas por día, top de productos, formas de pago),
   KPIs y exportación CSV.
 - **Historial de ventas:** filtros por rango de fechas, mesa/barra, producto y
@@ -191,7 +202,8 @@ disponible en `http://localhost:8000/docs`.
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
 | Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
 | Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
-| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/resumen?dias=N&offset_dias=M`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
+| Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/tickets?turno_id=<id>` (turno abierto o cerrado), `GET /caja/resumen?dias=N&offset_dias=M`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
+| Personalización | `GET /configuracion/` y `PUT /configuracion/` (nombre del negocio y logo data URL) |
 | Configuración | `GET /config` (bajo `/api`) y `GET /health` (sin prefijo) |
 
 ## Requisitos previos
@@ -594,7 +606,7 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 | `v1.1.0` | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 | `v1.2.0` | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
-| `v1.2.1` (actual) | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login |
+| `v1.2.1` (actual) | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login. Incluye personalización visual del negocio y tickets internos desde Corte de caja |
 
 ## Despliegue en la nube
 

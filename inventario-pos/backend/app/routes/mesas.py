@@ -17,6 +17,7 @@ from app.schemas import (
     OcuparMesaOut,
     PosicionBarra,
 )
+from app.tiempo import ahora_local
 
 router = APIRouter(tags=["mesas"])
 
@@ -234,6 +235,7 @@ def ocupar_mesa(mesa_id: int, db: Session = Depends(get_db)):
                 status_code=400, detail="No hay puestos libres en esta barra"
             )
         libre.estado = "ocupada"
+        libre.fecha_ocupacion = ahora_local()
         db.commit()
         db.refresh(libre)
         return OcuparMesaOut(
@@ -245,6 +247,8 @@ def ocupar_mesa(mesa_id: int, db: Session = Depends(get_db)):
         )
 
     mesa.estado = "ocupada"
+    if not mesa.fecha_ocupacion:
+        mesa.fecha_ocupacion = ahora_local()
     db.commit()
     db.refresh(mesa)
     return OcuparMesaOut(
@@ -296,6 +300,10 @@ def actualizar_estado_mesa(
             )
 
     mesa.estado = datos.nuevo_estado
+    if datos.nuevo_estado == "disponible":
+        mesa.fecha_ocupacion = None
+    elif datos.nuevo_estado == "ocupada" and not mesa.fecha_ocupacion:
+        mesa.fecha_ocupacion = ahora_local()
     db.commit()
     db.refresh(mesa)
     return mesa
@@ -351,6 +359,7 @@ def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
 
     for m in mesas:
         m.estado = "disponible"
+        m.fecha_ocupacion = None
     db.commit()
     db.refresh(mesa)
     return mesa

@@ -311,6 +311,8 @@ def cerrar_cuenta(
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
         pedido.fecha_cierre = ahora
+        if not pedido.fecha_ocupacion:
+            pedido.fecha_ocupacion = mesa.fecha_ocupacion or pedido.fecha or ahora
         pedido.guardar_origen(mesa)
 
     # Marcar como pagadas las divisiones pendientes
@@ -319,12 +321,17 @@ def cerrar_cuenta(
         if division.estado == "pendiente":
             division.estado = "pagada"
             division.forma_pago = forma_pago
+            if not division.fecha_ocupacion:
+                division.fecha_ocupacion = mesa.fecha_ocupacion or division.fecha or ahora
             for participante in division.participantes:
                 participante.pagado = 1
                 participante.forma_pago = forma_pago
+                participante.fecha_pago = ahora
 
     # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
     mesa.estado = "disponible" if liberar_mesa else "ocupada"
+    if liberar_mesa:
+        mesa.fecha_ocupacion = None
 
     db.commit()
 
@@ -372,6 +379,8 @@ def cerrar_cuenta_barra(
         pedido.fecha_cierre = ahora
         plaza = mesas_por_id.get(pedido.mesa_id)
         if plaza:
+            if not pedido.fecha_ocupacion:
+                pedido.fecha_ocupacion = plaza.fecha_ocupacion or pedido.fecha or ahora
             pedido.guardar_origen(plaza)
 
     # Marcar como pagadas las divisiones pendientes de cada plaza
@@ -380,11 +389,18 @@ def cerrar_cuenta_barra(
             if division.estado == "pendiente":
                 division.estado = "pagada"
                 division.forma_pago = forma_pago
+                if not division.fecha_ocupacion:
+                    division.fecha_ocupacion = (
+                        mesa.fecha_ocupacion or division.fecha or ahora
+                    )
                 for participante in division.participantes:
                     participante.pagado = 1
                     participante.forma_pago = forma_pago
+                    participante.fecha_pago = ahora
 
         mesa.estado = "disponible" if liberar_barra else "ocupada"
+        if liberar_barra:
+            mesa.fecha_ocupacion = None
 
     db.commit()
 
@@ -583,11 +599,13 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     )
 
     # Crear la división con los subtotales por alias
+    fecha_ocupacion = mesa_division.fecha_ocupacion or ahora_local()
     division = Division(
         mesa_id=mesa_division.id,
         usuario_id=usuario.id,
         total=0.0,
         estado="pendiente",
+        fecha_ocupacion=fecha_ocupacion,
     )
     db.add(division)
     db.flush()
@@ -650,6 +668,7 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
             usuario_id=usuario.id,
             estado="abierto",
             total=resto_total,
+            fecha_ocupacion=fecha_ocupacion,
         )
         pedido_resto.guardar_origen(mesa_division)
         db.add(pedido_resto)
@@ -719,6 +738,7 @@ def pagar_participante(
     if not participante.pagado:
         participante.pagado = 1
         participante.forma_pago = forma_pago
+        participante.fecha_pago = ahora_local()
         participante.division.forma_pago = forma_pago
 
     division = participante.division
@@ -747,6 +767,7 @@ def pagar_participante(
         )
         if pedidos_abiertos == 0 and divisiones_pendientes == 0:
             mesa.estado = "disponible"
+            mesa.fecha_ocupacion = None
 
     db.commit()
 
@@ -760,7 +781,11 @@ def pagar_participante(
 
 
 @router.post("/division/{division_id}/pagar", response_model=DivisionOut)
-def pagar_division(division_id: int, db: Session = Depends(get_db)):
+def pagar_division(
+    division_id: int,
+    forma_pago: str = "efectivo",
+    db: Session = Depends(get_db),
+):
     """Marca como pagados TODOS los clientes de una división."""
     division = (
         db.query(Division)
@@ -775,12 +800,22 @@ def pagar_division(division_id: int, db: Session = Depends(get_db)):
     if not division:
         raise HTTPException(status_code=404, detail="División no encontrada")
 
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ahora = ahora_local()
     for participante in division.participantes:
         if not participante.pagado:
             participante.pagado = 1
+            participante.forma_pago = forma_pago
+            participante.fecha_pago = ahora
 
     if all(p.pagado for p in division.participantes):
         division.estado = "pagada"
+        division.forma_pago = forma_pago
 
     db.commit()
     return _division_out(division)

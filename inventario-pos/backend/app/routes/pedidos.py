@@ -76,11 +76,15 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     if not datos.items:
         raise HTTPException(status_code=400, detail="El pedido no tiene productos")
 
+    if not mesa.fecha_ocupacion:
+        mesa.fecha_ocupacion = ahora_local()
+
     nuevo_pedido = Pedido(
         mesa_id=mesa.id,
         usuario_id=usuario.id,
         estado="abierto",
         total=0.0,
+        fecha_ocupacion=mesa.fecha_ocupacion,
     )
     nuevo_pedido.guardar_origen(mesa)
     db.add(nuevo_pedido)
@@ -192,6 +196,10 @@ def ajustar_item_pedido(
         pedido.estado = "cerrado"
         pedido.forma_pago = "efectivo"
         pedido.fecha_cierre = ahora_local()
+        if not pedido.fecha_ocupacion:
+            pedido.fecha_ocupacion = (
+                pedido.mesa.fecha_ocupacion if pedido.mesa else None
+            ) or pedido.fecha
         if pedido.mesa:
             pedido.guardar_origen(pedido.mesa)
 
@@ -255,6 +263,10 @@ def cerrar_pedido(
     pedido.estado = "cerrado"
     pedido.forma_pago = forma_pago
     pedido.fecha_cierre = ahora_local()
+    if not pedido.fecha_ocupacion:
+        pedido.fecha_ocupacion = (
+            pedido.mesa.fecha_ocupacion if pedido.mesa else None
+        ) or pedido.fecha
     if pedido.mesa:
         pedido.guardar_origen(pedido.mesa)
 
@@ -279,6 +291,7 @@ def cerrar_pedido(
             mesa = db.query(Mesa).filter(Mesa.id == pedido.mesa_id).first()
             if mesa:
                 mesa.estado = "disponible"
+                mesa.fecha_ocupacion = None
 
     db.commit()
     pedido_cargado = _cargar_pedido(db, pedido.id)
