@@ -1,6 +1,6 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.2.1
+**Versión actual:** 1.2.2
 
 **Última actualización:** 05/11/2026
 
@@ -52,9 +52,10 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `https://inventario-pos-bfw.pages.dev/admin/usuarios`. El frontend siempre se
   sirve desde Cloudflare Pages; al iniciar sesión prueba en paralelo
   `localhost:8000`, `127.0.0.1:8000` y la IP LAN compilada, y si ninguna
-  responde usa Render. El login solo muestra `Inventario POS v1.2.1`; no hay
+  responde usa Render. El login solo muestra `Inventario POS v1.2.2`; no hay
   botón de conexión ni estado del servidor. El fallback seguro solo reintenta
   `GET`, `HEAD` y login.
+- **1.2.2 (05/11/2026):** tipografía uniforme en el modal de apertura, máscara de miles sin decimales para el Fondo Inicial de Caja e impresión de todos los tickets del turno con salto de página.
 - **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
   `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
   solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
@@ -185,7 +186,7 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `/admin/personalizacion`. Cambia el nombre visible de la cabecera y agrega un
   logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP). El nombre oficial del
   sistema sigue siendo **Inventario POS** y el login conserva
-  `Inventario POS v1.2.1`.
+  `Inventario POS v1.2.2`.
 - Los valores se guardan en la tabla `configuracion_negocio` (fila única
   `id=1`). La cabecera del Administrador y la del Bartender los leen mediante
   `useConfiguracionNegocio`, con copia en `localStorage` y evento

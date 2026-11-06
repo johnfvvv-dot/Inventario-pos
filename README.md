@@ -4,14 +4,14 @@ Sistema web y de escritorio de inventario y punto de venta para pequeños
 negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
 pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
-**Versión actual:** 1.2.1
+**Versión actual:** 1.2.2
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
 - **Frontend:** React 18 + TypeScript
 - **Base de datos:** Neon PostgreSQL (modo híbrido) / SQLite (respaldo local)
 - **Ejecución:** `.exe` local + Render Free como respaldo + Cloudflare Pages
 
-## Modo híbrido (v1.2.1)
+## Modo híbrido (v1.2.2)
 
 El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador y el
 frontend siempre publicado en Cloudflare Pages:
@@ -25,7 +25,7 @@ frontend siempre publicado en Cloudflare Pages:
 - Mientras la ventana del `.exe` esté abierta, el backend local sigue activo.
   No se instala como servicio de Windows: si se cierra la consola, el backend
   se detiene y el frontend pasa a Render.
-- El login solo muestra **`Inventario POS v1.2.1`**. No hay botón de conexión ni
+- El login solo muestra **`Inventario POS v1.2.2`**. No hay botón de conexión ni
   textos sobre el servidor activo; la detección es transparente.
 
 ### Lógica de detección
@@ -80,7 +80,7 @@ Opciones reales para el celular en la misma WiFi:
 Para habilitar la opción 1, permite el puerto **8000** en el firewall de
 Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
 
-## Funcionalidades (v1.2.1)
+## Funcionalidades (v1.2.2)
 
 ### Módulos
 
@@ -422,7 +422,7 @@ navegador, la PWA o el APK está ejecutando un **build anterior**. La versión
 nuevo no puede apuntar a ngrok.
 
 1. Abre https://inventario-pos-bfw.pages.dev y confirma al pie del login que
-   diga **Inventario POS v1.2.1**.
+   diga **Inventario POS v1.2.2**.
 2. Si aparece la versión vieja, cierra todas las pestañas, borra los datos del
    sitio (o desinstala la PWA) y vuelve a abrir la URL.
 3. En el PC, cierra cualquier `InventarioPOS.exe` viejo y usa el nuevo de
@@ -606,7 +606,8 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.0.0` | `e8a5325` | Primera versión estable: inventario, mesas, pedidos, cuentas, división por alias, liberación controlada y transferencia de cuenta |
 | `v1.1.0` | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 | `v1.2.0` | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
-| `v1.2.1` (actual) | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login. Incluye personalización visual del negocio y tickets internos desde Corte de caja |
+| `v1.2.1` | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login. Incluye personalización visual del negocio y tickets internos desde Corte de caja |
+| `v1.2.2` (actual) | — | Estandariza la tipografía del modal de apertura, aplica máscara de miles sin decimales al Fondo Inicial de Caja y permite imprimir todos los tickets del turno con salto de página |
 
 ## Despliegue en la nube
 

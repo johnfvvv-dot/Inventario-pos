@@ -8,6 +8,10 @@
 
 import { FormEvent, useState } from "react";
 import type { TurnoCaja } from "../types/turno";
+import {
+  formatearMontoEditable,
+  parsearMontoEditable,
+} from "../utils/format";
 
 interface Props {
   abrirTurno: (fondoInicial: number) => Promise<TurnoCaja>;
@@ -24,6 +28,13 @@ export default function AvisoTurnoModal({
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cambiarFondo = (valor: string) => {
+    // Se conservan solo dígitos: el "$" y los puntos son únicamente visuales.
+    // El límite evita perder precisión con montos fuera del rango seguro.
+    setFondo(valor.replace(/\D/g, "").slice(0, 12));
+    setError(null);
+  };
+
   const confirmar = async (evento: FormEvent) => {
     evento.preventDefault();
     setError(null);
@@ -33,7 +44,7 @@ export default function AvisoTurnoModal({
       return;
     }
 
-    const monto = Number(fondo);
+    const monto = parsearMontoEditable(fondo);
     if (!Number.isFinite(monto) || monto < 0) {
       setError(
         "El Fondo Inicial de Caja debe ser un número mayor o igual a cero."
@@ -90,22 +101,18 @@ export default function AvisoTurnoModal({
           <label htmlFor="fondo-inicial">Fondo Inicial de Caja</label>
           <input
             id="fondo-inicial"
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            value={fondo}
-            onChange={(evento) => {
-              setFondo(evento.target.value);
-              setError(null);
-            }}
-            placeholder="Base en efectivo para cambio/vueltos"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={formatearMontoEditable(fondo)}
+            onChange={(evento) => cambiarFondo(evento.target.value)}
+            placeholder="Ej: $100.000"
             aria-describedby="ayuda-fondo-inicial"
             autoFocus
             required
             disabled={procesando}
           />
-          <small id="ayuda-fondo-inicial" className="muted">
+          <small id="ayuda-fondo-inicial" className="campo-ayuda">
             Base en efectivo para cambio/vueltos.
           </small>
         </div>

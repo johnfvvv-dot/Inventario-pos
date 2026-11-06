@@ -21,6 +21,24 @@ export const formatearNumero = (valor: number | null | undefined): string => {
 };
 
 /**
+ * Texto editable de moneda: recibe el valor visible o los dígitos y devuelve
+ * "$100.000" (sin decimales). Si no hay dígitos, devuelve una cadena vacía.
+ */
+export const formatearMontoEditable = (valor: string): string => {
+  const digitos = String(valor ?? "").replace(/\D/g, "");
+  return digitos ? formatearPrecio(Number(digitos)) : "";
+};
+
+/**
+ * Convierte "$100.000" o "100.000" en el número limpio 100000.
+ * Devuelve NaN cuando no hay dígitos para validar el campo.
+ */
+export const parsearMontoEditable = (valor: string): number => {
+  const digitos = String(valor ?? "").replace(/\D/g, "");
+  return digitos ? Number(digitos) : NaN;
+};
+
+/**
  * Interpreta una fecha del backend como hora local.
  *
  * El servidor guarda horas locales "naive" (sin zona horaria). Si el texto
