@@ -1,7 +1,7 @@
 /** Layout del panel de administración. */
 
 import { Outlet, useNavigate } from "react-router-dom";
-import AvisoTurnoModal from "../components/AvisoTurnoModal";
+import { TurnoProvider } from "../context/TurnoContext";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
 import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
@@ -17,51 +17,50 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="admin-layout">
-      {/* Pregunta por la apertura del turno solo la primera vez del día */}
-      <AvisoTurnoModal />
-
-      <header className="admin-header">
-        <div className="admin-brand">
-          {negocio.logo && (
-            <img
-              className="admin-brand-logo"
-              src={negocio.logo}
-              alt="Logotipo del negocio"
-            />
-          )}
-          <div>
-            <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
-            <p className="muted">Panel de Administración</p>
+    <TurnoProvider>
+      <div className="admin-layout">
+        <header className="admin-header">
+          <div className="admin-brand">
+            {negocio.logo && (
+              <img
+                className="admin-brand-logo"
+                src={negocio.logo}
+                alt="Logotipo del negocio"
+              />
+            )}
+            <div>
+              <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
+              <p className="muted">Panel de Administración</p>
+            </div>
           </div>
-        </div>
-        <div className="user-info">
-          <UserMenu
-            nombre={usuario.alias || usuario.nombre || "Administrador"}
-            rol={usuario.rol || "admin"}
-            onCerrarSesion={cerrarSesion}
-          />
-        </div>
-      </header>
+          <div className="user-info">
+            <UserMenu
+              nombre={usuario.alias || usuario.nombre || "Administrador"}
+              rol={usuario.rol || "admin"}
+              onCerrarSesion={cerrarSesion}
+            />
+          </div>
+        </header>
 
-      <div className="admin-body">
-        <nav className="admin-nav">
-          <MenuLink to="/admin/inventario" rutas={["/admin"]}>
-            Inventario
-          </MenuLink>
-          <MenuLink to="/admin/mesas">Mesas</MenuLink>
-          <MenuLink to="/admin/pedidos">Pedidos</MenuLink>
-          <MenuLink to="/admin/reportes">Reportes</MenuLink>
-          <MenuLink to="/admin/corte-caja">Corte de caja</MenuLink>
-          <MenuLink to="/admin/historial">Historial</MenuLink>
-          <MenuLink to="/admin/personalizacion">Personalización</MenuLink>
-          <MenuLink to="/admin/usuarios">Usuarios</MenuLink>
-        </nav>
+        <div className="admin-body">
+          <nav className="admin-nav">
+            <MenuLink to="/admin/inventario" rutas={["/admin"]}>
+              Inventario
+            </MenuLink>
+            <MenuLink to="/admin/mesas">Mesas</MenuLink>
+            <MenuLink to="/admin/pedidos">Pedidos</MenuLink>
+            <MenuLink to="/admin/reportes">Reportes</MenuLink>
+            <MenuLink to="/admin/corte-caja">Corte de caja</MenuLink>
+            <MenuLink to="/admin/historial">Historial</MenuLink>
+            <MenuLink to="/admin/personalizacion">Personalización</MenuLink>
+            <MenuLink to="/admin/usuarios">Usuarios</MenuLink>
+          </nav>
 
-        <main className="admin-content">
-          <Outlet context={{ ingresoStockHabilitado: usuario.rol === "admin" }} />
-        </main>
+          <main className="admin-content">
+            <Outlet context={{ ingresoStockHabilitado: usuario.rol === "admin" }} />
+          </main>
+        </div>
       </div>
-    </div>
+    </TurnoProvider>
   );
 }

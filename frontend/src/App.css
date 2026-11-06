@@ -1232,6 +1232,16 @@ select:focus {
   color: #8a6a20;
 }
 
+/* Aviso operativo cuando no hay turno de caja abierto */
+.aviso-turno {
+  background: #eef6fd;
+  border-color: #b9d9f2;
+}
+
+.aviso-turno .aviso-texto {
+  color: #2c5d85;
+}
+
 .aviso-acciones {
   display: flex;
   align-items: center;
@@ -1291,6 +1301,15 @@ select:focus {
 
 .modal-cierre-turno {
   max-width: 480px;
+}
+
+.modal-apertura-turno {
+  max-width: 460px;
+}
+
+.modal-apertura-turno input[type="number"] {
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 
 .cierre-monto {
@@ -1811,18 +1830,29 @@ select:focus {
   flex-shrink: 0;
 }
 
+.tickets-visualizador {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
 .tickets-print-area {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1rem;
-  align-items: start;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
+  width: 100%;
   overflow-y: auto;
-  padding: 0.25rem 0.35rem 1rem 0.25rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.25rem;
 }
 
 .ticket-card {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
+  width: min(100%, 380px);
   padding: 1rem 1.05rem;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1915,11 +1945,72 @@ select:focus {
   font-weight: 600;
 }
 
+.ticket-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.1rem 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.ticket-total span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-total strong {
+  font-size: 1.1rem;
+}
+
 .ticket-pago {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
   font-size: 0.8rem;
+}
+
+.tickets-navegacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.1rem 0 0.15rem;
+}
+
+.ticket-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 110px;
+  margin: 0;
+}
+
+.ticket-nav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ticket-nav-flecha {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.ticket-contador {
+  min-width: 120px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .ticket-pie {
@@ -1956,8 +2047,38 @@ select:focus {
     justify-content: flex-start;
   }
 
-  .tickets-print-area {
-    grid-template-columns: 1fr;
+  .tickets-visualizador {
+    gap: 0.5rem;
+  }
+
+  .ticket-card {
+    width: 100%;
+  }
+
+  .tickets-navegacion {
+    gap: 0.4rem;
+  }
+
+  .ticket-nav-btn {
+    min-width: 0;
+    padding: 0.35rem 0.55rem;
+  }
+
+  .ticket-contador {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .ticket-nav-texto {
+    display: none;
+  }
+
+  .ticket-nav-btn {
+    width: 34px;
+    padding: 0.35rem;
   }
 }
 
@@ -1966,9 +2087,16 @@ select:focus {
     visibility: hidden;
   }
 
+  .tickets-visualizador,
   .tickets-print-area,
   .tickets-print-area * {
     visibility: visible;
+  }
+
+  .tickets-visualizador {
+    display: block;
+    min-height: auto;
+    overflow: visible;
   }
 
   .tickets-print-area {
@@ -1993,6 +2121,7 @@ select:focus {
   }
 
   .ticket-descarga,
+  .tickets-navegacion,
   .tickets-modal-head,
   .tickets-nota,
   .tickets-modal .error-msg,

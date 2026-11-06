@@ -1,38 +1,21 @@
 /** Pantalla de Corte de Caja - Administrador. */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import CierreTurnoModal from "../components/CierreTurnoModal";
 import TicketsModal from "../components/TicketsModal";
+import { useTurno } from "../context/TurnoContext";
 import { api } from "../services/api";
+import type { TotalesTurno, TurnoCaja } from "../types/turno";
 import {
   formatearDiaSemana,
   formatearFechaHora,
   formatearPrecio,
 } from "../utils/format";
 
-interface Totales {
-  efectivo: number;
-  tarjeta: number;
-  transferencia: number;
-  total: number;
-  operaciones: number;
-}
-
-interface Turno {
-  id: number;
-  usuario_nombre: string;
-  fecha_apertura: string;
-  fecha_cierre: string | null;
-  observaciones: string | null;
-  estado: string;
-  totales: Totales;
-  ganancia: number;
-}
-
 interface Resumen {
   desde: string;
   hasta: string;
-  totales: Totales;
+  totales: TotalesTurno;
   ganancia: number;
   pedidos_cerrados: number;
   mesas_atendidas: number;
@@ -40,8 +23,14 @@ interface Resumen {
 }
 
 export default function CorteCajaPage() {
-  const [turno, setTurno] = useState<Turno | null>(null);
-  const [turnos, setTurnos] = useState<Turno[]>([]);
+  const {
+    turno,
+    cargando: cargandoTurno,
+    error: errorTurno,
+    recargar: recargarTurno,
+    solicitarApertura,
+  } = useTurno();
+  const [turnos, setTurnos] = useState<TurnoCaja[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [periodo, setPeriodo] = useState(1);
   const [offsetDias, setOffsetDias] = useState(0);
@@ -51,45 +40,34 @@ export default function CorteCajaPage() {
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
-  const [cargando, setCargando] = useState(true);
+  const [cargandoDatos, setCargandoDatos] = useState(true);
 
-  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
-  const usuarioId: number = usuario?.id || 1;
-
-  const cargar = async () => {
-    setCargando(true);
+  const cargarDatos = useCallback(async () => {
+    setCargandoDatos(true);
     try {
-      const [t, hist, res]: any = await Promise.all([
-        api.getTurnoActual(),
+      const [hist, res]: any = await Promise.all([
         api.getTurnos(10),
         api.getResumenCaja(periodo, offsetDias),
       ]);
-      setTurno(t);
       setTurnos(hist);
       setResumen(res);
       setError(null);
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setCargando(false);
+      setCargandoDatos(false);
     }
-  };
-
-  useEffect(() => {
-    cargar();
   }, [periodo, offsetDias]);
 
-  const abrirTurno = async () => {
-    setProcesando(true);
-    try {
-      const res: any = await api.abrirTurno(usuarioId);
-      setMensaje(res.mensaje || "Turno abierto");
-      await cargar();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setProcesando(false);
-    }
+  // Espera a que el contexto resuelva el turno y recarga el historial cada
+  // vez que se abre o cierra un turno.
+  useEffect(() => {
+    if (cargandoTurno) return;
+    cargarDatos();
+  }, [cargarDatos, cargandoTurno, turno?.id]);
+
+  const actualizar = async () => {
+    await Promise.all([recargarTurno(), cargarDatos()]);
   };
 
   const abrirModalCierre = () => {
@@ -105,8 +83,10 @@ export default function CorteCajaPage() {
       await api.cerrarTurno(observaciones);
       setModalCierre(false);
       setMensaje("Turno de caja cerrado");
-      await cargar();
+      // El contexto actualiza el turno a null y el efecto recarga historial.
+      await recargarTurno();
     } catch (err: any) {
+      // El modal permanece abierto mostrando el rechazo del backend (409).
       setErrorCierre(err.message);
     } finally {
       setProcesando(false);
@@ -142,13 +122,15 @@ export default function CorteCajaPage() {
             <option value="7">Últimos 7 días</option>
             <option value="30">Últimos 30 días</option>
           </select>
-          <button className="btn-secondary" onClick={cargar}>
+          <button className="btn-secondary" onClick={actualizar}>
             Actualizar
           </button>
         </div>
       </div>
 
-      {error && <p className="error-msg">{error}</p>}
+      {(error || errorTurno) && (
+        <p className="error-msg">{error || errorTurno}</p>
+      )}
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {/* Turno abierto */}
@@ -160,29 +142,29 @@ export default function CorteCajaPage() {
               <button
                 className="btn-secondary"
                 onClick={() => setTicketsTurnoId(turno.id)}
-                disabled={cargando}
+                disabled={cargandoTurno}
               >
                 Tickets
               </button>
               <button
                 className="btn-warning"
                 onClick={abrirModalCierre}
-                disabled={procesando || cargando}
+                disabled={procesando}
               >
-                {procesando
-                  ? "Cerrando..."
-                  : cargando
-                  ? "Actualizando..."
-                  : "Cerrar turno"}
+                {procesando ? "Cerrando..." : "Cerrar turno"}
               </button>
             </div>
-          ) : cargando ? (
+          ) : cargandoTurno ? (
             <button className="btn-secondary" disabled>
               Cargando...
             </button>
           ) : (
-            <button className="btn-primary" onClick={abrirTurno} disabled={procesando}>
-              {procesando ? "Abriendo..." : "Abrir turno"}
+            <button
+              className="btn-primary"
+              onClick={solicitarApertura}
+              disabled={procesando}
+            >
+              Abrir turno
             </button>
           )}
         </div>
@@ -191,7 +173,8 @@ export default function CorteCajaPage() {
           <>
             <p className="muted small">
               Abierto por <strong>{turno.usuario_nombre}</strong> el{" "}
-              {formatearFechaHora(turno.fecha_apertura)}
+              {formatearFechaHora(turno.fecha_apertura)} · Fondo inicial:{" "}
+              <strong>{formatearPrecio(turno.fondo_inicial || 0)}</strong>
             </p>
             <div className="kpis">
               <div className="kpi-card">
@@ -216,7 +199,7 @@ export default function CorteCajaPage() {
               </div>
             </div>
           </>
-        ) : cargando ? (
+        ) : cargandoTurno ? (
           <p className="empty-state">Cargando turno...</p>
         ) : (
           <p className="empty-state">
@@ -274,6 +257,7 @@ export default function CorteCajaPage() {
                 <th>Abierto</th>
                 <th>Cerrado</th>
                 <th>Usuario</th>
+                <th>Fondo inicial</th>
                 <th>Efectivo</th>
                 <th>Tarjeta</th>
                 <th>Transfer.</th>
@@ -291,6 +275,7 @@ export default function CorteCajaPage() {
                   <td>{formatearFechaHora(t.fecha_apertura)}</td>
                   <td>{formatearFechaHora(t.fecha_cierre)}</td>
                   <td>{t.usuario_nombre}</td>
+                  <td>{formatearPrecio(t.fondo_inicial || 0)}</td>
                   <td>{formatearPrecio(t.totales.efectivo)}</td>
                   <td>{formatearPrecio(t.totales.tarjeta)}</td>
                   <td>{formatearPrecio(t.totales.transferencia)}</td>
@@ -311,8 +296,10 @@ export default function CorteCajaPage() {
               ))}
               {turnos.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="empty-state">
-                    Todavía no hay turnos registrados.
+                  <td colSpan={13} className="empty-state">
+                    {cargandoDatos
+                      ? "Cargando turnos..."
+                      : "Todavía no hay turnos registrados."}
                   </td>
                 </tr>
               )}

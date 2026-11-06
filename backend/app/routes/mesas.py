@@ -18,6 +18,7 @@ from app.schemas import (
     PosicionBarra,
 )
 from app.tiempo import ahora_local
+from app.turnos import exigir_turno_abierto
 
 router = APIRouter(tags=["mesas"])
 
@@ -217,6 +218,8 @@ def listar_mesas(db: Session = Depends(get_db)):
 @router.post("/{mesa_id}/ocupar", response_model=OcuparMesaOut)
 def ocupar_mesa(mesa_id: int, db: Session = Depends(get_db)):
     """Asigna un cliente a una mesa o a un puesto libre de una barra."""
+    exigir_turno_abierto(db)
+
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -273,6 +276,10 @@ def actualizar_estado_mesa(
             status_code=400,
             detail=f"Estado inválido. Use: {', '.join(ESTADOS_PERMITIDOS)}",
         )
+
+    # Ocupar una mesa es una operación de atención: exige turno abierto.
+    if datos.nuevo_estado == "ocupada":
+        exigir_turno_abierto(db)
 
     # No se puede marcar como disponible una mesa con cuentas pendientes
     if datos.nuevo_estado == "disponible":

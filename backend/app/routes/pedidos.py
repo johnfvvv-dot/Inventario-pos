@@ -15,6 +15,7 @@ from app.schemas import (
     PedidoOut,
 )
 from app.tiempo import ahora_local
+from app.turnos import exigir_turno_abierto
 
 router = APIRouter(tags=["pedidos"])
 
@@ -65,6 +66,8 @@ def _cargar_pedido(db: Session, pedido_id: int) -> Pedido:
 @router.post("/", response_model=PedidoOut, status_code=201)
 def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     """Crear un pedido, descontar stock y calcular el total."""
+    exigir_turno_abierto(db)
+
     mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
@@ -141,6 +144,8 @@ def ajustar_item_pedido(
 
     cantidad=0 elimina la línea; devuelve el stock al inventario.
     """
+    exigir_turno_abierto(db)
+
     pedido = (
         db.query(Pedido)
         .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))

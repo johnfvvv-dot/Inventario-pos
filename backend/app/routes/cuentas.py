@@ -32,6 +32,7 @@ from app.schemas import (
     TransferirCuentaOut,
 )
 from app.tiempo import ahora_local
+from app.turnos import exigir_turno_abierto
 
 router = APIRouter(tags=["cuentas"])
 
@@ -412,6 +413,8 @@ def transferir_cuenta(
     mesa_id: int, destino_id: int, db: Session = Depends(get_db)
 ):
     """Transfiere una cuenta abierta entre mesas y plazas de barra."""
+    exigir_turno_abierto(db)
+
     origen = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not origen:
         raise HTTPException(status_code=404, detail="Mesa de origen no encontrada")
@@ -507,6 +510,8 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
     divide lo asignado a los alias; el resto queda en un pedido abierto
     (bloque único) para que la cuenta se complete.
     """
+    exigir_turno_abierto(db)
+
     es_barra = datos.barra_numero is not None
     if es_barra:
         grupo = f"Barra {datos.barra_numero}"

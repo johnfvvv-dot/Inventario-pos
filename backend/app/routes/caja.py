@@ -22,6 +22,7 @@ from app.models import (
     etiqueta_desde_numero_historico,
 )
 from app.schemas import (
+    AbrirTurnoIn,
     AbrirTurnoOut,
     CerrarTurnoIn,
     ResumenCajaOut,
@@ -32,6 +33,7 @@ from app.schemas import (
     TurnoCajaOut,
 )
 from app.tiempo import ahora_local
+from app.turnos import MENSAJE_CIERRE_BLOQUEADO, turno_abierto
 
 router = APIRouter(tags=["caja"])
 
@@ -120,6 +122,7 @@ def _turno_out(db: Session, turno: TurnoCaja) -> TurnoCajaOut:
         fecha_cierre=turno.fecha_cierre,
         observaciones=turno.observaciones,
         estado=turno.estado,
+        fondo_inicial=float(turno.fondo_inicial or 0.0),
         totales=totales,
         ganancia=_ganancia_periodo(db, turno.fecha_apertura, hasta),
     )
@@ -197,6 +200,7 @@ def _turnos_out(db: Session, turnos: List[TurnoCaja]) -> List[TurnoCajaOut]:
                 fecha_cierre=turno.fecha_cierre,
                 observaciones=turno.observaciones,
                 estado=turno.estado,
+                fondo_inicial=float(turno.fondo_inicial or 0.0),
                 totales=TotalesFormaPago(
                     efectivo=totales["efectivo"],
                     tarjeta=totales["tarjeta"],
@@ -256,22 +260,15 @@ def turno_ayer(db: Session = Depends(get_db)):
 @router.get("/turno-actual", response_model=Optional[TurnoCajaOut])
 def turno_actual(db: Session = Depends(get_db)):
     """Devuelve el turno de caja abierto (o null si no hay ninguno)."""
-    turno = (
-        db.query(TurnoCaja)
-        .filter(TurnoCaja.estado == "abierto")
-        .order_by(TurnoCaja.id.desc())
-        .first()
-    )
+    turno = turno_abierto(db)
     return _turno_out(db, turno) if turno else None
 
 
-@router.post("/abrir", response_model=AbrirTurnoOut)
-def abrir_turno(usuario_id: int = 1, db: Session = Depends(get_db)):
-    """Abre un nuevo turno de caja."""
-    abierto = (
-        db.query(TurnoCaja).filter(TurnoCaja.estado == "abierto").first()
-    )
-    if abierto:
+def _crear_turno(
+    db: Session, usuario_id: int, fondo_inicial: float
+) -> AbrirTurnoOut:
+    """Abre un turno nuevo si no existe otro abierto."""
+    if turno_abierto(db):
         raise HTTPException(
             status_code=400, detail="Ya hay un turno de caja abierto"
         )
@@ -280,7 +277,11 @@ def abrir_turno(usuario_id: int = 1, db: Session = Depends(get_db)):
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    turno = TurnoCaja(usuario_id=usuario.id, estado="abierto")
+    turno = TurnoCaja(
+        usuario_id=usuario.id,
+        estado="abierto",
+        fondo_inicial=round(float(fondo_inicial), 2),
+    )
     db.add(turno)
     db.commit()
     db.refresh(turno)
@@ -289,17 +290,55 @@ def abrir_turno(usuario_id: int = 1, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/abrir-turno", response_model=AbrirTurnoOut)
+def abrir_turno(datos: AbrirTurnoIn, db: Session = Depends(get_db)):
+    """Abre un turno de caja con el fondo inicial en efectivo."""
+    return _crear_turno(db, datos.usuario_id, datos.fondo_inicial)
+
+
+@router.post("/abrir", response_model=AbrirTurnoOut)
+def abrir_turno_compatibilidad(
+    usuario_id: int = 1, fondo_inicial: float = 0.0, db: Session = Depends(get_db)
+):
+    """Alias compatible para clientes anteriores que abren sin cuerpo JSON."""
+    return _crear_turno(db, usuario_id, fondo_inicial)
+
+
 @router.post("/cerrar", response_model=TurnoCajaOut)
 def cerrar_turno(datos: CerrarTurnoIn, db: Session = Depends(get_db)):
-    """Cierra el turno de caja abierto."""
-    turno = (
-        db.query(TurnoCaja)
-        .filter(TurnoCaja.estado == "abierto")
-        .order_by(TurnoCaja.id.desc())
-        .first()
-    )
+    """Cierra el turno de caja abierto.
+
+    Se rechaza el cierre mientras existan mesas ocupadas, pedidos sin
+    liquidar o divisiones de cuenta pendientes de pago.
+    """
+    turno = turno_abierto(db)
     if not turno:
         raise HTTPException(status_code=400, detail="No hay un turno de caja abierto")
+
+    db.flush()
+    mesas_ocupadas = (
+        db.query(func.count(Mesa.id))
+        .filter(Mesa.estado == "ocupada")
+        .scalar()
+        or 0
+    )
+    pedidos_pendientes = (
+        db.query(func.count(Pedido.id))
+        .filter(Pedido.estado.in_(["abierto", "pendiente"]))
+        .scalar()
+        or 0
+    )
+    divisiones_pendientes = (
+        db.query(func.count(Division.id))
+        .filter(Division.estado == "pendiente")
+        .scalar()
+        or 0
+    )
+    if mesas_ocupadas or pedidos_pendientes or divisiones_pendientes:
+        raise HTTPException(
+            status_code=409,
+            detail=MENSAJE_CIERRE_BLOQUEADO,
+        )
 
     turno.estado = "cerrado"
     turno.fecha_cierre = ahora_local()
