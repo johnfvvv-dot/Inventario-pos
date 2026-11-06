@@ -2,13 +2,18 @@
  * Tickets internos de un turno de caja.
  *
  * Se solicitan al backend al abrir la ventana y viven solo en memoria del
- * navegador: al cerrarla desaparecen. Se pueden imprimir/guardar como PDF o
- * descargar como imagen PNG.
+ * navegador: al cerrarla desaparecen. Se muestran de uno en uno y se pueden
+ * imprimir/guardar como PDF o descargar como imagen PNG.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../services/api";
-import { formatearFechaHora, formatearPrecio } from "../utils/format";
+import {
+  formatearDiaSemana,
+  formatearFecha,
+  formatearFechaHora,
+  formatearPrecio,
+} from "../utils/format";
 import { descargarTicketPng } from "../utils/ticketImagen";
 
 interface TicketItem {
@@ -27,6 +32,7 @@ interface Ticket {
   fecha_pago: string;
   alias?: string | null;
   forma_pago: string;
+  total?: number | null;
   items: TicketItem[];
 }
 
@@ -54,10 +60,25 @@ function etiquetaPago(forma: string): string {
   return ETIQUETAS_PAGO[forma] || forma;
 }
 
+/** Usa el total del backend si existe; si no, suma cantidad × precio. */
+function calcularTotalTicket(ticket: Ticket): number {
+  if (typeof ticket.total === "number" && Number.isFinite(ticket.total)) {
+    return ticket.total;
+  }
+
+  return ticket.items.reduce(
+    (total, item) =>
+      total +
+      Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+    0
+  );
+}
+
 export default function TicketsModal({ turnoId, onCerrar }: Props) {
   const [datos, setDatos] = useState<RespuestaTickets | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [indiceActual, setIndiceActual] = useState(0);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -65,6 +86,7 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
     try {
       const respuesta: any = await api.getTicketsTurno(turnoId);
       setDatos(respuesta);
+      setIndiceActual(0);
     } catch (err: any) {
       setError(err?.message || "No se pudieron generar los tickets.");
     } finally {
@@ -78,14 +100,51 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
 
   useEffect(() => {
     const alPresionarTecla = (evento: KeyboardEvent) => {
-      if (evento.key === "Escape") onCerrar();
+      if (evento.key === "Escape") {
+        onCerrar();
+        return;
+      }
+
+      if (evento.key === "ArrowLeft") {
+        setIndiceActual((indice) => Math.max(0, indice - 1));
+      } else if (evento.key === "ArrowRight") {
+        const total = datos?.tickets.length ?? 0;
+        if (total > 0) {
+          setIndiceActual((indice) => Math.min(total - 1, indice + 1));
+        }
+      }
     };
+
     window.addEventListener("keydown", alPresionarTecla);
     return () => window.removeEventListener("keydown", alPresionarTecla);
-  }, [onCerrar]);
+  }, [datos, onCerrar]);
+
+  const totalTickets = datos?.tickets.length ?? 0;
+  const ticketActual = datos?.tickets[indiceActual] ?? null;
+  const esPrimero = indiceActual === 0;
+  const esUltimo = indiceActual >= totalTickets - 1;
+  const sinTickets = Boolean(datos && totalTickets === 0);
+
+  const fechaTurno =
+    datos?.fecha_apertura ||
+    datos?.tickets[0]?.fecha_pago ||
+    datos?.tickets[0]?.fecha_ocupacion;
+  const tituloTickets = fechaTurno
+    ? `Tickets del turno - ${formatearDiaSemana(fechaTurno)}, ${formatearFecha(
+        fechaTurno
+      )}`
+    : "Tickets del turno";
+
+  const irAnterior = () => {
+    setIndiceActual((indice) => Math.max(0, indice - 1));
+  };
+
+  const irSiguiente = () => {
+    setIndiceActual((indice) => Math.min(totalTickets - 1, indice + 1));
+  };
 
   const imprimir = () => {
-    if (datos?.tickets.length) window.print();
+    if (ticketActual) window.print();
   };
 
   const descargar = (ticket: Ticket) => {
@@ -96,8 +155,6 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
       setError(err?.message || "No se pudo generar la imagen del ticket.");
     }
   };
-
-  const sinTickets = Boolean(datos && datos.tickets.length === 0);
 
   return (
     <div className="modal-overlay" onClick={onCerrar}>
@@ -110,11 +167,11 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
       >
         <div className="modal-head tickets-modal-head">
           <div>
-            <h3 id="titulo-tickets">Tickets del turno</h3>
+            <h3 id="titulo-tickets">{tituloTickets}</h3>
             {datos && (
               <p className="muted small">
-                Turno #{datos.turno_id} · {datos.tickets.length} ticket
-                {datos.tickets.length === 1 ? "" : "s"} ·{" "}
+                Turno #{datos.turno_id} · {totalTickets} ticket
+                {totalTickets === 1 ? "" : "s"} ·{" "}
                 {datos.estado === "abierto" ? "Turno abierto" : "Turno cerrado"}
               </p>
             )}
@@ -130,8 +187,8 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
             <button
               className="btn-secondary btn-small"
               onClick={imprimir}
-              disabled={cargando || !datos?.tickets.length}
-              title="Abre el diálogo de impresión; permite guardar como PDF"
+              disabled={cargando || !ticketActual}
+              title="Imprime el ticket seleccionado; permite guardar como PDF"
             >
               Imprimir / PDF
             </button>
@@ -147,8 +204,7 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
         </div>
 
         <p className="muted small tickets-nota">
-          Comprobantes internos de control administrativo. No incluyen total ni
-          impuestos y no se guardan en el servidor.
+          Comprobantes internos de control administrativo.
         </p>
 
         {error && <p className="error-msg">{error}</p>}
@@ -164,10 +220,10 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
           </p>
         )}
 
-        {datos && datos.tickets.length > 0 && (
-          <div className="tickets-print-area">
-            {datos.tickets.map((ticket) => (
-              <article className="ticket-card" key={ticket.id}>
+        {datos && ticketActual && (
+          <div className="tickets-visualizador">
+            <div className="tickets-print-area">
+              <article className="ticket-card">
                 <header className="ticket-cabecera">
                   <strong className="ticket-negocio">
                     {datos.nombre_negocio}
@@ -180,25 +236,25 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
                 <dl className="ticket-meta">
                   <div>
                     <dt>Folio</dt>
-                    <dd>{ticket.folio}</dd>
+                    <dd>{ticketActual.folio}</dd>
                   </div>
                   <div>
                     <dt>Mesa</dt>
-                    <dd>{ticket.mesa}</dd>
+                    <dd>{ticketActual.mesa}</dd>
                   </div>
-                  {ticket.alias && (
+                  {ticketActual.alias && (
                     <div>
                       <dt>Cliente</dt>
-                      <dd>{ticket.alias}</dd>
+                      <dd>{ticketActual.alias}</dd>
                     </div>
                   )}
                   <div>
                     <dt>Ocupación</dt>
-                    <dd>{formatearFechaHora(ticket.fecha_ocupacion)}</dd>
+                    <dd>{formatearFechaHora(ticketActual.fecha_ocupacion)}</dd>
                   </div>
                   <div>
                     <dt>Pago</dt>
-                    <dd>{formatearFechaHora(ticket.fecha_pago)}</dd>
+                    <dd>{formatearFechaHora(ticketActual.fecha_pago)}</dd>
                   </div>
                 </dl>
 
@@ -206,10 +262,10 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
 
                 <div className="ticket-items">
                   <div className="ticket-items-titulo">Productos</div>
-                  {ticket.items.map((item, indice) => (
+                  {ticketActual.items.map((item, indice) => (
                     <div
                       className="ticket-item"
-                      key={`${ticket.id}-${indice}`}
+                      key={`${ticketActual.id}-${indice}`}
                     >
                       <span className="ticket-item-nombre">{item.nombre}</span>
                       <span className="ticket-item-precio">
@@ -221,9 +277,18 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
 
                 <div className="ticket-separador" />
 
+                <div className="ticket-total">
+                  <span>Total</span>
+                  <strong>
+                    {formatearPrecio(calcularTotalTicket(ticketActual))}
+                  </strong>
+                </div>
+
+                <div className="ticket-separador" />
+
                 <div className="ticket-pago">
                   <span>Forma de pago</span>
-                  <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+                  <strong>{etiquetaPago(ticketActual.forma_pago)}</strong>
                 </div>
 
                 <p className="ticket-pie">
@@ -235,12 +300,48 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
                 <button
                   type="button"
                   className="btn-secondary btn-small ticket-descarga"
-                  onClick={() => descargar(ticket)}
+                  onClick={() => descargar(ticketActual)}
+                  aria-label={`Descargar imagen del ticket ${ticketActual.folio}`}
                 >
                   Descargar imagen
                 </button>
               </article>
-            ))}
+            </div>
+
+            <nav
+              className="tickets-navegacion"
+              aria-label="Navegación entre tickets"
+            >
+              <button
+                type="button"
+                className="btn-secondary btn-small ticket-nav-btn"
+                onClick={irAnterior}
+                disabled={esPrimero}
+                aria-label="Ticket anterior"
+              >
+                <span className="ticket-nav-flecha" aria-hidden="true">
+                  ‹
+                </span>
+                <span className="ticket-nav-texto">Anterior</span>
+              </button>
+
+              <span className="ticket-contador" aria-live="polite">
+                Ticket {indiceActual + 1} de {totalTickets}
+              </span>
+
+              <button
+                type="button"
+                className="btn-secondary btn-small ticket-nav-btn"
+                onClick={irSiguiente}
+                disabled={esUltimo}
+                aria-label="Ticket siguiente"
+              >
+                <span className="ticket-nav-texto">Siguiente</span>
+                <span className="ticket-nav-flecha" aria-hidden="true">
+                  ›
+                </span>
+              </button>
+            </nav>
           </div>
         )}
       </div>

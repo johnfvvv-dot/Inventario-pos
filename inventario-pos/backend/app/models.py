@@ -213,6 +213,8 @@ class TurnoCaja(Base):
     fecha_cierre = Column(DateTime, nullable=True)
     observaciones = Column(String(255), nullable=True)
     estado = Column(String(20), default="abierto")  # abierto | cerrado
+    # Base en efectivo entregada al cajero para dar cambio/vueltos.
+    fondo_inicial = Column(Float, nullable=False, default=0.0)
 
     usuario = relationship("Usuario")
 

@@ -4,10 +4,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
+import {
+  MENSAJE_TURNO_REQUERIDO,
+  useTurno,
+} from "../context/TurnoContext";
 import ConfirmModal from "../components/ConfirmModal";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
+import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 
 interface Posicion {
   id: number;
@@ -35,6 +40,8 @@ export default function MesasPage() {
   // El panel de mesas lo comparten Administrador y Bartender; cada uno debe
   // volver a su propia ruta de pedidos, no siempre a /admin.
   const basePedidos = usuario?.rol === "bartender" ? "/bartender" : "/admin";
+  const { turno, cargando: cargandoTurno, solicitarApertura } = useTurno();
+  const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
   const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "2" });
@@ -104,6 +111,11 @@ export default function MesasPage() {
   /** Asigna un cliente: en una mesa la ocupa, en una barra toma un puesto libre.
    *  Solo cambia el estado; no abre la ventana de pedidos. */
   const ocupar = async (mesa: Mesa) => {
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return;
+    }
+
     try {
       if (mesa.tipo === "barra") {
         // La tarjeta agregada usa la posicion activa; el backend asigna la
@@ -182,6 +194,8 @@ export default function MesasPage() {
 
       {error && <p className="error-msg">{error}</p>}
       {mensaje && <p className="success-msg">{mensaje}</p>}
+
+      {sinTurno && <TurnoRequeridoAviso onAbrir={solicitarApertura} />}
 
       {/* Aviso de mesa con cuenta pendiente */}
       {aviso && (
@@ -298,6 +312,8 @@ export default function MesasPage() {
                 <button
                   className="btn-secondary btn-small"
                   onClick={() => ocupar(mesa)}
+                  disabled={!turno || cargandoTurno}
+                  title={!turno ? MENSAJE_TURNO_REQUERIDO : "Ocupar la mesa"}
                 >
                   Ocupar
                 </button>
@@ -313,7 +329,12 @@ export default function MesasPage() {
               <button
                 className="btn-primary btn-small"
                 onClick={() => abrirPedido(mesa)}
-                title={`Abrir el pedido de ${etiquetaMesa(mesa)}`}
+                title={
+                  !turno
+                    ? MENSAJE_TURNO_REQUERIDO
+                    : `Abrir el pedido de ${etiquetaMesa(mesa)}`
+                }
+                disabled={!turno || cargandoTurno}
               >
                 Pedido
               </button>

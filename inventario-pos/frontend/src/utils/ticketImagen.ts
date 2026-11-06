@@ -21,6 +21,7 @@ export interface TicketImagen {
   fecha_pago: string;
   alias?: string | null;
   forma_pago: string;
+  total?: number | null;
   items: TicketImagenItem[];
 }
 
@@ -47,8 +48,22 @@ const PADDING = 24;
 const FUENTE_TITULO = "700 19px 'Segoe UI', Arial, sans-serif";
 const FUENTE_BASE = "13px 'Segoe UI', Arial, sans-serif";
 const FUENTE_NEGRITA = "600 13px 'Segoe UI', Arial, sans-serif";
+const FUENTE_TOTAL = "700 18px 'Segoe UI', Arial, sans-serif";
 const FUENTE_MINI = "11px 'Segoe UI', Arial, sans-serif";
 const FUENTE_MINI_NEGRITA = "600 10px 'Segoe UI', Arial, sans-serif";
+
+function calcularTotalTicket(ticket: TicketImagen): number {
+  if (typeof ticket.total === "number" && Number.isFinite(ticket.total)) {
+    return ticket.total;
+  }
+
+  return ticket.items.reduce(
+    (total, item) =>
+      total +
+      Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+    0
+  );
+}
 
 function tamanoFuente(font: string): number {
   const coincidencia = /(\d+(?:\.\d+)?)px/.exec(font);
@@ -152,6 +167,13 @@ function crearCanvasTicket(ticket: TicketImagen, nombreNegocio: string): HTMLCan
   }
 
   lineas.push({ separador: true, margenArriba: 10, margenAbajo: 5 });
+  lineas.push({
+    izquierda: "TOTAL",
+    derecha: formatearPrecio(calcularTotalTicket(ticket)),
+    font: FUENTE_TOTAL,
+    margenArriba: 2,
+  });
+  lineas.push({ separador: true, margenArriba: 8, margenAbajo: 5 });
   lineas.push({
     izquierda: "Forma de pago",
     derecha: ETIQUETAS_PAGO[ticket.forma_pago] || ticket.forma_pago,

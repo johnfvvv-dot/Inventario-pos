@@ -4,10 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
+import {
+  MENSAJE_TURNO_REQUERIDO,
+  useTurno,
+} from "../context/TurnoContext";
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 import CobroModal from "../components/CobroModal";
+import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 
 interface Mesa {
   id: number;
@@ -56,6 +61,8 @@ interface Pedido {
 
 export default function PedidoMesaPage() {
   const [searchParams] = useSearchParams();
+  const { turno, cargando: cargandoTurno, solicitarApertura } = useTurno();
+  const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
@@ -160,6 +167,11 @@ export default function PedidoMesaPage() {
     setError(null);
     setMensaje(null);
 
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return false;
+    }
+
     if (!Number.isInteger(cantidad) || cantidad <= 0) {
       setError("Ingresá una cantidad válida mayor a cero");
       return false;
@@ -225,6 +237,10 @@ export default function PedidoMesaPage() {
   };
 
   const confirmarPedido = async () => {
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return;
+    }
     if (!mesaId) {
       setError("Selecciona una mesa");
       return;
@@ -255,6 +271,10 @@ export default function PedidoMesaPage() {
 
   /** Ajusta la cantidad de una linea de un pedido abierto */
   const ajustarLinea = async (pedidoId: number, itemId: number, cantidad: number) => {
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return;
+    }
     try {
       await api.ajustarItemPedido(pedidoId, itemId, cantidad);
       await Promise.all([cargarPedidos(Number(mesaId)), cargarCatalogos()]);
@@ -327,6 +347,8 @@ export default function PedidoMesaPage() {
       {error && <p className="error-msg">{error}</p>}
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
+      {sinTurno && <TurnoRequeridoAviso onAbrir={solicitarApertura} />}
+
       <div className="pos-grid">
         <section className="panel">
           <h3>Productos disponibles</h3>
@@ -377,21 +399,29 @@ export default function PedidoMesaPage() {
                               agregarDesdeInput(p);
                             }
                           }}
-                          disabled={p.stock === 0}
+                          disabled={p.stock === 0 || !turno}
                         />
                         <button
                           className="btn-success btn-small"
-                          disabled={p.stock === 0}
+                          disabled={p.stock === 0 || !turno}
                           onClick={() => agregarDesdeInput(p)}
-                          title={`Agregar la cantidad indicada de ${p.nombre}`}
+                          title={
+                            !turno
+                              ? MENSAJE_TURNO_REQUERIDO
+                              : `Agregar la cantidad indicada de ${p.nombre}`
+                          }
                         >
                           Agregar
                         </button>
                         <button
                           className="btn-primary btn-small"
-                          disabled={p.stock === 0}
+                          disabled={p.stock === 0 || !turno}
                           onClick={() => agregar(p)}
-                          title={`Agregar una unidad de ${p.nombre}`}
+                          title={
+                            !turno
+                              ? MENSAJE_TURNO_REQUERIDO
+                              : `Agregar una unidad de ${p.nombre}`
+                          }
                         >
                           +
                         </button>
@@ -445,7 +475,12 @@ export default function PedidoMesaPage() {
             <strong>{formatearPrecio(total)}</strong>
           </div>
 
-          <button className="btn-primary btn-block" onClick={confirmarPedido}>
+          <button
+            className="btn-primary btn-block"
+            onClick={confirmarPedido}
+            disabled={!turno || cargandoTurno}
+            title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
+          >
             Confirmar pedido
           </button>
         </section>
@@ -481,6 +516,7 @@ export default function PedidoMesaPage() {
                               <button
                                 className="btn-icon"
                                 title="Quitar una unidad"
+                                disabled={!turno}
                                 onClick={() =>
                                   ajustarLinea(p.id, i.id as number, i.cantidad - 1)
                                 }
@@ -490,6 +526,7 @@ export default function PedidoMesaPage() {
                               <button
                                 className="btn-icon"
                                 title="Añadir una unidad"
+                                disabled={!turno}
                                 onClick={() =>
                                   ajustarLinea(p.id, i.id as number, i.cantidad + 1)
                                 }

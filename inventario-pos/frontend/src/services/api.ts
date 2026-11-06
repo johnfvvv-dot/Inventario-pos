@@ -602,8 +602,14 @@ export const api = {
   // ---------- Corte de caja ----------
   getTurnoActual: () => request("/caja/turno-actual"),
 
-  abrirTurno: (usuarioId = 1) =>
-    request(`/caja/abrir?usuario_id=${usuarioId}`, { method: "POST" }),
+  abrirTurno: (usuarioId = 1, fondoInicial = 0) =>
+    request("/caja/abrir-turno", {
+      method: "POST",
+      body: JSON.stringify({
+        usuario_id: usuarioId,
+        fondo_inicial: fondoInicial,
+      }),
+    }),
 
   cerrarTurno: (observaciones?: string) =>
     request("/caja/cerrar", {

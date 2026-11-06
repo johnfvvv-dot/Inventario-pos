@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
+import { TurnoProvider } from "../context/TurnoContext";
 import MenuLink from "../components/MenuLink";
 import UserMenu from "../components/UserMenu";
-import AvisoTurnoModal from "../components/AvisoTurnoModal";
 import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
 import { api } from "../services/api";
 
@@ -68,47 +68,46 @@ export default function BartenderLayout() {
   };
 
   return (
-    <div className="mesero-layout">
-      {/* Pregunta por la apertura del turno solo la primera vez del día */}
-      <AvisoTurnoModal />
-
-      <header className="admin-header">
-        <div className="admin-brand">
-          {negocio.logo && (
-            <img
-              className="admin-brand-logo"
-              src={negocio.logo}
-              alt="Logotipo del negocio"
-            />
-          )}
-          <div>
-            <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
-            <p className="muted">Panel de Bartender</p>
+    <TurnoProvider>
+      <div className="mesero-layout">
+        <header className="admin-header">
+          <div className="admin-brand">
+            {negocio.logo && (
+              <img
+                className="admin-brand-logo"
+                src={negocio.logo}
+                alt="Logotipo del negocio"
+              />
+            )}
+            <div>
+              <h1 title={negocio.nombre_negocio}>{negocio.nombre_negocio}</h1>
+              <p className="muted">Panel de Bartender</p>
+            </div>
           </div>
-        </div>
-        <div className="user-info">
-          <UserMenu
-            nombre={usuario.alias || usuario.nombre || "Bartender"}
-            rol={usuario.rol || "bartender"}
-            onCerrarSesion={cerrarSesion}
-          />
-        </div>
-      </header>
+          <div className="user-info">
+            <UserMenu
+              nombre={usuario.alias || usuario.nombre || "Bartender"}
+              rol={usuario.rol || "bartender"}
+              onCerrarSesion={cerrarSesion}
+            />
+          </div>
+        </header>
 
-      <div className="admin-body">
-        <nav className="admin-nav">
-          <MenuLink to="/bartender/pedidos" rutas={["/bartender"]}>
-            Pedidos
-          </MenuLink>
-          <MenuLink to="/bartender/mesas">Mesas</MenuLink>
-          <MenuLink to="/bartender/inventario">Inventario</MenuLink>
-          <MenuLink to="/bartender/corte-caja">Corte de caja</MenuLink>
-        </nav>
+        <div className="admin-body">
+          <nav className="admin-nav">
+            <MenuLink to="/bartender/pedidos" rutas={["/bartender"]}>
+              Pedidos
+            </MenuLink>
+            <MenuLink to="/bartender/mesas">Mesas</MenuLink>
+            <MenuLink to="/bartender/inventario">Inventario</MenuLink>
+            <MenuLink to="/bartender/corte-caja">Corte de caja</MenuLink>
+          </nav>
 
-        <main className="admin-content">
-          <Outlet context={{ ingresoStockHabilitado: ingresoStock }} />
-        </main>
+          <main className="admin-content">
+            <Outlet context={{ ingresoStockHabilitado: ingresoStock }} />
+          </main>
+        </div>
       </div>
-    </div>
+    </TurnoProvider>
   );
 }

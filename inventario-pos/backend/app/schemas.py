@@ -232,8 +232,16 @@ class TurnoCajaOut(BaseModel):
     fecha_cierre: Optional[datetime] = None
     observaciones: Optional[str] = None
     estado: str
+    fondo_inicial: float = 0.0
     totales: TotalesFormaPago
     ganancia: float = 0.0
+
+
+class AbrirTurnoIn(BaseModel):
+    """Datos para abrir un turno: cajero y base en efectivo."""
+
+    usuario_id: int = Field(default=1, gt=0)
+    fondo_inicial: float = Field(..., ge=0)
 
 
 class AbrirTurnoOut(BaseModel):

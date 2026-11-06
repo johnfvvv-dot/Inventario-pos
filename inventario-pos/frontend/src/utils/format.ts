@@ -86,6 +86,25 @@ export const formatearDiaSemana = (
 };
 
 /**
+ * Fecha local con formato DD/MM/YYYY.
+ * Ejemplo: "05/11/2026".
+ */
+export const formatearFecha = (
+  valor: string | Date | null | undefined
+): string => {
+  if (!valor) return "-";
+
+  const fecha = typeof valor === "string" ? parsearFecha(valor) : valor;
+  if (Number.isNaN(fecha.getTime())) return "-";
+
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const anio = fecha.getFullYear();
+
+  return `${dia}/${mes}/${anio}`;
+};
+
+/**
  * Fecha y hora local con formato DD/MM/YYYY, HH:mm:ss.
  * Ejemplo: "25/10/2026, 22:52:46".
  */

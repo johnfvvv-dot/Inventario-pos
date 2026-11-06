@@ -1,84 +1,131 @@
 /**
- * Aviso de apertura de turno del día.
+ * Modal de apertura de turno.
  *
- * Se muestra una sola vez por día (la primera vez que se entra a la sesión)
- * y únicamente cuando no existe ningún turno abierto:
- *
- *  - Un turno abierto desde la noche anterior que continúa en la madrugada
- *    hace que `/caja/turno-actual` devuelva datos y el aviso no aparece.
- *  - El día queda marcado en `localStorage` al comprobarlo, de modo que un
- *    segundo inicio de sesión el mismo día no vuelve a preguntar.
- *  - Si el backend no responde, el día NO se marca y se vuelve a comprobar
- *    en el siguiente inicio de sesión.
+ * Se muestra automáticamente cuando no existe un turno abierto. Exige el
+ * Fondo Inicial de Caja (base en efectivo para cambio/vueltos) antes de
+ * enviar la apertura al backend.
  */
 
-import { useEffect, useState } from "react";
-import { api } from "../services/api";
-import { fechaParaArchivo } from "../utils/format";
-import ConfirmModal from "./ConfirmModal";
+import { FormEvent, useState } from "react";
+import type { TurnoCaja } from "../types/turno";
 
-/** Último día en que se resolvió el aviso (YYYY-MM-DD, hora local). */
-const CLAVE_AVISO = "turno_aviso_fecha";
+interface Props {
+  abrirTurno: (fondoInicial: number) => Promise<TurnoCaja>;
+  onAbierto: (turno: TurnoCaja) => void;
+  onCancelar: () => void;
+}
 
-export default function AvisoTurnoModal() {
-  const [mostrar, setMostrar] = useState(false);
+export default function AvisoTurnoModal({
+  abrirTurno,
+  onAbierto,
+  onCancelar,
+}: Props) {
+  const [fondo, setFondo] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let vigente = true;
-
-    const revisar = async () => {
-      const hoy = fechaParaArchivo();
-      // Ya se resolvió el aviso en el día de hoy.
-      if (localStorage.getItem(CLAVE_AVISO) === hoy) return;
-
-      try {
-        const turno = await api.getTurnoActual();
-        if (!vigente) return;
-
-        // Se marca el día aunque haya turno: la solicitud solo corresponde
-        // al primer ingreso del día cuando no hay turno abierto.
-        localStorage.setItem(CLAVE_AVISO, hoy);
-        if (!turno) setMostrar(true);
-      } catch {
-        // Sin respuesta del backend no se marca el día, para que el aviso
-        // se evalúe de nuevo en el siguiente inicio de sesión.
-      }
-    };
-
-    revisar();
-    return () => {
-      vigente = false;
-    };
-  }, []);
-
-  if (!mostrar) return null;
-
-  const abrirTurno = async () => {
-    setProcesando(true);
+  const confirmar = async (evento: FormEvent) => {
+    evento.preventDefault();
     setError(null);
+
+    if (fondo.trim() === "") {
+      setError("Ingresa el Fondo Inicial de Caja.");
+      return;
+    }
+
+    const monto = Number(fondo);
+    if (!Number.isFinite(monto) || monto < 0) {
+      setError(
+        "El Fondo Inicial de Caja debe ser un número mayor o igual a cero."
+      );
+      return;
+    }
+
+    setProcesando(true);
     try {
-      const sesion = JSON.parse(localStorage.getItem("user") || "{}");
-      await api.abrirTurno(Number(sesion?.id) || 1);
-      setMostrar(false);
+      const turno = await abrirTurno(monto);
+      onAbierto(turno);
     } catch (err: any) {
-      setError(err.message || "No se pudo abrir el turno");
+      setError(err?.message || "No se pudo abrir el turno.");
     } finally {
       setProcesando(false);
     }
   };
 
   return (
-    <ConfirmModal
-      titulo="Apertura de turno"
-      mensaje="¿Desea abrir el turno del día?"
-      aceptar="Aceptar"
-      cancelar="Cancelar"
-      onConfirmar={abrirTurno}
-      onCancelar={() => setMostrar(false)}
-      procesando={procesando}
-      error={error}
-    />
+    <div
+      className="modal-overlay"
+      onClick={() => {
+        if (!procesando) onCancelar();
+      }}
+    >
+      <form
+        className="modal-box modal-apertura-turno"
+        onClick={(evento) => evento.stopPropagation()}
+        onSubmit={confirmar}
+        noValidate
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titulo-apertura-turno"
+      >
+        <div className="modal-head">
+          <h3 id="titulo-apertura-turno">Apertura de turno</h3>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={onCancelar}
+            title="Cerrar"
+            disabled={procesando}
+          >
+            ×
+          </button>
+        </div>
+
+        <p className="confirm-mensaje">
+          No hay un turno de caja abierto. Registra la base en efectivo para
+          empezar a atender mesas y tomar pedidos.
+        </p>
+
+        <div className="form-group">
+          <label htmlFor="fondo-inicial">Fondo Inicial de Caja</label>
+          <input
+            id="fondo-inicial"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            value={fondo}
+            onChange={(evento) => {
+              setFondo(evento.target.value);
+              setError(null);
+            }}
+            placeholder="Base en efectivo para cambio/vueltos"
+            aria-describedby="ayuda-fondo-inicial"
+            autoFocus
+            required
+            disabled={procesando}
+          />
+          <small id="ayuda-fondo-inicial" className="muted">
+            Base en efectivo para cambio/vueltos.
+          </small>
+        </div>
+
+        {error && <p className="error-msg">{error}</p>}
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onCancelar}
+            disabled={procesando}
+          >
+            Ahora no
+          </button>
+          <button type="submit" className="btn-primary" disabled={procesando}>
+            {procesando ? "Abriendo..." : "Abrir turno"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
