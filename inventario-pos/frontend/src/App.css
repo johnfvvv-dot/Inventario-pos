@@ -30,6 +30,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Los controles nativos no heredan la tipografía del body por defecto. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 h1, h2, h3 {
   margin: 0;
 }
@@ -1307,9 +1315,42 @@ select:focus {
   max-width: 460px;
 }
 
-.modal-apertura-turno input[type="number"] {
-  font-size: 1.05rem;
+/* Tipografía uniforme del modal de apertura: título, texto, label y campo. */
+.modal-apertura-turno .modal-head h3 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.modal-apertura-turno .confirm-mensaje {
+  margin-bottom: 1rem;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.modal-apertura-turno .form-group {
+  gap: 0.4rem;
+}
+
+.modal-apertura-turno .form-group label {
+  font-size: 0.9rem;
   font-weight: 600;
+  line-height: 1.35;
+}
+
+.modal-apertura-turno .form-group input {
+  padding: 0.65rem 0.8rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.modal-apertura-turno .campo-ayuda {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .cierre-monto {
@@ -1862,6 +1903,11 @@ select:focus {
   color: var(--text);
 }
 
+/* En pantalla se muestra un solo ticket; en impresión se revelan todos. */
+.ticket-card-oculto {
+  display: none;
+}
+
 .ticket-cabecera {
   padding-bottom: 0.55rem;
   border-bottom: 1px dashed var(--border);
@@ -2118,6 +2164,19 @@ select:focus {
     box-shadow: none;
     break-inside: avoid;
     page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  /* La impresión incluye también los tickets fuera del carrusel. */
+  .ticket-card-oculto {
+    display: flex !important;
+  }
+
+  .ticket-card:last-child {
+    margin-bottom: 0;
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .ticket-descarga,

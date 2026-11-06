@@ -74,6 +74,104 @@ function calcularTotalTicket(ticket: Ticket): number {
   );
 }
 
+interface TicketCardProps {
+  ticket: Ticket;
+  nombreNegocio: string;
+  activo: boolean;
+  onDescargar: (ticket: Ticket) => void;
+}
+
+/**
+ * Un ticket individual. En pantalla solo se muestra el activo; el resto queda
+ * en el DOM para que la impresión pueda incluir todos los comprobantes.
+ */
+function TicketCard({
+  ticket,
+  nombreNegocio,
+  activo,
+  onDescargar,
+}: TicketCardProps) {
+  return (
+    <article
+      className={`ticket-card${activo ? "" : " ticket-card-oculto"}`}
+      aria-hidden={activo ? undefined : true}
+    >
+      <header className="ticket-cabecera">
+        <strong className="ticket-negocio">{nombreNegocio}</strong>
+        <span className="ticket-subtitulo">Comprobante interno</span>
+      </header>
+
+      <dl className="ticket-meta">
+        <div>
+          <dt>Folio</dt>
+          <dd>{ticket.folio}</dd>
+        </div>
+        <div>
+          <dt>Mesa</dt>
+          <dd>{ticket.mesa}</dd>
+        </div>
+        {ticket.alias && (
+          <div>
+            <dt>Cliente</dt>
+            <dd>{ticket.alias}</dd>
+          </div>
+        )}
+        <div>
+          <dt>Ocupación</dt>
+          <dd>{formatearFechaHora(ticket.fecha_ocupacion)}</dd>
+        </div>
+        <div>
+          <dt>Pago</dt>
+          <dd>{formatearFechaHora(ticket.fecha_pago)}</dd>
+        </div>
+      </dl>
+
+      <div className="ticket-separador" />
+
+      <div className="ticket-items">
+        <div className="ticket-items-titulo">Productos</div>
+        {ticket.items.map((item, indice) => (
+          <div className="ticket-item" key={`${ticket.id}-${indice}`}>
+            <span className="ticket-item-nombre">{item.nombre}</span>
+            <span className="ticket-item-precio">
+              {item.cantidad} × {formatearPrecio(item.precio_unitario)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="ticket-separador" />
+
+      <div className="ticket-total">
+        <span>Total</span>
+        <strong>{formatearPrecio(calcularTotalTicket(ticket))}</strong>
+      </div>
+
+      <div className="ticket-separador" />
+
+      <div className="ticket-pago">
+        <span>Forma de pago</span>
+        <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+      </div>
+
+      <p className="ticket-pie">
+        Documento interno de control.
+        <br />
+        No válido como factura.
+      </p>
+
+      <button
+        type="button"
+        className="btn-secondary btn-small ticket-descarga"
+        onClick={() => onDescargar(ticket)}
+        aria-label={`Descargar imagen del ticket ${ticket.folio}`}
+      >
+        Descargar imagen
+      </button>
+    </article>
+  );
+}
+
 export default function TicketsModal({ turnoId, onCerrar }: Props) {
   const [datos, setDatos] = useState<RespuestaTickets | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -120,7 +218,6 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
   }, [datos, onCerrar]);
 
   const totalTickets = datos?.tickets.length ?? 0;
-  const ticketActual = datos?.tickets[indiceActual] ?? null;
   const esPrimero = indiceActual === 0;
   const esUltimo = indiceActual >= totalTickets - 1;
   const sinTickets = Boolean(datos && totalTickets === 0);
@@ -144,7 +241,9 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
   };
 
   const imprimir = () => {
-    if (ticketActual) window.print();
+    // El CSS de impresión muestra todos los tickets del turno, no solo el
+    // que está seleccionado en el carrusel.
+    if (totalTickets > 0) window.print();
   };
 
   const descargar = (ticket: Ticket) => {
@@ -187,8 +286,8 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
             <button
               className="btn-secondary btn-small"
               onClick={imprimir}
-              disabled={cargando || !ticketActual}
-              title="Imprime el ticket seleccionado; permite guardar como PDF"
+              disabled={cargando || totalTickets === 0}
+              title="Imprime todos los tickets del turno; permite guardar como PDF"
             >
               Imprimir / PDF
             </button>
@@ -220,92 +319,18 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
           </p>
         )}
 
-        {datos && ticketActual && (
+        {datos && totalTickets > 0 && (
           <div className="tickets-visualizador">
             <div className="tickets-print-area">
-              <article className="ticket-card">
-                <header className="ticket-cabecera">
-                  <strong className="ticket-negocio">
-                    {datos.nombre_negocio}
-                  </strong>
-                  <span className="ticket-subtitulo">
-                    Comprobante interno
-                  </span>
-                </header>
-
-                <dl className="ticket-meta">
-                  <div>
-                    <dt>Folio</dt>
-                    <dd>{ticketActual.folio}</dd>
-                  </div>
-                  <div>
-                    <dt>Mesa</dt>
-                    <dd>{ticketActual.mesa}</dd>
-                  </div>
-                  {ticketActual.alias && (
-                    <div>
-                      <dt>Cliente</dt>
-                      <dd>{ticketActual.alias}</dd>
-                    </div>
-                  )}
-                  <div>
-                    <dt>Ocupación</dt>
-                    <dd>{formatearFechaHora(ticketActual.fecha_ocupacion)}</dd>
-                  </div>
-                  <div>
-                    <dt>Pago</dt>
-                    <dd>{formatearFechaHora(ticketActual.fecha_pago)}</dd>
-                  </div>
-                </dl>
-
-                <div className="ticket-separador" />
-
-                <div className="ticket-items">
-                  <div className="ticket-items-titulo">Productos</div>
-                  {ticketActual.items.map((item, indice) => (
-                    <div
-                      className="ticket-item"
-                      key={`${ticketActual.id}-${indice}`}
-                    >
-                      <span className="ticket-item-nombre">{item.nombre}</span>
-                      <span className="ticket-item-precio">
-                        {item.cantidad} × {formatearPrecio(item.precio_unitario)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="ticket-separador" />
-
-                <div className="ticket-total">
-                  <span>Total</span>
-                  <strong>
-                    {formatearPrecio(calcularTotalTicket(ticketActual))}
-                  </strong>
-                </div>
-
-                <div className="ticket-separador" />
-
-                <div className="ticket-pago">
-                  <span>Forma de pago</span>
-                  <strong>{etiquetaPago(ticketActual.forma_pago)}</strong>
-                </div>
-
-                <p className="ticket-pie">
-                  Documento interno de control.
-                  <br />
-                  No válido como factura.
-                </p>
-
-                <button
-                  type="button"
-                  className="btn-secondary btn-small ticket-descarga"
-                  onClick={() => descargar(ticketActual)}
-                  aria-label={`Descargar imagen del ticket ${ticketActual.folio}`}
-                >
-                  Descargar imagen
-                </button>
-              </article>
+              {datos.tickets.map((ticket, indice) => (
+                <TicketCard
+                  key={`${ticket.id}-${indice}`}
+                  ticket={ticket}
+                  nombreNegocio={datos.nombre_negocio}
+                  activo={indice === indiceActual}
+                  onDescargar={descargar}
+                />
+              ))}
             </div>
 
             <nav
