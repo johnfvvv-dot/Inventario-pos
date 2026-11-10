@@ -330,6 +330,8 @@ class PedidoItemOut(BaseModel):
 class PedidoCreate(BaseModel):
     mesa_id: int = Field(..., gt=0)
     usuario_id: int = Field(..., gt=0)
+    # NULL o ausente = cuenta general de la mesa/barra.
+    participante_id: Optional[int] = Field(default=None, gt=0)
     items: List[PedidoItemCreate]
 
 
@@ -348,6 +350,9 @@ class PedidoOut(BaseModel):
     fecha_cierre: Optional[datetime] = None
     total: float
     estado: str
+    participante_id: Optional[int] = None
+    alias: Optional[str] = None
+    es_pago_division: bool = False
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -386,6 +391,8 @@ class CuentaMesaOut(BaseModel):
     mesa_numero: int
     estado_mesa: str
     total: float
+    total_general: float = 0.0
+    total_divisiones: float = 0.0
     pedidos: List[PedidoOut]
     divisiones: List[DivisionResumen]
 

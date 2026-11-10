@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Division, Mesa, Pedido
+from app.models import Division, Mesa, Participante, Pedido
 from app.schemas import (
     BarraCreate,
     EstadoUpdate,
@@ -39,8 +39,23 @@ def _resumen_cuenta(db: Session, mesas: List[Mesa]):
         .all()
     )
     divisiones = (
-        db.query(Division.mesa_id, func.count(Division.id), func.coalesce(func.sum(Division.total), 0.0))
+        db.query(Division.mesa_id, func.count(func.distinct(Division.id)))
         .filter(Division.mesa_id.in_(ids), Division.estado == "pendiente")
+        .group_by(Division.mesa_id)
+        .all()
+    )
+    participantes = (
+        db.query(
+            Division.mesa_id,
+            func.count(Participante.id),
+            func.coalesce(func.sum(Participante.subtotal), 0.0),
+        )
+        .join(Participante, Participante.division_id == Division.id)
+        .filter(
+            Division.mesa_id.in_(ids),
+            Division.estado == "pendiente",
+            Participante.pagado == 0,
+        )
         .group_by(Division.mesa_id)
         .all()
     )
@@ -50,13 +65,21 @@ def _resumen_cuenta(db: Session, mesas: List[Mesa]):
         resumen[mesa_id] = {
             "pedidos": cantidad,
             "divisiones": 0,
+            "clientes": 0,
             "total": round(float(total or 0), 2),
         }
-    for mesa_id, cantidad, total in divisiones:
+    for mesa_id, cantidad in divisiones:
         item = resumen.setdefault(
-            mesa_id, {"pedidos": 0, "divisiones": 0, "total": 0.0}
+            mesa_id,
+            {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
         )
         item["divisiones"] = cantidad
+    for mesa_id, cantidad, total in participantes:
+        item = resumen.setdefault(
+            mesa_id,
+            {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
+        )
+        item["clientes"] = cantidad
         item["total"] = round(item["total"] + float(total or 0), 2)
     return resumen
 
@@ -144,10 +167,16 @@ def listar_mesas(db: Session = Depends(get_db)):
     resultado_barras = []
     for grupo, posiciones in grupos.items():
         posiciones.sort(key=lambda m: m.posicion or 0)
-        info_pos = [resumen.get(m.id, {"pedidos": 0, "divisiones": 0, "total": 0.0}) for m in posiciones]
+        info_pos = [
+            resumen.get(
+                m.id,
+                {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
+            )
+            for m in posiciones
+        ]
         total = round(sum(i["total"] for i in info_pos), 2)
         ocupada = any(m.estado == "ocupada" for m in posiciones)
-        tiene = any(i["pedidos"] or i["divisiones"] for i in info_pos)
+        tiene = any(i["pedidos"] or i["divisiones"] or i["clientes"] for i in info_pos)
 
         # posicion activa: la primera ocupada, si no la primera libre
         activa = next((m for m in posiciones if m.estado == "ocupada"), posiciones[0])
@@ -165,10 +194,17 @@ def listar_mesas(db: Session = Depends(get_db)):
                 total_cuenta=total,
                 tiene_cuenta_pendiente=tiene,
                 detalle_pendiente=(
-                    f"{sum(1 for m in posiciones if m.estado == 'ocupada')} cliente(s) en uso"
-                    if ocupada
-                    else ""
-                ),
+                    (
+                        f"{sum(i['clientes'] for i in info_pos)} cliente(s) pendiente(s) · "
+                        if sum(i["clientes"] for i in info_pos)
+                        else ""
+                    )
+                    + (
+                        f"{sum(1 for m in posiciones if m.estado == 'ocupada')} plaza(s) en uso"
+                        if ocupada
+                        else ""
+                    )
+                ).strip(" ·"),
                 posiciones=[
                     PosicionBarra(
                         id=m.id,
@@ -186,13 +222,21 @@ def listar_mesas(db: Session = Depends(get_db)):
     for mesa in mesas:
         if (mesa.tipo or "mesa") == "barra":
             continue
-        info = resumen.get(mesa.id, {"pedidos": 0, "divisiones": 0, "total": 0.0})
+        info = resumen.get(
+            mesa.id,
+            {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
+        )
         pendientes = []
         if info["pedidos"]:
             pendientes.append(
                 f"{info['pedidos']} pedido abierto" + ("s" if info["pedidos"] > 1 else "")
             )
-        if info["divisiones"]:
+        if info["clientes"]:
+            pendientes.append(
+                f"{info['clientes']} cliente" + ("s" if info["clientes"] > 1 else "")
+                + " pendiente" + ("s" if info["clientes"] > 1 else "")
+            )
+        elif info["divisiones"]:
             pendientes.append(
                 f"{info['divisiones']} división pendiente"
                 + ("s" if info["divisiones"] > 1 else "")
