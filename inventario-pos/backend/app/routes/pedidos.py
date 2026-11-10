@@ -3,10 +3,20 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models import Division, Mesa, Pedido, PedidoItem, Producto, Usuario
+from app.models import (
+    Division,
+    Mesa,
+    Participante,
+    ParticipanteItem,
+    Pedido,
+    PedidoItem,
+    Producto,
+    Usuario,
+)
 from app.schemas import (
     FORMAS_PAGO,
     PedidoCreate,
@@ -47,6 +57,9 @@ def _pedido_to_out(pedido: Pedido) -> PedidoOut:
         fecha_cierre=pedido.fecha_cierre,
         total=pedido.total,
         estado=pedido.estado,
+        participante_id=pedido.participante_id,
+        alias=pedido.participante.alias if pedido.participante else None,
+        es_pago_division=bool(pedido.es_pago_division),
     )
 
 
@@ -56,6 +69,7 @@ def _cargar_pedido(db: Session, pedido_id: int) -> Pedido:
         .options(
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
         .filter(Pedido.id == pedido_id)
@@ -63,9 +77,85 @@ def _cargar_pedido(db: Session, pedido_id: int) -> Pedido:
     )
 
 
+def _cargar_pedidos_mesa(db: Session, mesa_id: int) -> List[Pedido]:
+    return (
+        db.query(Pedido)
+        .options(
+            joinedload(Pedido.mesa),
+            joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
+            joinedload(Pedido.items).joinedload(PedidoItem.producto),
+        )
+        .filter(Pedido.mesa_id == mesa_id)
+        .order_by(Pedido.id.desc())
+        .all()
+    )
+
+
+def _bloquear_cuenta(db: Session, mesa: Mesa) -> None:
+    """Bloquea la fila (o filas) que representan la cuenta de una mesa/barra.
+
+    En PostgreSQL ``FOR UPDATE`` serializa la creación de pedidos, los cobros
+    y los cierres. En SQLite se ignora y la escritura ya queda serializada.
+    """
+    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
+        (
+            db.query(Mesa)
+            .filter(Mesa.grupo == mesa.grupo)
+            .order_by(Mesa.id)
+            .with_for_update()
+            .all()
+        )
+    else:
+        db.query(Mesa).filter(Mesa.id == mesa.id).with_for_update().first()
+
+
+def _misma_cuenta(division: Division, mesa: Mesa) -> bool:
+    """True si la división pertenece a la misma mesa o a la misma barra."""
+    if division.mesa_id == mesa.id:
+        return True
+    if (
+        (mesa.tipo or "mesa") == "barra"
+        and mesa.grupo
+        and division.mesa
+        and (division.mesa.tipo or "mesa") == "barra"
+        and division.mesa.grupo == mesa.grupo
+    ):
+        return True
+    return False
+
+
+def _recalcular_participante(db: Session, participante: Participante) -> float:
+    subtotal = (
+        db.query(func.coalesce(func.sum(ParticipanteItem.subtotal), 0.0))
+        .filter(ParticipanteItem.participante_id == participante.id)
+        .scalar()
+        or 0.0
+    )
+    participante.subtotal = round(float(subtotal), 2)
+    return participante.subtotal
+
+
+def _recalcular_division(db: Session, division: Division) -> float:
+    total = (
+        db.query(func.coalesce(func.sum(Participante.subtotal), 0.0))
+        .filter(Participante.division_id == division.id)
+        .scalar()
+        or 0.0
+    )
+    division.total = round(float(total), 2)
+    return division.total
+
+
 @router.post("/", response_model=PedidoOut, status_code=201)
 def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
-    """Crear un pedido, descontar stock y calcular el total."""
+    """Crear un pedido y asignarlo a la cuenta general o a un alias.
+
+    Un pedido completo tiene un solo destino. Si se envía
+    ``participante_id``, el pedido nace como ``dividido`` y sus líneas se
+    copian al alias; la cuenta general no se modifica. Sin ese campo el
+    pedido queda ``abierto`` en la cuenta general.
+    """
     exigir_turno_abierto(db)
 
     mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
@@ -79,55 +169,170 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     if not datos.items:
         raise HTTPException(status_code=400, detail="El pedido no tiene productos")
 
-    if not mesa.fecha_ocupacion:
-        mesa.fecha_ocupacion = ahora_local()
+    participante = None
+    division = None
+    mesa_destino = mesa
+    estado_pedido = "abierto"
 
-    nuevo_pedido = Pedido(
-        mesa_id=mesa.id,
-        usuario_id=usuario.id,
-        estado="abierto",
-        total=0.0,
-        fecha_ocupacion=mesa.fecha_ocupacion,
-    )
-    nuevo_pedido.guardar_origen(mesa)
-    db.add(nuevo_pedido)
-    db.flush()  # obtener ID sin confirmar todavía
+    if datos.participante_id is not None:
+        # Primera lectura para saber qué cuenta (mesa o barra) hay que bloquear.
+        participante = (
+            db.query(Participante)
+            .options(joinedload(Participante.division).joinedload(Division.mesa))
+            .filter(Participante.id == datos.participante_id)
+            .first()
+        )
+        if not participante:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+        division = participante.division
+        if not division:
+            raise HTTPException(
+                status_code=409, detail="El cliente no pertenece a una división activa."
+            )
 
-    total = 0.0
+        mesa_destino = division.mesa or db.query(Mesa).filter(
+            Mesa.id == division.mesa_id
+        ).first()
+        if not mesa_destino:
+            raise HTTPException(status_code=404, detail="Mesa de la división no encontrada")
+
+        _bloquear_cuenta(db, mesa_destino)
+
+        # Releer bajo el lock para que un pago simultáneo no pase inadvertido.
+        participante = (
+            db.query(Participante)
+            .filter(Participante.id == datos.participante_id)
+            .with_for_update()
+            .first()
+        )
+        division = (
+            db.query(Division)
+            .filter(Division.id == division.id)
+            .with_for_update()
+            .first()
+        )
+        if not participante or not division:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
+
+        if participante.pagado:
+            raise HTTPException(
+                status_code=409,
+                detail="El cliente ya pagó su cuenta; elige otro destino.",
+            )
+        if division.estado != "pendiente":
+            raise HTTPException(
+                status_code=409, detail="La división ya está cerrada."
+            )
+        if not _misma_cuenta(division, mesa):
+            raise HTTPException(
+                status_code=400, detail="El cliente no pertenece a esta cuenta."
+            )
+        if mesa_destino.estado != "ocupada":
+            raise HTTPException(
+                status_code=409,
+                detail="La cuenta ya no está activa; actualiza y vuelve a intentar.",
+            )
+
+        estado_pedido = "dividido"
+    else:
+        _bloquear_cuenta(db, mesa)
+
+    # Validar y bloquear todos los productos en orden de id para evitar
+    # interbloqueos entre pedidos concurrentes.
+    ids_productos = sorted({item.producto_id for item in datos.items})
+    productos = {
+        p.id: p
+        for p in (
+            db.query(Producto)
+            .filter(Producto.id.in_(ids_productos))
+            .order_by(Producto.id)
+            .with_for_update()
+            .all()
+        )
+    }
     for item in datos.items:
-        producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
-        if not producto:
-            db.rollback()
+        if item.producto_id not in productos:
             raise HTTPException(
                 status_code=404,
                 detail=f"Producto con ID {item.producto_id} no encontrado",
             )
-        if producto.stock < item.cantidad:
-            db.rollback()
+
+    usado: dict = {}
+    for item in datos.items:
+        producto = productos[item.producto_id]
+        solicitado = usado.get(producto.id, 0) + item.cantidad
+        if producto.stock < solicitado:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Stock insuficiente para {producto.nombre}. "
-                    f"Disponible: {producto.stock}, solicitado: {item.cantidad}"
+                    f"Disponible: {producto.stock}, solicitado: {solicitado}"
                 ),
             )
+        usado[producto.id] = solicitado
 
-        subtotal = round(producto.precio * item.cantidad, 2)
-        producto.stock -= item.cantidad
-        db.add(
-            PedidoItem(
-                pedido_id=nuevo_pedido.id,
-                producto_id=producto.id,
-                cantidad=item.cantidad,
-                precio_unitario=producto.precio,
-                subtotal=subtotal,
-            )
+    if not mesa_destino.fecha_ocupacion:
+        mesa_destino.fecha_ocupacion = ahora_local()
+
+    try:
+        nuevo_pedido = Pedido(
+            mesa_id=mesa_destino.id,
+            usuario_id=usuario.id,
+            estado=estado_pedido,
+            total=0.0,
+            fecha_ocupacion=mesa_destino.fecha_ocupacion,
+            participante_id=participante.id if participante else None,
+            es_pago_division=0,
         )
-        total += subtotal
+        nuevo_pedido.guardar_origen(mesa_destino)
+        db.add(nuevo_pedido)
+        db.flush()  # obtener ID sin confirmar todavía
 
-    nuevo_pedido.total = round(total, 2)
-    mesa.estado = "ocupada"
-    db.commit()
+        total = 0.0
+        for item in datos.items:
+            producto = productos[item.producto_id]
+            subtotal = round(producto.precio * item.cantidad, 2)
+            producto.stock -= item.cantidad
+            db.add(
+                PedidoItem(
+                    pedido_id=nuevo_pedido.id,
+                    producto_id=producto.id,
+                    cantidad=item.cantidad,
+                    precio_unitario=producto.precio,
+                    subtotal=subtotal,
+                )
+            )
+            total += subtotal
+
+        nuevo_pedido.total = round(total, 2)
+
+        if participante and division:
+            for item in datos.items:
+                producto = productos[item.producto_id]
+                db.add(
+                    ParticipanteItem(
+                        participante_id=participante.id,
+                        producto_id=producto.id,
+                        cantidad=item.cantidad,
+                        precio_unitario=producto.precio,
+                        subtotal=round(producto.precio * item.cantidad, 2),
+                        pedido_id=nuevo_pedido.id,
+                    )
+                )
+            db.flush()
+            _recalcular_participante(db, participante)
+            # La división suma los subtotales ya guardados de sus alias.
+            db.flush()
+            _recalcular_division(db, division)
+
+        mesa_destino.estado = "ocupada"
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
     pedido_cargado = _cargar_pedido(db, nuevo_pedido.id)
     return _pedido_to_out(pedido_cargado)
@@ -221,6 +426,7 @@ def listar_pedidos(db: Session = Depends(get_db)):
         .options(
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
         .order_by(Pedido.id.desc())
@@ -232,14 +438,31 @@ def listar_pedidos(db: Session = Depends(get_db)):
 @router.get("/mesa/{mesa_id}", response_model=List[PedidoOut])
 def pedidos_por_mesa(mesa_id: int, db: Session = Depends(get_db)):
     """Listar pedidos de una mesa específica."""
+    return [_pedido_to_out(p) for p in _cargar_pedidos_mesa(db, mesa_id)]
+
+
+@router.get("/barra/{numero_barra}", response_model=List[PedidoOut])
+def pedidos_por_barra(numero_barra: int, db: Session = Depends(get_db)):
+    """Listar los pedidos de todas las plazas de una barra.
+
+    La pantalla de pedidos usa este endpoint para mostrar tanto la cuenta
+    general de la barra como los pedidos asignados a alias que quedaron
+    guardados en otra plaza.
+    """
+    grupo = f"Barra {numero_barra}"
+    mesas = db.query(Mesa).filter(Mesa.grupo == grupo).order_by(Mesa.posicion).all()
+    if not mesas:
+        raise HTTPException(status_code=404, detail="Barra no encontrada")
+    ids = [m.id for m in mesas]
     pedidos = (
         db.query(Pedido)
         .options(
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
-        .filter(Pedido.mesa_id == mesa_id)
+        .filter(Pedido.mesa_id.in_(ids))
         .order_by(Pedido.id.desc())
         .all()
     )
@@ -253,11 +476,26 @@ def cerrar_pedido(
     db: Session = Depends(get_db),
 ):
     """Cerrar un pedido (cobrar) y liberar la mesa si no quedan cuentas pendientes."""
+    exigir_turno_abierto(db)
+
     pedido = db.query(Pedido).filter(Pedido.id == pedido_id).first()
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido no encontrado")
     if pedido.estado == "cerrado":
         raise HTTPException(status_code=400, detail="El pedido ya estaba cerrado")
+    if pedido.estado == "dividido" or pedido.participante_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Este pedido pertenece a una división; cobra la parte del "
+                "cliente desde la cuenta."
+            ),
+        )
+    if pedido.es_pago_division:
+        raise HTTPException(
+            status_code=400,
+            detail="Este pedido es un pago de división y ya está cerrado.",
+        )
 
     if forma_pago not in FORMAS_PAGO:
         raise HTTPException(

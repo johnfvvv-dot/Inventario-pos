@@ -13,6 +13,9 @@ import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 import CobroModal from "../components/CobroModal";
 import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
+import AsignarPedidoModal, {
+  type DestinoPedido,
+} from "../components/AsignarPedidoModal";
 
 interface Mesa {
   id: number;
@@ -50,6 +53,8 @@ interface Pedido {
   mesa?: { numero: number } | null;
   total: number;
   estado: string;
+  participante_id?: number | null;
+  alias?: string | null;
   items: {
     id?: number;
     producto_id?: number;
@@ -57,6 +62,30 @@ interface Pedido {
     cantidad: number;
     subtotal: number;
   }[];
+}
+
+interface ParticipanteCuenta {
+  id: number;
+  alias: string;
+  subtotal: number;
+  pagado: boolean;
+  items: { producto_nombre: string; cantidad: number; subtotal: number }[];
+}
+
+interface DivisionCuenta {
+  id: number;
+  total: number;
+  total_pendiente: number;
+  estado: string;
+  participantes: ParticipanteCuenta[];
+}
+
+interface CuentaData {
+  total: number;
+  total_general: number;
+  total_divisiones: number;
+  pedidos: Pedido[];
+  divisiones: DivisionCuenta[];
 }
 
 export default function PedidoMesaPage() {
@@ -79,6 +108,13 @@ export default function PedidoMesaPage() {
   const [pedidoACobrar, setPedidoACobrar] = useState<Pedido | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | "">("");
+
+  // Cuenta actual y destinos posibles para el nuevo pedido
+  const [cuenta, setCuenta] = useState<CuentaData | null>(null);
+  const [destinos, setDestinos] = useState<DestinoPedido[]>([]);
+  const [mostrarAsignacion, setMostrarAsignacion] = useState(false);
+  const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
+  const [procesandoAsignacion, setProcesandoAsignacion] = useState(false);
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -118,6 +154,24 @@ export default function PedidoMesaPage() {
   const etiquetaMesa = (m: Mesa) =>
     m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
+  const etiquetaCuenta = barraNumero
+    ? `Barra ${barraNumero}`
+    : mesaSeleccionada
+    ? `Mesa ${mesaSeleccionada.numero}`
+    : "la cuenta";
+
+  const aliasActivos = destinos.filter((d) => !d.esGeneral && !d.pagado);
+
+  // Los pedidos asignados a un alias se ocultan cuando ese cliente ya pagó:
+  // siguen guardados para el historial, pero ya no forman parte de la cuenta.
+  const pedidosVisibles = pedidos.filter((p) => {
+    if (p.estado === "abierto") return true;
+    if (p.estado !== "dividido" || p.participante_id == null) return false;
+    return destinos.some(
+      (d) => d.participanteId === p.participante_id && !d.pagado
+    );
+  });
+
   const cargarCatalogos = async () => {
     try {
       const [m, inv, cats]: any = await Promise.all([
@@ -133,12 +187,108 @@ export default function PedidoMesaPage() {
     }
   };
 
-  const cargarPedidos = async (id: number) => {
+  const cargarPedidos = async (id: number, barra?: number | null) => {
     try {
-      const data: any = await api.getPedidosMesa(id);
-      setPedidos(data.filter((p: Pedido) => p.estado === "abierto"));
+      const data: any = barra
+        ? await api.getPedidosBarra(barra)
+        : await api.getPedidosMesa(id);
+      // La cuenta general son los pedidos abiertos. Los pedidos asignados a
+      // un alias quedan "dividido" y se muestran solo como información.
+      setPedidos(
+        data.filter(
+          (p: Pedido) =>
+            p.estado === "abierto" ||
+            (p.estado === "dividido" && p.participante_id != null)
+        )
+      );
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  const destinosDesdeCuenta = (data: CuentaData): DestinoPedido[] => {
+    const deAlias: DestinoPedido[] = (data.divisiones || []).flatMap((d) =>
+      (d.participantes || []).map((p) => ({
+        participanteId: p.id,
+        alias: p.alias,
+        divisionId: d.id,
+        subtotal: p.subtotal,
+        pagado: p.pagado,
+        itemsCount: p.items?.length || 0,
+      }))
+    );
+    return [
+      ...deAlias,
+      {
+        participanteId: null,
+        alias: barraNumero
+          ? "Cuenta General de la Barra"
+          : "Cuenta General de la Mesa",
+        subtotal: data.total_general || 0,
+        pagado: false,
+        itemsCount: data.pedidos?.length || 0,
+        esGeneral: true,
+      },
+    ];
+  };
+
+  const cargarCuenta = async (): Promise<CuentaData | null> => {
+    if (mesaId === "") return null;
+    try {
+      const data: any = barraNumero
+        ? await api.getCuentaBarra(barraNumero)
+        : await api.getCuentaMesa(Number(mesaId));
+      setCuenta(data);
+      setDestinos(destinosDesdeCuenta(data));
+      return data;
+    } catch (err: any) {
+      setError(err.message);
+      return null;
+    }
+  };
+
+  const crearPedido = async (
+    participanteId: number | null,
+    etiquetaDestino: string,
+    desdeModal = false
+  ) => {
+    if (!mesaId) return;
+    setProcesandoAsignacion(true);
+    if (desdeModal) setErrorAsignacion(null);
+    try {
+      await api.createPedido({
+        mesa_id: Number(mesaId),
+        usuario_id: usuarioId,
+        participante_id: participanteId,
+        items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
+        })),
+      });
+      setCarrito([]);
+      setCantidades({});
+      setMostrarAsignacion(false);
+      setErrorAsignacion(null);
+      setError(null);
+      setMensaje(`Pedido agregado a ${etiquetaDestino}.`);
+      await Promise.all([
+        cargarCatalogos(),
+        cargarPedidos(Number(mesaId), barraNumero),
+        cargarCuenta(),
+      ]);
+    } catch (err: any) {
+      if (desdeModal) {
+        setErrorAsignacion(err.message);
+        // El alias pudo pagar mientras se confirmaba: refrescar opciones.
+        await Promise.all([
+          cargarCuenta(),
+          cargarPedidos(Number(mesaId), barraNumero),
+        ]);
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setProcesandoAsignacion(false);
     }
   };
 
@@ -151,13 +301,21 @@ export default function PedidoMesaPage() {
       setCantidades({});
       setMensaje(null);
       setError(null);
+      setMostrarAsignacion(false);
+      setErrorAsignacion(null);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (mesaId) cargarPedidos(Number(mesaId));
-    else setPedidos([]);
-  }, [mesaId]);
+    if (mesaId) {
+      cargarPedidos(Number(mesaId), barraNumero);
+      cargarCuenta();
+    } else {
+      setPedidos([]);
+      setCuenta(null);
+      setDestinos([]);
+    }
+  }, [mesaId, barraNumero]);
 
   useEffect(() => {
     cargarCatalogos();
@@ -250,23 +408,31 @@ export default function PedidoMesaPage() {
       return;
     }
 
-    try {
-      await api.createPedido({
-        mesa_id: Number(mesaId),
-        usuario_id: usuarioId,
-        items: carrito.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-        })),
-      });
-      setCarrito([]);
-      setCantidades({});
-      setMensaje("Pedido registrado correctamente");
-      setError(null);
-      await Promise.all([cargarCatalogos(), cargarPedidos(Number(mesaId))]);
-    } catch (err: any) {
-      setError(err.message);
+    setError(null);
+    // Se consulta la cuenta justo antes de confirmar para no asignar a un
+    // alias que acaba de pagar o a una división ya cerrada.
+    const data = await cargarCuenta();
+    if (!data) return;
+
+    const opciones = destinosDesdeCuenta(data);
+    const activos = opciones.filter((d) => !d.esGeneral && !d.pagado);
+    if (activos.length === 0) {
+      await crearPedido(null, "la cuenta general");
+      return;
     }
+
+    setDestinos(opciones);
+    setErrorAsignacion(null);
+    setMostrarAsignacion(true);
+  };
+
+  const confirmarAsignacion = (participanteId: number | null) => {
+    const destino = destinos.find((d) =>
+      participanteId === null
+        ? d.esGeneral
+        : d.participanteId === participanteId
+    );
+    crearPedido(participanteId, destino?.alias || "la cuenta general", true);
   };
 
   /** Ajusta la cantidad de una linea de un pedido abierto */
@@ -277,7 +443,11 @@ export default function PedidoMesaPage() {
     }
     try {
       await api.ajustarItemPedido(pedidoId, itemId, cantidad);
-      await Promise.all([cargarPedidos(Number(mesaId)), cargarCatalogos()]);
+      await Promise.all([
+        cargarPedidos(Number(mesaId), barraNumero),
+        cargarCatalogos(),
+        cargarCuenta(),
+      ]);
     } catch (err: any) {
       setError(err.message);
     }
@@ -290,7 +460,10 @@ export default function PedidoMesaPage() {
       setMensaje(`Pedido #${pedidoId} cerrado y cobrado (${formaPago})`);
       await Promise.all([
         cargarCatalogos(),
-        mesaId ? cargarPedidos(Number(mesaId)) : Promise.resolve(),
+        mesaId
+          ? cargarPedidos(Number(mesaId), barraNumero)
+          : Promise.resolve(),
+        mesaId ? cargarCuenta() : Promise.resolve(),
       ]);
     } catch (err: any) {
       setError(err.message);
@@ -310,6 +483,8 @@ export default function PedidoMesaPage() {
               setCarrito([]);
               setCantidades({});
               setMensaje(null);
+              setMostrarAsignacion(false);
+              setErrorAsignacion(null);
             }}
           >
             <option value="">— Seleccionar mesa o barra —</option>
@@ -348,6 +523,30 @@ export default function PedidoMesaPage() {
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {sinTurno && <TurnoRequeridoAviso onAbrir={solicitarApertura} />}
+
+      {aliasActivos.length > 0 && (
+        <div className="aviso-clientes">
+          <div className="aviso-clientes-texto">
+            <strong>
+              {etiquetaCuenta} tiene {aliasActivos.length} cliente
+              {aliasActivos.length > 1 ? "s" : ""} activo
+              {aliasActivos.length > 1 ? "s" : ""}.
+            </strong>{" "}
+            Al confirmar el pedido podrás elegir a quién asignarlo.
+          </div>
+          <div className="aviso-clientes-detalle">
+            {aliasActivos.map((d) => (
+              <span key={d.participanteId}>
+                {d.alias}: <strong>{formatearPrecio(d.subtotal)}</strong>
+              </span>
+            ))}
+            <span>
+              Cuenta general:{" "}
+              <strong>{formatearPrecio(cuenta?.total_general || 0)}</strong>
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="pos-grid">
         <section className="panel">
@@ -487,8 +686,8 @@ export default function PedidoMesaPage() {
       </div>
 
       <section className="panel">
-        <h3>Pedidos abiertos de la mesa</h3>
-        {pedidos.length === 0 ? (
+        <h3>Pedidos de {etiquetaCuenta}</h3>
+        {pedidosVisibles.length === 0 ? (
           <p className="empty-state">No hay pedidos abiertos.</p>
         ) : (
           <div className="table-wrap">
@@ -498,61 +697,75 @@ export default function PedidoMesaPage() {
                   <th>#</th>
                   <th>Productos</th>
                   <th>Total</th>
-                  <th></th>
+                  <th>Destino</th>
                 </tr>
               </thead>
               <tbody>
-                {pedidos.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.id}</td>
-                    <td>
-                      {p.items.map((i) => (
-                        <div key={i.producto_id} className="linea-pedido">
-                          <span>
-                            {i.cantidad} × {i.producto_nombre}
-                          </span>
-                          {i.id !== undefined && (
-                            <span className="linea-acciones">
-                              <button
-                                className="btn-icon"
-                                title="Quitar una unidad"
-                                disabled={!turno}
-                                onClick={() =>
-                                  ajustarLinea(p.id, i.id as number, i.cantidad - 1)
-                                }
-                              >
-                                −
-                              </button>
-                              <button
-                                className="btn-icon"
-                                title="Añadir una unidad"
-                                disabled={!turno}
-                                onClick={() =>
-                                  ajustarLinea(p.id, i.id as number, i.cantidad + 1)
-                                }
-                              >
-                                +
-                              </button>
+                {pedidosVisibles.map((p) => {
+                  const asignado =
+                    p.estado === "dividido" && p.participante_id != null;
+                  return (
+                    <tr key={p.id}>
+                      <td>{p.id}</td>
+                      <td>
+                        {p.items.map((i) => (
+                          <div key={i.producto_id} className="linea-pedido">
+                            <span>
+                              {i.cantidad} × {i.producto_nombre}
                             </span>
-                          )}
-                        </div>
-                      ))}
-                    </td>
-                    <td>{formatearPrecio(p.total)}</td>
-                    <td>
-                      <button
-                        className="btn-primary btn-small"
-                        onClick={() => setPedidoACobrar(p)}
-                      >
-                        Cobrar / cerrar
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                            {!asignado && i.id !== undefined && (
+                              <span className="linea-acciones">
+                                <button
+                                  className="btn-icon"
+                                  title="Quitar una unidad"
+                                  disabled={!turno}
+                                  onClick={() =>
+                                    ajustarLinea(p.id, i.id as number, i.cantidad - 1)
+                                  }
+                                >
+                                  −
+                                </button>
+                                <button
+                                  className="btn-icon"
+                                  title="Añadir una unidad"
+                                  disabled={!turno}
+                                  onClick={() =>
+                                    ajustarLinea(p.id, i.id as number, i.cantidad + 1)
+                                  }
+                                >
+                                  +
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </td>
+                      <td>{formatearPrecio(p.total)}</td>
+                      <td>
+                        {asignado ? (
+                          <span className="badge badge-warning badge-cliente">
+                            Asignado a {p.alias}
+                          </span>
+                        ) : (
+                          <button
+                            className="btn-primary btn-small"
+                            onClick={() => setPedidoACobrar(p)}
+                          >
+                            Cobrar / cerrar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
+        <p className="muted small">
+          Los pedidos asignados a un alias se cobran desde la cuenta, con
+          "Cerrar división". No se pueden cobrar por separado.
+        </p>
       </section>
 
       {/* Ventana de cobro de un pedido */}
@@ -563,6 +776,24 @@ export default function PedidoMesaPage() {
           error={error}
           onClose={() => setPedidoACobrar(null)}
           confirmar={(formaPago) => cerrarPedido(pedidoACobrar.id, formaPago)}
+        />
+      )}
+
+      {/* Ventana de asignación del pedido a un alias o a la cuenta general */}
+      {mostrarAsignacion && (
+        <AsignarPedidoModal
+          etiquetaCuenta={etiquetaCuenta}
+          totalPedido={total}
+          cantidadItems={carrito.reduce((s, i) => s + i.cantidad, 0)}
+          destinos={destinos}
+          procesando={procesandoAsignacion}
+          error={errorAsignacion}
+          onConfirmar={confirmarAsignacion}
+          onClose={() => {
+            if (procesandoAsignacion) return;
+            setMostrarAsignacion(false);
+            setErrorAsignacion(null);
+          }}
         />
       )}
 
@@ -581,8 +812,9 @@ export default function PedidoMesaPage() {
             setMostrarTransferir(true);
           }}
           onActualizado={() => {
-            cargarPedidos(Number(mesaId));
+            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
+            cargarCuenta();
           }}
         />
       )}
@@ -594,8 +826,9 @@ export default function PedidoMesaPage() {
           barraNumero={barraNumero}
           onClose={() => setMostrarDivision(false)}
           onConfirmado={() => {
-            cargarPedidos(Number(mesaId));
+            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
+            cargarCuenta();
           }}
         />
       )}
@@ -608,8 +841,9 @@ export default function PedidoMesaPage() {
           onClose={() => setMostrarTransferir(false)}
           onTransferido={() => {
             setMostrarTransferir(false);
-            cargarPedidos(Number(mesaId));
+            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
+            cargarCuenta();
           }}
         />
       )}

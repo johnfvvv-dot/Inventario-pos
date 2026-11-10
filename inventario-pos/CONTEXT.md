@@ -1,8 +1,8 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.2.2
+**Versión actual:** 1.3.0
 
-**Última actualización:** 05/11/2026
+**Última actualización:** 10/11/2026
 
 ## 1. Propósito del sistema
 
@@ -52,10 +52,14 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `https://inventario-pos-bfw.pages.dev/admin/usuarios`. El frontend siempre se
   sirve desde Cloudflare Pages; al iniciar sesión prueba en paralelo
   `localhost:8000`, `127.0.0.1:8000` y la IP LAN compilada, y si ninguna
-  responde usa Render. El login solo muestra `Inventario POS v1.2.2`; no hay
+  responde usa Render. El login solo muestra `Inventario POS v1.3.0`; no hay
   botón de conexión ni estado del servidor. El fallback seguro solo reintenta
   `GET`, `HEAD` y login.
 - **1.2.2 (05/11/2026):** tipografía uniforme en el modal de apertura, máscara de miles sin decimales para el Fondo Inicial de Caja e impresión de todos los tickets del turno con salto de página.
+- **1.3.0 (10/11/2026):** asignación de pedidos nuevos a alias activos o a la
+  Cuenta General; pago de divisiones materializado como pedido cerrado para
+  caja, ganancia e historial; totales separados de cuenta general y divisiones;
+  tickets sin duplicados y bloqueo de alias ya pagados.
 - **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
   `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
   solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
@@ -153,11 +157,39 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - Se valida el stock considerando lo que ya está en el carrito y se muestran
   mensajes de error claros.
 - Los campos de cantidad se limpian al agregar y al cambiar de mesa/barra.
+- **Asignación por pedido (1.3.0):** ante alias activos, `AsignarPedidoModal`
+  pregunta **"¿A quién deseas asignar este pedido?"** y ofrece cada alias más la
+  **Cuenta General de la Mesa/Barra**. El pedido completo tiene un solo destino.
+  - Alias: `POST /api/pedidos/` con `participante_id`; el pedido nace
+    `dividido`, se copian sus líneas a `participante_items` con `pedido_id` y
+    se recalculan subtotal y división.
+  - Cuenta general: pedido `abierto` con `participante_id = NULL`; no toca los
+    alias.
+  - Los alias con `pagado = 1` se muestran deshabilitados como **Pagado** y el
+    backend responde `409` si se intenta asignarles un pedido.
+  - En barras, `GET /api/pedidos/barra/{numero}` lista los pedidos de todas las
+    plazas para que la pantalla muestre también los guardados en otra plaza.
 
 ### Cuentas, caja y reportes
 
 - División de cuenta por alias, cobro individual, transferencia entre mesas y
   plazas de barra, cierre con o sin liberación y corte de caja por turno.
+- **Pagos de divisiones (1.3.0):** al cobrar un alias,
+  `_registrar_pago_participante()` crea un `Pedido` cerrado con
+  `es_pago_division = 1`, `participante_id` y la forma de pago. Ese pedido es la
+  fuente para el corte de caja, la ganancia y el historial. El ticket del alias
+  sigue saliendo de `participante_items`, y la generación de tickets excluye el
+  pedido financiero para no duplicarlo.
+- Un pago ya realizado no se sobrescribe al cerrar la cuenta: se conservan su
+  forma de pago y su fecha. Los alias pendientes se cobran con la forma elegida.
+- `CuentaMesaOut` incluye `total_general` y `total_divisiones`; el total
+  pendiente es la suma de pedidos abiertos más partes impagas. Las tarjetas de
+  mesa/barra usan la misma regla y muestran los clientes pendientes.
+- Transferencia: además de los pedidos generales y las divisiones pendientes, se
+  mueven los pedidos `dividido` asignados a sus alias; los pedidos financieros
+  cerrados no se mueven.
+- No se hace backfill de pagos de divisiones anteriores a 1.3.0. Un rescate
+  histórico requeriría autorización y respaldo previo.
 - El **resumen de ventas** filtra por días calendario: `Hoy` va de las 00:00 a
   la hora actual, `Ayer` cubre el día completo y `7/30 días` incluyen hoy. Los
   totales, pedidos cerrados, mesas y operaciones usan el mismo rango; el
@@ -186,7 +218,7 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `/admin/personalizacion`. Cambia el nombre visible de la cabecera y agrega un
   logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP). El nombre oficial del
   sistema sigue siendo **Inventario POS** y el login conserva
-  `Inventario POS v1.2.2`.
+  `Inventario POS v1.3.0`.
 - Los valores se guardan en la tabla `configuracion_negocio` (fila única
   `id=1`). La cabecera del Administrador y la del Bartender los leen mediante
   `useConfiguracionNegocio`, con copia en `localStorage` y evento
@@ -261,15 +293,17 @@ también empaquetarse como ejecutable de Windows o APK de Android.
    el mensaje.
 3. **`start_dev.sh`:** crea/activa el entorno virtual en la raíz pero luego
    espera `backend/venv`; unificar la ruta.
-4. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
-   migración de etiquetas históricas sobre una base de datos antigua.
+4. **Pruebas automatizadas:** hay 4 pruebas de integración de cuentas divididas
+   en `backend/tests/test_cuentas_asignacion.py`; falta ampliar la cobertura de
+   frontend y validar la migración de etiquetas históricas sobre una base de
+   datos antigua.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
-   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.2.1
-   elimina cualquier posibilidad de forzar un endpoint temporal (ngrok), abre
-   Pages en una ventana nueva y muestra solo la versión en el login. Queda
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.3.0
+   agrega la asignación de pedidos a alias, el registro de pagos de divisiones y
+   los totales separados. Queda
    opcional eliminar el servicio Render antiguo `Inventario-pos` cuando se
    confirme el nuevo. No se envía ping a Render: la operación interna usa el
    `.exe`.

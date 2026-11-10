@@ -4,14 +4,14 @@ Sistema web y de escritorio de inventario y punto de venta para pequeños
 negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
 pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
-**Versión actual:** 1.2.2
+**Versión actual:** 1.3.0
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
 - **Frontend:** React 18 + TypeScript
 - **Base de datos:** Neon PostgreSQL (modo híbrido) / SQLite (respaldo local)
 - **Ejecución:** `.exe` local + Render Free como respaldo + Cloudflare Pages
 
-## Modo híbrido (v1.2.2)
+## Modo híbrido (v1.3.0)
 
 El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador y el
 frontend siempre publicado en Cloudflare Pages:
@@ -25,7 +25,7 @@ frontend siempre publicado en Cloudflare Pages:
 - Mientras la ventana del `.exe` esté abierta, el backend local sigue activo.
   No se instala como servicio de Windows: si se cierra la consola, el backend
   se detiene y el frontend pasa a Render.
-- El login solo muestra **`Inventario POS v1.2.2`**. No hay botón de conexión ni
+- El login solo muestra **`Inventario POS v1.3.0`**. No hay botón de conexión ni
   textos sobre el servidor activo; la detección es transparente.
 
 ### Lógica de detección
@@ -80,7 +80,7 @@ Opciones reales para el celular en la misma WiFi:
 Para habilitar la opción 1, permite el puerto **8000** en el firewall de
 Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
 
-## Funcionalidades (v1.2.2)
+## Funcionalidades (v1.3.0)
 
 ### Módulos
 
@@ -109,14 +109,25 @@ Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
   **máximo 8 filas visibles con scroll**; cada producto tiene un campo numérico
   + botón verde **"Agregar"** para cantidades manuales, además del botón **"+"**
   incremental.
-- **Cuentas por mesa y barra:** total en vivo, detalle por pedido y por
-  división, cierre con confirmación (Aceptar / Liberar mesa o barra) sin liberar
-  la mesa/barra por defecto. Las barras se cierran y liberan con el mismo flujo
-  que las mesas.
+- **Asignación de pedidos (v1.3.0):** si la mesa o barra tiene clientes
+  activos, al confirmar un pedido se pregunta **"¿A quién deseas asignar este
+  pedido?"**. Se puede elegir un alias o la **Cuenta General de la Mesa/Barra**.
+  El pedido completo tiene un solo destino: al elegirlo se suman sus productos
+  al subtotal del alias sin modificar a los demás. Los alias ya pagados se
+  muestran deshabilitados como **Pagado** y no admiten pedidos nuevos.
+- **Cuentas por mesa y barra:** total en vivo separado en **cuenta general** y
+  **divisiones pendientes**, detalle por pedido y por división, cierre con
+  confirmación (Aceptar / Liberar mesa o barra) sin liberar la mesa/barra por
+  defecto. Las barras se cierran y liberan con el mismo flujo que las mesas.
 - **División de cuenta:** reparto entre clientes con alias, cantidad exacta por
   producto, subtotales por cliente, resto de la cuenta conservado como bloque
   único y cobro individual de cada alias. Funciona en mesas y en la cuenta
-  agregada de una barra.
+  agregada de una barra. Los pedidos nuevos asignados a un alias se agregan a
+  su parte y se cobran junto con ella.
+- **Pagos de divisiones en caja:** al cobrar un alias se registra un pedido
+  cerrado con su forma de pago; así el corte de caja, la ganancia y el historial
+  contabilizan el dinero real. Ese pedido financiero no duplica el ticket del
+  alias y los pagos ya realizados no se sobrescriben al cerrar la cuenta.
 - **Liberación controlada:** una mesa o barra con cuentas pendientes no se puede
   liberar; se muestra el aviso correspondiente con acceso directo al pedido
   abierto.
@@ -180,8 +191,10 @@ Panel Mesas
  │                      la barra se muestra como una tarjeta más, igual que
  │                      una mesa, y cada plaza guarda su propia cuenta
  ├─ [Pedido]  → pedidos con la mesa/barra ya seleccionada
- │              └─ cantidad manual o +/− por producto
- ├─ [Cuenta]  → ┌─ Dividir cuenta ────► alias con cantidades por producto
+ │              ├─ cantidad manual o +/− por producto
+ │              └─ si hay alias activos: elegir alias o Cuenta General
+ ├─ [Cuenta]  → ┌─ Resumen general + divisiones pendientes
+ │              ├─ Dividir cuenta ────► alias con cantidades por producto
  │              ├─ Cerrar división ───► cobra 1 cliente, los demás siguen
  │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa/plaza libre
  │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa/barra] + pago
@@ -200,7 +213,7 @@ disponible en `http://localhost:8000/docs`.
 | Mesas y barras | `GET /mesas/`, `POST /mesas/`, `POST /mesas/barra`, `POST /mesas/{id}/ocupar`, `PUT /mesas/{id}/estado`, `POST /mesas/{id}/liberar`, `DELETE /mesas/{id}` |
 | Inventario | `GET /inventario/` (búsqueda + paginación), `POST /inventario/`, `PUT /inventario/{id}`, `PUT /inventario/{id}/stock`, `POST /inventario/{id}/stock/ajuste` (delta atómico), `DELETE /inventario/{id}` |
 | Categorías | `GET /categorias/`, `POST /categorias/`, `PUT /categorias/{id}`, `DELETE /categorias/{id}` |
-| Pedidos | `GET /pedidos/`, `POST /pedidos/`, `GET /pedidos/mesa/{id}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
+| Pedidos | `GET /pedidos/`, `POST /pedidos/` (acepta `participante_id` para asignar a un alias), `GET /pedidos/mesa/{id}`, `GET /pedidos/barra/{numero}`, `PUT /pedidos/{id}/items/{item_id}`, `PUT /pedidos/{id}/cerrar` |
 | Cuentas | `GET /cuentas/mesa/{id}`, `GET /cuentas/barra/{numero}`, `POST /cuentas/mesa/{id}/cerrar`, `POST /cuentas/barra/{numero}/cerrar`, `POST /cuentas/mesa/{id}/transferir`, `POST /cuentas/dividir`, `POST /cuentas/participante/{id}/pagar`, `POST /cuentas/division/{id}/pagar`, `GET /cuentas/mesa/{id}/divisiones` |
 | Caja | `GET /caja/turno-actual`, `POST /caja/abrir`, `POST /caja/cerrar`, `GET /caja/turnos`, `GET /caja/tickets?turno_id=<id>` (turno abierto o cerrado), `GET /caja/resumen?dias=N&offset_dias=M`, `GET /caja/ventas-por-dia`, `GET /caja/historial` |
 | Personalización | `GET /configuracion/` y `PUT /configuracion/` (nombre del negocio y logo data URL) |
@@ -307,14 +320,17 @@ yarn start
 2. Elige una mesa o una barra (por ejemplo, **Barra 1**) y pulsa **Pedido**.
 3. Agrega productos con el botón **"+"** o escribe una cantidad y pulsa
    **"Agregar"**. La lista muestra 8 productos visibles y permite desplazarse.
-4. Revisa el carrito y registra el pedido.
+4. Revisa el carrito y registra el pedido. Si la cuenta ya tiene alias activos,
+   elige el cliente o la **Cuenta General** en la ventana de asignación.
 
 ### Cobrar y cerrar una cuenta
 
 1. En **Mesas**, pulsa **Cuenta** sobre la mesa o barra.
-2. Desde allí puedes **Dividir cuenta**, **Transferir cuenta** o **Cerrar
-   cuenta**.
-3. Al cerrar, elige la forma de pago y si deseas **Liberar mesa/barra**.
+2. Desde allí puedes **Dividir cuenta**, **Cerrar división** de un alias,
+   **Transferir cuenta** o **Cerrar cuenta**. El resumen separa la cuenta
+   general de las divisiones pendientes.
+3. Al cerrar, elige la forma de pago y si deseas **Liberar mesa/barra**. Los
+   alias que ya pagaron conservan su pago y no se vuelven a cobrar.
 
 ### Generar un reporte
 
@@ -422,7 +438,7 @@ navegador, la PWA o el APK está ejecutando un **build anterior**. La versión
 nuevo no puede apuntar a ngrok.
 
 1. Abre https://inventario-pos-bfw.pages.dev y confirma al pie del login que
-   diga **Inventario POS v1.2.2**.
+   diga **Inventario POS v1.3.0**.
 2. Si aparece la versión vieja, cierra todas las pestañas, borra los datos del
    sitio (o desinstala la PWA) y vuelve a abrir la URL.
 3. En el PC, cierra cualquier `InventarioPOS.exe` viejo y usa el nuevo de
@@ -560,8 +576,10 @@ backend local. También puedes instalarla desde
    mensaje.
 3. **`start_dev.sh`:** unificar la ruta del entorno virtual (hoy crea/activa
    `venv` en la raíz pero espera `backend/venv`).
-4. **Pruebas automatizadas:** agregar pruebas de backend/frontend y validar la
-   migración de etiquetas históricas en una base antigua.
+4. **Pruebas automatizadas:** se agregaron 4 pruebas de integración de cuentas
+   divididas en `backend/tests/test_cuentas_asignacion.py`. Falta ampliar la
+   cobertura de frontend y validar la migración de etiquetas históricas en una
+   base antigua.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    reconstruir.
@@ -607,7 +625,8 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.1.0` | — | Mejoras de barras, ingreso de stock, cantidades manuales en pedidos, totales con formato y fechas en hora local |
 | `v1.2.0` | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
 | `v1.2.1` | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login. Incluye personalización visual del negocio y tickets internos desde Corte de caja |
-| `v1.2.2` (actual) | — | Estandariza la tipografía del modal de apertura, aplica máscara de miles sin decimales al Fondo Inicial de Caja y permite imprimir todos los tickets del turno con salto de página |
+| `v1.2.2` | — | Estandariza la tipografía del modal de apertura, aplica máscara de miles sin decimales al Fondo Inicial de Caja y permite imprimir todos los tickets del turno con salto de página |
+| `v1.3.0` (actual) | — | Asigna pedidos nuevos a alias de cuentas divididas o a la Cuenta General, registra los pagos de divisiones en caja e historial, separa totales pendientes y evita sobrescribir pagos ya realizados |
 
 ## Despliegue en la nube
 
