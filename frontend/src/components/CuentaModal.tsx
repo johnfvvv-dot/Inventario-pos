@@ -35,6 +35,9 @@ interface Division {
 interface Pedido {
   id: number;
   total: number;
+  estado: string;
+  participante_id?: number | null;
+  alias?: string | null;
   items: LineaItem[];
 }
 
@@ -43,6 +46,8 @@ interface Cuenta {
   mesa_numero: number;
   estado_mesa: string;
   total: number;
+  total_general: number;
+  total_divisiones: number;
   pedidos: Pedido[];
   divisiones: Division[];
 }
@@ -74,6 +79,8 @@ export default function CuentaModal({
 
   const esBarra = barraNumero != null;
   const etiqueta = esBarra ? "barra" : "mesa";
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+  const usuarioId: number = usuario?.id || 1;
 
   const cargar = async () => {
     try {
@@ -125,10 +132,12 @@ export default function CuentaModal({
 
   const pagarDivision = async (divisionId: number) => {
     setProcesando(true);
+    setError(null);
     try {
-      await api.pagarDivision(divisionId);
+      await api.pagarDivision(divisionId, formaPago, usuarioId);
       setMensaje("División cobrada.");
       await cargar();
+      onActualizado?.();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -139,8 +148,9 @@ export default function CuentaModal({
   /** Cierra solo la cuenta de un alias: ese cliente paga su parte */
   const cerrarAlias = async (participanteId: number, alias: string) => {
     setProcesando(true);
+    setError(null);
     try {
-      await api.pagarParticipante(participanteId, formaPago);
+      await api.pagarParticipante(participanteId, formaPago, usuarioId);
       setMensaje(`"${alias}" pagó su parte. La cuenta sigue abierta para los demás.`);
       await cargar();
       onActualizado?.();
@@ -172,14 +182,35 @@ export default function CuentaModal({
 
         {cuenta && (
           <>
-            <div className="cuenta-total">
-              <span>Total de la cuenta</span>
-              <strong>{formatearPrecio(cuenta.total)}</strong>
+            <div className="cuenta-resumen">
+              <div className="cuenta-resumen-item">
+                <span>Cuenta general</span>
+                <strong>{formatearPrecio(cuenta.total_general || 0)}</strong>
+              </div>
+              <div className="cuenta-resumen-item">
+                <span>Divisiones pendientes</span>
+                <strong>{formatearPrecio(cuenta.total_divisiones || 0)}</strong>
+              </div>
+              <div className="cuenta-total">
+                <span>Total pendiente</span>
+                <strong>{formatearPrecio(cuenta.total)}</strong>
+              </div>
             </div>
 
             <div className="cuenta-scroll">
               {cuenta.pedidos.length === 0 && cuenta.divisiones.length === 0 && (
                 <p className="empty-state">La cuenta está vacía.</p>
+              )}
+
+              {cuenta.pedidos.length > 0 && (
+                <div className="cuenta-grupo-titulo">
+                  <h4>
+                    Cuenta general de {esBarra ? "la barra" : "la mesa"}
+                  </h4>
+                  <span className="badge badge-warning">
+                    {cuenta.pedidos.length} pedido(s)
+                  </span>
+                </div>
               )}
 
               {cuenta.pedidos.map((pedido) => (
@@ -199,6 +230,15 @@ export default function CuentaModal({
                   </div>
                 </div>
               ))}
+
+              {cuenta.divisiones.length > 0 && (
+                <div className="cuenta-grupo-titulo">
+                  <h4>Divisiones de clientes</h4>
+                  <span className="muted small">
+                    Los alias pagados no admiten pedidos nuevos.
+                  </span>
+                </div>
+              )}
 
               {cuenta.divisiones.map((division) => (
                 <div key={`d-${division.id}`} className="cuenta-bloque">
@@ -278,6 +318,10 @@ export default function CuentaModal({
                 <p className="confirm-pregunta">
                   ¿Cerrar la cuenta de esta {etiqueta}? La {etiqueta} seguirá ocupada.
                 </p>
+                <p className="muted small">
+                  Se cobrarán la cuenta general y los clientes pendientes. Los
+                  alias que ya pagaron conservan su forma de pago y su fecha.
+                </p>
                 <div className="modal-actions">
                   <button
                     className="btn-secondary"
@@ -330,8 +374,10 @@ export default function CuentaModal({
             )}
             <p className="muted small">
               "Cerrar división" cobra la parte de un solo cliente y mantiene abierta la
-              cuenta de los demás. "Cerrar cuenta" cobra todo; "Aceptar" mantiene la{" "}
-              {etiqueta} ocupada y "Liberar {etiqueta}" la deja disponible.
+              cuenta de los demás. "Cerrar cuenta" cobra la cuenta general y las partes
+              pendientes; "Aceptar" mantiene la {etiqueta} ocupada y "Liberar{" "}
+              {etiqueta}" la deja disponible. Los nuevos pedidos se asignan al
+              confirmarlos desde la pantalla de pedido.
             </p>
           </>
         )}

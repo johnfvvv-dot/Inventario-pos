@@ -546,9 +546,15 @@ export const api = {
   getPedidosMesa: (mesaId: number) =>
     request(`/pedidos/mesa/${idPositivo(mesaId, "Mesa")}`),
 
+  /** Pedidos de todas las plazas de una barra. */
+  getPedidosBarra: (numeroBarra: number) =>
+    request(`/pedidos/barra/${idPositivo(numeroBarra, "Barra")}`),
+
   createPedido: (datos: {
     mesa_id: number;
     usuario_id: number;
+    /** null/ausente = cuenta general; id = alias de una división. */
+    participante_id?: number | null;
     items: { producto_id: number; cantidad: number }[];
   }) =>
     request("/pedidos/", {
@@ -583,21 +589,38 @@ export const api = {
   getDivisionesMesa: (mesaId: number) =>
     request(`/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/divisiones`),
 
-  pagarDivision: (divisionId: number, formaPago = "efectivo") =>
-    request(
-      `/cuentas/division/${idPositivo(divisionId, "División")}/pagar?forma_pago=${formaPago}`,
+  pagarDivision: (
+    divisionId: number,
+    formaPago = "efectivo",
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams({ forma_pago: formaPago });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/cuentas/division/${idPositivo(
+        divisionId,
+        "División"
+      )}/pagar?${params.toString()}`,
       { method: "POST" }
-    ),
+    );
+  },
 
   /** Cierra solo la cuenta de un alias (el cliente paga su parte) */
-  pagarParticipante: (participanteId: number, formaPago = "efectivo") =>
-    request(
+  pagarParticipante: (
+    participanteId: number,
+    formaPago = "efectivo",
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams({ forma_pago: formaPago });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
       `/cuentas/participante/${idPositivo(
         participanteId,
         "Cliente"
-      )}/pagar?forma_pago=${formaPago}`,
+      )}/pagar?${params.toString()}`,
       { method: "POST" }
-    ),
+    );
+  },
 
   // ---------- Corte de caja ----------
   getTurnoActual: () => request("/caja/turno-actual"),

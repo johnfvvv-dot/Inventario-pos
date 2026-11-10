@@ -59,6 +59,7 @@ export default function DivisionModal({
   const [destino, setDestino] = useState<string>("nuevo"); // "nuevo" o índice de participante
   const [seleccion, setSeleccion] = useState<Record<number, number>>({});
   const [totalCuenta, setTotalCuenta] = useState(0);
+  const [divisionesExistentes, setDivisionesExistentes] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
@@ -85,7 +86,17 @@ export default function DivisionModal({
           });
         });
         setLineas(todas);
-        setTotalCuenta(data.total || 0);
+        // Solo se reparte la cuenta general. Las divisiones existentes no se
+        // tocan y sus subtotales no deben inflar el total de esta ventana.
+        setTotalCuenta(
+          redondear(
+            (data.pedidos || []).reduce(
+              (s: number, p: any) => s + (p.total || 0),
+              0
+            )
+          )
+        );
+        setDivisionesExistentes((data.divisiones || []).length);
         setError(null);
       } catch (err: any) {
         setError(err.message);
@@ -303,6 +314,14 @@ export default function DivisionModal({
         {error && <p className="error-msg">{error}</p>}
         {mensaje && <p className="success-msg">{mensaje}</p>}
 
+        {divisionesExistentes > 0 && (
+          <div className="division-nota">
+            Esta cuenta ya tiene {divisionesExistentes} división(es) creada(s).
+            Aquí solo se reparte la cuenta general; los alias existentes no se
+            modifican.
+          </div>
+        )}
+
         {lineas.length === 0 ? (
           <p className="empty-state">
             No hay productos pendientes en {barraNumero ? "esta barra" : "esta mesa"}.
@@ -499,7 +518,7 @@ export default function DivisionModal({
 
             <div className="total-row">
               <span>
-                Total de la división: {formatearPrecio(totalAsignado)} · Resto:{" "}
+                Total asignado: {formatearPrecio(totalAsignado)} · Resto:{" "}
                 {formatearPrecio(resto)}
               </span>
               <strong>{formatearPrecio(totalCuenta)}</strong>

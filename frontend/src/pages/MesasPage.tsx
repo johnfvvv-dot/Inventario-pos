@@ -306,6 +306,11 @@ export default function MesasPage() {
                 {formatearPrecio(mesa.total_cuenta || 0)}
               </div>
             )}
+            {mesa.detalle_pendiente && (
+              <div className="muted small mesa-detalle">
+                {mesa.detalle_pendiente}
+              </div>
+            )}
 
             <div className="mesa-acciones">
               {mesa.estado === "disponible" && (

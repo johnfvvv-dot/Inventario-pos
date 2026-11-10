@@ -17,6 +17,7 @@ interface PedidoHistorial {
   mesa_numero: number | null;
   mesa_etiqueta: string | null;
   usuario_nombre: string;
+  alias?: string | null;
   productos: string[];
 }
 
@@ -160,11 +161,21 @@ export default function HistorialPage() {
 
       const filas: string[][] = [
         ["HISTORIAL DE VENTAS"],
-        ["Pedido", "Fecha", "Mesa / Barra", "Usuario", "Forma de pago", "Total", "Productos"],
+        [
+          "Pedido",
+          "Fecha",
+          "Mesa / Barra",
+          "Cliente",
+          "Usuario",
+          "Forma de pago",
+          "Total",
+          "Productos",
+        ],
         ...todos.map((p) => [
           String(p.id),
           formatearFechaHora(p.fecha),
           etiquetaOrigen(p),
+          p.alias || "Cuenta general",
           p.usuario_nombre,
           p.forma_pago,
           String(p.total),
@@ -287,6 +298,7 @@ export default function HistorialPage() {
               <th>#</th>
               <th>Fecha</th>
               <th>Mesa / Barra</th>
+              <th>Cliente</th>
               <th>Usuario</th>
               <th>Forma de pago</th>
               <th>Productos</th>
@@ -299,6 +311,13 @@ export default function HistorialPage() {
                 <td>{p.id}</td>
                 <td>{formatearFechaHora(p.fecha)}</td>
                 <td>{etiquetaOrigen(p)}</td>
+                <td>
+                  {p.alias ? (
+                    <span className="badge badge-warning">{p.alias}</span>
+                  ) : (
+                    <span className="muted small">Cuenta general</span>
+                  )}
+                </td>
                 <td>{p.usuario_nombre}</td>
                 <td>
                   <span className="badge badge-success">{p.forma_pago}</span>
@@ -311,7 +330,7 @@ export default function HistorialPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={7} className="empty-state">
+                <td colSpan={8} className="empty-state">
                   No hay ventas que coincidan con los filtros.
                 </td>
               </tr>
