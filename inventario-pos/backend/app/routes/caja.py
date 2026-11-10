@@ -614,6 +614,10 @@ def tickets_turno(
         )
         .filter(
             Pedido.estado == "cerrado",
+            or_(
+                Pedido.es_pago_division == 0,
+                Pedido.es_pago_division.is_(None),
+            ),
             Pedido.fecha_cierre.isnot(None),
             Pedido.fecha_cierre >= desde,
             Pedido.fecha_cierre <= hasta,
@@ -834,6 +838,7 @@ def historial_ventas(
             selectinload(Pedido.items).joinedload(PedidoItem.producto),
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
         )
         .order_by(Pedido.fecha_cierre.desc())
         .offset(offset)
@@ -874,6 +879,9 @@ def historial_ventas(
                 ),
                 "mesa_etiqueta": mesa_etiqueta,
                 "usuario_nombre": usuario.nombre if usuario else "",
+                "alias": pedido.participante.alias
+                if pedido.participante
+                else None,
                 "productos": productos_txt,
             }
         )

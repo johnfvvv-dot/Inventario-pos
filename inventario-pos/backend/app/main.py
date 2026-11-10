@@ -39,7 +39,7 @@ from app.schemas import CLAVE_INICIAL
 from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.2.2"
+VERSION = "1.3.0"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
@@ -171,6 +171,38 @@ def _migrar_columnas_faltantes() -> None:
             with engine.begin() as conexion:
                 conexion.execute(text(sql))
             print(f"[migracion] columna {tabla.name}.{columna.name} agregada")
+
+
+def _migrar_indices_cuentas() -> None:
+    """Crea los índices de las columnas nuevas de cuentas divididas.
+
+    ``_migrar_columnas_faltantes`` agrega las columnas, pero no sus índices.
+    Se usa ``IF NOT EXISTS`` para que la migración sea repetible en SQLite y
+    PostgreSQL.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    tablas = set(inspector.get_table_names())
+    indices = [
+        ("pedidos", "ix_pedidos_participante_id", "participante_id"),
+        ("pedidos", "ix_pedidos_es_pago_division", "es_pago_division"),
+        ("participante_items", "ix_participante_items_pedido_id", "pedido_id"),
+        ("participantes", "ix_participantes_pedido_pago_id", "pedido_pago_id"),
+    ]
+    for tabla, nombre, columna in indices:
+        if tabla not in tablas:
+            continue
+        columnas = {c["name"] for c in inspector.get_columns(tabla)}
+        if columna not in columnas:
+            continue
+        with engine.begin() as conexion:
+            conexion.execute(
+                text(
+                    f'CREATE INDEX IF NOT EXISTS {nombre} '
+                    f'ON {tabla} ("{columna}")'
+                )
+            )
 
 
 def _migrar_alias_usuarios() -> None:
@@ -387,6 +419,7 @@ def crear_datos_iniciales() -> None:
     """Crea tablas y siembra usuarios, productos y mesas de ejemplo."""
     Base.metadata.create_all(bind=engine)
     _migrar_columnas_faltantes()
+    _migrar_indices_cuentas()
     # Antes de completar fechas nulas: así las que se rellenen ya quedan locales.
     _migrar_fechas_a_hora_local()
     _migrar_alias_usuarios()

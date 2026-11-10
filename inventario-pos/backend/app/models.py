@@ -112,9 +112,19 @@ class Pedido(Base):
     # Copia de la ocupación de la mesa al crear el pedido. Se conserva aunque
     # la mesa se libere después, porque los tickets se generan al final.
     fecha_ocupacion = Column(DateTime, nullable=True)
+    # Alias de la división al que se asignó el pedido (NULL = cuenta general).
+    participante_id = Column(Integer, nullable=True, index=True)
+    # 1 = pedido financiero creado al cobrar la parte de un alias. Se excluye
+    # de la generación de tickets para no duplicar el ticket del cliente.
+    es_pago_division = Column(Integer, default=0, nullable=False, index=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")
+    participante = relationship(
+        "Participante",
+        primaryjoin="Pedido.participante_id == Participante.id",
+        foreign_keys=[participante_id],
+    )
     items = relationship(
         "PedidoItem", back_populates="pedido", cascade="all, delete-orphan"
     )
@@ -179,6 +189,9 @@ class Participante(Base):
     forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
     # Momento exacto en que este cliente pagó su parte (para los tickets).
     fecha_pago = Column(DateTime, nullable=True)
+    # Pedido financiero creado al cobrar esta parte. Entero simple (sin FK)
+    # para evitar una referencia circular entre pedidos y participantes.
+    pedido_pago_id = Column(Integer, nullable=True, index=True)
 
     division = relationship("Division", back_populates="participantes")
     items = relationship(
@@ -197,6 +210,9 @@ class ParticipanteItem(Base):
     cantidad = Column(Integer, nullable=False, default=1)
     precio_unitario = Column(Float, nullable=False)
     subtotal = Column(Float, nullable=False)
+    # Pedido que originó este ítem cuando se asignó después de dividir.
+    # NULL en los ítems creados durante la división inicial.
+    pedido_id = Column(Integer, nullable=True, index=True)
 
     participante = relationship("Participante", back_populates="items")
     producto = relationship("Producto")

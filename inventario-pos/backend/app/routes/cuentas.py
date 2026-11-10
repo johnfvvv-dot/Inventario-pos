@@ -1,6 +1,6 @@
 """Endpoints de la cuenta de una mesa: consulta, cierre y división entre clientes."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -69,6 +69,9 @@ def _pedido_out(pedido: Pedido) -> PedidoOut:
         fecha=pedido.fecha,
         total=pedido.total,
         estado=pedido.estado,
+        participante_id=pedido.participante_id,
+        alias=pedido.participante.alias if pedido.participante else None,
+        es_pago_division=bool(pedido.es_pago_division),
     )
 
 
@@ -108,14 +111,148 @@ def _cargar_divisiones(db: Session, mesa_id: int) -> List[Division]:
     return (
         db.query(Division)
         .options(
+            joinedload(Division.mesa),
             joinedload(Division.participantes).joinedload(Participante.items).joinedload(
                 ParticipanteItem.producto
-            )
+            ),
         )
         .filter(Division.mesa_id == mesa_id)
         .order_by(Division.id.desc())
         .all()
     )
+
+
+def _bloquear_cuenta(db: Session, mesa: Mesa) -> None:
+    """Bloquea las filas de la mesa o de todas las plazas de una barra."""
+    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
+        (
+            db.query(Mesa)
+            .filter(Mesa.grupo == mesa.grupo)
+            .order_by(Mesa.id)
+            .with_for_update()
+            .all()
+        )
+    else:
+        db.query(Mesa).filter(Mesa.id == mesa.id).with_for_update().first()
+
+
+def _recalcular_participante(db: Session, participante: Participante) -> float:
+    subtotal = (
+        db.query(func.coalesce(func.sum(ParticipanteItem.subtotal), 0.0))
+        .filter(ParticipanteItem.participante_id == participante.id)
+        .scalar()
+        or 0.0
+    )
+    participante.subtotal = round(float(subtotal), 2)
+    return participante.subtotal
+
+
+def _recalcular_division(db: Session, division: Division) -> float:
+    total = (
+        db.query(func.coalesce(func.sum(Participante.subtotal), 0.0))
+        .filter(Participante.division_id == division.id)
+        .scalar()
+        or 0.0
+    )
+    division.total = round(float(total), 2)
+    return division.total
+
+
+def _registrar_pago_participante(
+    db: Session,
+    participante: Participante,
+    forma_pago: str,
+    ahora,
+    usuario_id: Optional[int] = None,
+) -> None:
+    """Marca pagado un alias y crea el pedido financiero de su consumo.
+
+    El pedido ``es_pago_division=1`` es la única fuente para caja, ganancia,
+    historial y reportes. La generación de tickets lo excluye y mantiene el
+    ticket del alias desde ``ParticipanteItem``.
+    """
+    if participante.pagado:
+        return
+
+    _recalcular_participante(db, participante)
+
+    # Si ya existe un pedido de pago (por un reintento), no se duplica.
+    if participante.pedido_pago_id:
+        participante.pagado = 1
+        participante.forma_pago = forma_pago
+        participante.fecha_pago = participante.fecha_pago or ahora
+        return
+
+    division = participante.division
+    if division is None:
+        division = db.query(Division).filter(
+            Division.id == participante.division_id
+        ).first()
+    mesa = division.mesa if division else None
+    if division and mesa is None:
+        mesa = db.query(Mesa).filter(Mesa.id == division.mesa_id).first()
+
+    items = (
+        db.query(ParticipanteItem)
+        .filter(ParticipanteItem.participante_id == participante.id)
+        .order_by(ParticipanteItem.id)
+        .all()
+    )
+    if items and division:
+        pedido_pago = Pedido(
+            mesa_id=division.mesa_id,
+            usuario_id=usuario_id or division.usuario_id,
+            estado="cerrado",
+            total=participante.subtotal,
+            forma_pago=forma_pago,
+            fecha_cierre=ahora,
+            fecha_ocupacion=(
+                division.fecha_ocupacion or division.fecha or ahora
+            ),
+            participante_id=participante.id,
+            es_pago_division=1,
+        )
+        if mesa is not None:
+            pedido_pago.guardar_origen(mesa)
+        db.add(pedido_pago)
+        db.flush()
+
+        for item in items:
+            db.add(
+                PedidoItem(
+                    pedido_id=pedido_pago.id,
+                    producto_id=item.producto_id,
+                    cantidad=item.cantidad,
+                    precio_unitario=item.precio_unitario,
+                    subtotal=item.subtotal,
+                )
+            )
+        participante.pedido_pago_id = pedido_pago.id
+
+    participante.pagado = 1
+    participante.forma_pago = forma_pago
+    participante.fecha_pago = ahora
+
+
+def _liberar_mesa_si_corresponde(db: Session, mesa_id: int) -> None:
+    """Libera una mesa/plaza cuando ya no tiene nada pendiente de cobro."""
+    mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
+    if not mesa:
+        return
+    db.flush()
+    pedidos_abiertos = (
+        db.query(Pedido)
+        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
+        .count()
+    )
+    divisiones_pendientes = (
+        db.query(Division)
+        .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
+        .count()
+    )
+    if pedidos_abiertos == 0 and divisiones_pendientes == 0:
+        mesa.estado = "disponible"
+        mesa.fecha_ocupacion = None
 
 
 @router.get("/mesa/{mesa_id}", response_model=CuentaMesaOut)
@@ -130,6 +267,7 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
         .options(
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
         .filter(Pedido.mesa_id == mesa_id, Pedido.estado == "abierto")
@@ -141,20 +279,23 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
 
     # La cuenta solo suma lo que falta por cobrar:
     # pedidos abiertos + partes de alias que aún no pagaron
-    total = round(
-        sum(p.total for p in pedidos)
-        + sum(
+    total_general = round(sum(p.total for p in pedidos), 2)
+    total_divisiones = round(
+        sum(
             round(sum(p.subtotal for p in d.participantes if not p.pagado), 2)
             for d in divisiones
         ),
         2,
     )
+    total = round(total_general + total_divisiones, 2)
 
     return CuentaMesaOut(
         mesa_id=mesa.id,
         mesa_numero=mesa.numero,
         estado_mesa=mesa.estado,
         total=total,
+        total_general=total_general,
+        total_divisiones=total_divisiones,
         pedidos=[_pedido_out(p) for p in pedidos],
         divisiones=[
             DivisionResumen(
@@ -209,6 +350,7 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
         .options(
             joinedload(Pedido.mesa),
             joinedload(Pedido.usuario),
+            joinedload(Pedido.participante),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
         .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
@@ -224,17 +366,23 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
             d for d in _cargar_divisiones(db, mesa.id) if d.estado == "pendiente"
         ]
 
-    total = round(
-        sum(p.total for p in pedidos)
-        + sum(round(sum(pp.subtotal for pp in d.participantes if not pp.pagado), 2) for d in divisiones),
+    total_general = round(sum(p.total for p in pedidos), 2)
+    total_divisiones = round(
+        sum(
+            round(sum(pp.subtotal for pp in d.participantes if not pp.pagado), 2)
+            for d in divisiones
+        ),
         2,
     )
+    total = round(total_general + total_divisiones, 2)
 
     return CuentaMesaOut(
         mesa_id=mesas[0].id,
         mesa_numero=numero_barra,
         estado_mesa=("ocupada" if any(m.estado == "ocupada" for m in mesas) else "disponible"),
         total=total,
+        total_general=total_general,
+        total_divisiones=total_divisiones,
         pedidos=[_pedido_out(p) for p in pedidos],
         divisiones=[
             DivisionResumen(
@@ -286,11 +434,23 @@ def cerrar_cuenta(
     Por defecto la mesa permanece OCUPADA (se puede abrir una nueva cuenta).
     Con liberar_mesa=True la mesa queda DISPONIBLE al terminar.
     """
+    exigir_turno_abierto(db)
+
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
-    # Cerrar pedidos abiertos
+    _bloquear_cuenta(db, mesa)
+
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ahora = ahora_local()
+
+    # Cerrar pedidos abiertos (la cuenta general)
     pedidos = (
         db.query(Pedido)
         .options(
@@ -301,13 +461,6 @@ def cerrar_cuenta(
         .filter(Pedido.mesa_id == mesa_id, Pedido.estado == "abierto")
         .all()
     )
-    if forma_pago not in FORMAS_PAGO:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
-        )
-
-    ahora = ahora_local()
     for pedido in pedidos:
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
@@ -316,18 +469,23 @@ def cerrar_cuenta(
             pedido.fecha_ocupacion = mesa.fecha_ocupacion or pedido.fecha or ahora
         pedido.guardar_origen(mesa)
 
-    # Marcar como pagadas las divisiones pendientes
+    # Cobrar solo las partes impagas. Los alias que ya pagaron conservan su
+    # forma de pago y su fecha original.
     divisiones = _cargar_divisiones(db, mesa_id)
     for division in divisiones:
-        if division.estado == "pendiente":
+        if division.estado != "pendiente":
+            continue
+        if not division.fecha_ocupacion:
+            division.fecha_ocupacion = mesa.fecha_ocupacion or division.fecha or ahora
+        for participante in division.participantes:
+            _registrar_pago_participante(
+                db, participante, forma_pago, ahora, division.usuario_id
+            )
+        db.flush()
+        _recalcular_division(db, division)
+        if division.participantes and all(p.pagado for p in division.participantes):
             division.estado = "pagada"
-            division.forma_pago = forma_pago
-            if not division.fecha_ocupacion:
-                division.fecha_ocupacion = mesa.fecha_ocupacion or division.fecha or ahora
-            for participante in division.participantes:
-                participante.pagado = 1
-                participante.forma_pago = forma_pago
-                participante.fecha_pago = ahora
+            division.forma_pago = division.forma_pago or forma_pago
 
     # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
     mesa.estado = "disponible" if liberar_mesa else "ocupada"
@@ -351,9 +509,15 @@ def cerrar_cuenta_barra(
     Por defecto la barra permanece OCUPADA (se puede abrir una nueva cuenta).
     Con liberar_barra=True todas sus plazas quedan DISPONIBLES al terminar.
     """
+    exigir_turno_abierto(db)
+
     grupo = f"Barra {numero_barra}"
     mesas = (
-        db.query(Mesa).filter(Mesa.grupo == grupo).order_by(Mesa.posicion).all()
+        db.query(Mesa)
+        .filter(Mesa.grupo == grupo)
+        .order_by(Mesa.id)
+        .with_for_update()
+        .all()
     )
     if not mesas:
         raise HTTPException(status_code=404, detail="Barra no encontrada")
@@ -384,20 +548,25 @@ def cerrar_cuenta_barra(
                 pedido.fecha_ocupacion = plaza.fecha_ocupacion or pedido.fecha or ahora
             pedido.guardar_origen(plaza)
 
-    # Marcar como pagadas las divisiones pendientes de cada plaza
+    # Cobrar solo las partes impagas de cada plaza. Los alias que ya pagaron
+    # conservan su forma de pago y su fecha original.
     for mesa in mesas:
         for division in _cargar_divisiones(db, mesa.id):
-            if division.estado == "pendiente":
+            if division.estado != "pendiente":
+                continue
+            if not division.fecha_ocupacion:
+                division.fecha_ocupacion = (
+                    mesa.fecha_ocupacion or division.fecha or ahora
+                )
+            for participante in division.participantes:
+                _registrar_pago_participante(
+                    db, participante, forma_pago, ahora, division.usuario_id
+                )
+            db.flush()
+            _recalcular_division(db, division)
+            if division.participantes and all(p.pagado for p in division.participantes):
                 division.estado = "pagada"
-                division.forma_pago = forma_pago
-                if not division.fecha_ocupacion:
-                    division.fecha_ocupacion = (
-                        mesa.fecha_ocupacion or division.fecha or ahora
-                    )
-                for participante in division.participantes:
-                    participante.pagado = 1
-                    participante.forma_pago = forma_pago
-                    participante.fecha_pago = ahora
+                division.forma_pago = division.forma_pago or forma_pago
 
         mesa.estado = "disponible" if liberar_barra else "ocupada"
         if liberar_barra:
@@ -429,6 +598,8 @@ def transferir_cuenta(
             detail="El destino debe ser otra mesa o una plaza de barra distinta",
         )
 
+    _bloquear_cuenta(db, origen)
+    _bloquear_cuenta(db, destino)
     db.flush()
 
     # El destino no debe tener ya una cuenta abierta. En una barra se valida
@@ -465,7 +636,7 @@ def transferir_cuenta(
             detail=detalle_ocupado,
         )
 
-    # Mover pedidos abiertos
+    # Mover pedidos abiertos (cuenta general)
     pedidos = (
         db.query(Pedido)
         .options(joinedload(Pedido.items))
@@ -478,15 +649,36 @@ def transferir_cuenta(
         pedido.guardar_origen(destino)
         total += pedido.total or 0.0
 
-    # Mover divisiones pendientes
+    # Mover divisiones pendientes y los pedidos asignados a sus alias.
+    # Los pedidos financieros (es_pago_division=1) son históricos y no se mueven.
     divisiones = _cargar_divisiones(db, origen.id)
+    ids_participantes = []
     for division in divisiones:
-        if division.estado == "pendiente":
-            division.mesa_id = destino.id
-            total += division.total or 0.0
+        if division.estado != "pendiente":
+            continue
+        division.mesa_id = destino.id
+        ids_participantes.extend(p.id for p in division.participantes)
+        total += round(
+            sum(p.subtotal for p in division.participantes if not p.pagado), 2
+        )
+
+    if ids_participantes:
+        asignados = (
+            db.query(Pedido)
+            .filter(
+                Pedido.participante_id.in_(ids_participantes),
+                Pedido.estado == "dividido",
+                Pedido.es_pago_division == 0,
+            )
+            .all()
+        )
+        for pedido in asignados:
+            pedido.mesa_id = destino.id
+            pedido.guardar_origen(destino)
 
     # Estados de las mesas
     origen.estado = "disponible"
+    origen.fecha_ocupacion = None
     destino.estado = "ocupada"
 
     db.commit()
@@ -518,7 +710,8 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
         mesas = (
             db.query(Mesa)
             .filter(Mesa.grupo == grupo)
-            .order_by(Mesa.posicion)
+            .order_by(Mesa.id)
+            .with_for_update()
             .all()
         )
         if not mesas:
@@ -530,7 +723,12 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
                 status_code=400,
                 detail="Indicá la mesa o la barra que se va a dividir",
             )
-        mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
+        mesa = (
+            db.query(Mesa)
+            .filter(Mesa.id == datos.mesa_id)
+            .with_for_update()
+            .first()
+        )
         if not mesa:
             raise HTTPException(status_code=404, detail="Mesa no encontrada")
         mesas = [mesa]
@@ -715,6 +913,7 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
 def pagar_participante(
     participante_id: int,
     forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Cierra la división de UN alias (el cliente paga su parte).
@@ -722,11 +921,13 @@ def pagar_participante(
     La cuenta general de la mesa sigue abierta para los demás clientes.
     La mesa se libera solo cuando todos pagaron y no quedan pedidos abiertos.
     """
+    exigir_turno_abierto(db)
+
     participante = (
         db.query(Participante)
         .options(
             joinedload(Participante.items).joinedload(ParticipanteItem.producto),
-            joinedload(Participante.division),
+            joinedload(Participante.division).joinedload(Division.mesa),
         )
         .filter(Participante.id == participante_id)
         .first()
@@ -740,40 +941,34 @@ def pagar_participante(
             detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
         )
 
-    if not participante.pagado:
-        participante.pagado = 1
-        participante.forma_pago = forma_pago
-        participante.fecha_pago = ahora_local()
-        participante.division.forma_pago = forma_pago
-
     division = participante.division
+    if not division:
+        raise HTTPException(
+            status_code=409, detail="El cliente no pertenece a una división activa."
+        )
+    mesa = division.mesa
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Mesa de la división no encontrada")
+
+    _bloquear_cuenta(db, mesa)
+    db.refresh(participante)
+    division = db.query(Division).filter(Division.id == division.id).first()
+
+    ahora = ahora_local()
+    _registrar_pago_participante(
+        db, participante, forma_pago, ahora, usuario_id or division.usuario_id
+    )
+    db.flush()
+    _recalcular_division(db, division)
+
     todos = (
         db.query(Participante).filter(Participante.division_id == division.id).all()
     )
     if todos and all(p.pagado for p in todos):
         division.estado = "pagada"
+        division.forma_pago = division.forma_pago or forma_pago
 
-    # La mesa se libera cuando ya no queda nada por cobrar
-    mesa = db.query(Mesa).filter(Mesa.id == division.mesa_id).first()
-    if mesa:
-        # Importante: volcar los cambios en memoria para que los COUNT
-        # reflejen el estado real (la sesion usa autoflush=False)
-        db.flush()
-
-        pedidos_abiertos = (
-            db.query(Pedido)
-            .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
-            .count()
-        )
-        divisiones_pendientes = (
-            db.query(Division)
-            .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
-            .count()
-        )
-        if pedidos_abiertos == 0 and divisiones_pendientes == 0:
-            mesa.estado = "disponible"
-            mesa.fecha_ocupacion = None
-
+    _liberar_mesa_si_corresponde(db, mesa.id)
     db.commit()
 
     participante = (
@@ -789,15 +984,19 @@ def pagar_participante(
 def pagar_division(
     division_id: int,
     forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Marca como pagados TODOS los clientes de una división."""
+    exigir_turno_abierto(db)
+
     division = (
         db.query(Division)
         .options(
             joinedload(Division.participantes).joinedload(Participante.items).joinedload(
                 ParticipanteItem.producto
-            )
+            ),
+            joinedload(Division.mesa),
         )
         .filter(Division.id == division_id)
         .first()
@@ -811,18 +1010,41 @@ def pagar_division(
             detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
         )
 
+    mesa = division.mesa
+    if mesa:
+        _bloquear_cuenta(db, mesa)
+        db.refresh(division)
+
     ahora = ahora_local()
     for participante in division.participantes:
-        if not participante.pagado:
-            participante.pagado = 1
-            participante.forma_pago = forma_pago
-            participante.fecha_pago = ahora
+        _registrar_pago_participante(
+            db,
+            participante,
+            forma_pago,
+            ahora,
+            usuario_id or division.usuario_id,
+        )
 
-    if all(p.pagado for p in division.participantes):
+    db.flush()
+    _recalcular_division(db, division)
+    if division.participantes and all(p.pagado for p in division.participantes):
         division.estado = "pagada"
-        division.forma_pago = forma_pago
+        division.forma_pago = division.forma_pago or forma_pago
+
+    if mesa:
+        _liberar_mesa_si_corresponde(db, mesa.id)
 
     db.commit()
+    division = (
+        db.query(Division)
+        .options(
+            joinedload(Division.participantes).joinedload(Participante.items).joinedload(
+                ParticipanteItem.producto
+            )
+        )
+        .filter(Division.id == division_id)
+        .first()
+    )
     return _division_out(division)
 
 
