@@ -13,6 +13,7 @@ interface Usuario {
   rol: string;
   activo: boolean;
   ingreso_stock: boolean;
+  editar_cantidades: boolean;
   creado_en: string;
 }
 
@@ -94,6 +95,24 @@ export default function UsuariosPage() {
       setMensaje(
         `Ingreso de stock de "${u.alias}" ${
           u.ingreso_stock ? "deshabilitado" : "habilitado"
+        }`
+      );
+      await cargar();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  /** Habilita o deshabilita la edición de pedidos en pedidos y alias. */
+  const alternarEditarCantidades = async (u: Usuario) => {
+    if (u.rol !== "bartender") return;
+    try {
+      await api.updateUsuario(u.id, {
+        editar_cantidades: !u.editar_cantidades,
+      });
+      setMensaje(
+        `Edición de pedidos de "${u.alias}" ${
+          u.editar_cantidades ? "deshabilitada" : "habilitada"
         }`
       );
       await cargar();
@@ -197,9 +216,10 @@ export default function UsuariosPage() {
       <section className="panel">
         <h3>Usuarios registrados</h3>
         <p className="muted small">
-          El ingreso de stock está desactivado por defecto para los Bartenders.
-          Habilitalo por usuario cuando necesiten cargar mercadería; el cambio
-          se refleja en su inventario sin recargar la página.
+          El ingreso de stock y la edición de pedidos están desactivados por
+          defecto para los Bartenders. Habilitalos por usuario cuando los
+          necesiten; el cambio se refleja en su sesión sin recargar la página.
+          El Administrador siempre puede editar pedidos.
         </p>
         <div className="table-wrap">
           <table>
@@ -209,6 +229,7 @@ export default function UsuariosPage() {
                 <th>Nombre</th>
                 <th>Rol</th>
                 <th>Ingreso de Stock</th>
+                <th>Edición de pedidos</th>
                 <th>Estado</th>
                 <th>Creado</th>
                 <th>Acciones</th>
@@ -267,6 +288,41 @@ export default function UsuariosPage() {
                     )}
                   </td>
                   <td>
+                    {u.rol === "bartender" ? (
+                      <button
+                        type="button"
+                        className={`permiso-stock${
+                          u.editar_cantidades ? " activo" : ""
+                        }`}
+                        role="switch"
+                        aria-checked={u.editar_cantidades}
+                        aria-label={`Edición de pedidos para ${u.alias}`}
+                        title={
+                          u.editar_cantidades
+                            ? "Deshabilitar la edición de pedidos"
+                            : "Habilitar la edición de pedidos"
+                        }
+                        onClick={() => alternarEditarCantidades(u)}
+                      >
+                        <span
+                          className={`toggle${
+                            u.editar_cantidades ? " activo" : ""
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <span className="toggle-bola" />
+                        </span>
+                        <span>
+                          {u.editar_cantidades ? "Habilitado" : "Solo lectura"}
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="badge badge-success">
+                        Siempre activo
+                      </span>
+                    )}
+                  </td>
+                  <td>
                     <span
                       className={u.activo ? "badge badge-success" : "badge badge-danger"}
                     >
@@ -301,7 +357,7 @@ export default function UsuariosPage() {
               ))}
               {usuarios.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty-state">
+                  <td colSpan={8} className="empty-state">
                     No hay usuarios registrados.
                   </td>
                 </tr>
@@ -345,6 +401,7 @@ export default function UsuariosPage() {
               <li>Acceso completo a todos los módulos</li>
               <li>Inventario: crear, editar y eliminar</li>
               <li>Mesas, Pedidos y Cuentas</li>
+              <li>Edición de pedidos y alias siempre habilitada</li>
               <li>Reportes e Historial de ventas</li>
               <li>Corte de caja</li>
               <li>Creación y gestión de usuarios</li>
@@ -357,6 +414,10 @@ export default function UsuariosPage() {
               <li>
                 Inventario en modo lectura; el Administrador puede habilitarle
                 el ingreso de stock desde esta pantalla
+              </li>
+              <li>
+                Edición de pedidos en modo lectura; el Administrador puede
+                habilitarlo por usuario
               </li>
               <li>Corte de caja</li>
               <li>Sin acceso a Reportes, Historial ni Usuarios</li>

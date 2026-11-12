@@ -1,6 +1,6 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.3.0
+**Versión actual:** 1.4.0
 
 **Última actualización:** 10/11/2026
 
@@ -52,7 +52,7 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `https://inventario-pos-bfw.pages.dev/admin/usuarios`. El frontend siempre se
   sirve desde Cloudflare Pages; al iniciar sesión prueba en paralelo
   `localhost:8000`, `127.0.0.1:8000` y la IP LAN compilada, y si ninguna
-  responde usa Render. El login solo muestra `Inventario POS v1.3.0`; no hay
+  responde usa Render. El login solo muestra `Inventario POS v1.4.0`; no hay
   botón de conexión ni estado del servidor. El fallback seguro solo reintenta
   `GET`, `HEAD` y login.
 - **1.2.2 (05/11/2026):** tipografía uniforme en el modal de apertura, máscara de miles sin decimales para el Fondo Inicial de Caja e impresión de todos los tickets del turno con salto de página.
@@ -60,6 +60,12 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   Cuenta General; pago de divisiones materializado como pedido cerrado para
   caja, ganancia e historial; totales separados de cuenta general y divisiones;
   tickets sin duplicados y bloqueo de alias ya pagados.
+- **1.4.0 (10/11/2026):** tarjetas de mesa/barra sin textos de pendientes;
+  panel de Pedidos con Cuenta General y todas las divisiones/ítems; edición de
+  cantidades con permiso `editar_cantidades`; creación de alias desde el panel
+  y el modal de asignación; cierre independiente de Cuenta General o de cada
+  alias con modal de pago; auditoría en `pedidos.usuario_cierre_id` y columna
+  "Cobrado por" en Historial.
 - **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
   `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
   solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
@@ -175,16 +181,40 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - División de cuenta por alias, cobro individual, transferencia entre mesas y
   plazas de barra, cierre con o sin liberación y corte de caja por turno.
 - **Pagos de divisiones (1.3.0):** al cobrar un alias,
-  `_registrar_pago_participante()` crea un `Pedido` cerrado con
+  `registrar_pago_participante()` crea un `Pedido` cerrado con
   `es_pago_division = 1`, `participante_id` y la forma de pago. Ese pedido es la
   fuente para el corte de caja, la ganancia y el historial. El ticket del alias
   sigue saliendo de `participante_items`, y la generación de tickets excluye el
   pedido financiero para no duplicarlo.
+- **Cierres independientes (1.4.0):** `POST /api/cuentas/mesa/{id}/cerrar-general`
+  y `POST /api/cuentas/barra/{n}/cerrar-general` cobran solo los pedidos
+  generales (`participante_id IS NULL`). Si quedan divisiones pendientes, la
+  mesa/barra sigue ocupada. `POST /api/cuentas/participante/{id}/pagar` cobra
+  solo el alias seleccionado y registra el pago con forma de pago, fecha/hora y
+  `usuario_cierre_id`. El cierre completo sigue disponible como "Cobrar cuenta
+  total" (con opción de liberar la mesa o barra).
+- **Edición de pedidos (1.4.0):** `PUT /api/pedidos/{id}/items/{item_id}` y
+  `PUT /api/cuentas/participante-item/{item_id}` ajustan la línea; cantidad `0`
+  la elimina y devuelve el stock. El Administrador siempre puede; el Bartender
+  requiere `usuarios.editar_cantidades = 1`. Sin permiso el backend responde
+  `403` y el frontend muestra solo lectura.
+- **Creación de alias (1.4.0):** se crea desde **Pedido actual** enviando
+  `nuevo_alias` en `POST /api/pedidos/`, que reutiliza
+  `obtener_o_crear_division_pendiente()` y `crear_participante()` y asigna el
+  pedido al alias en la misma transacción. El alias se agrega a la división
+  pendiente más reciente de la cuenta o se crea una nueva. `POST
+  /api/cuentas/alias` queda como soporte interno, sin botón en la interfaz.
+- **Auditoría (1.4.0):** `pedidos.usuario_cierre_id` guarda el usuario que
+  cobró (sin ForeignKey para evitar relaciones ambiguas con `Usuario.pedidos`).
+  El Historial muestra `usuario_cierre_nombre` en la columna "Cobrado por".
+- **Tarjetas de mesa/barra (1.4.0):** `MesaListadoOut.detalle_pendiente` queda
+  vacío; ya no se muestran "N pedidos abiertos" ni "N clientes pendientes". Se
+  conservan estado, `total_cuenta` y botones.
 - Un pago ya realizado no se sobrescribe al cerrar la cuenta: se conservan su
   forma de pago y su fecha. Los alias pendientes se cobran con la forma elegida.
 - `CuentaMesaOut` incluye `total_general` y `total_divisiones`; el total
   pendiente es la suma de pedidos abiertos más partes impagas. Las tarjetas de
-  mesa/barra usan la misma regla y muestran los clientes pendientes.
+  mesa/barra usan la misma regla y muestran solo el valor pendiente.
 - Transferencia: además de los pedidos generales y las divisiones pendientes, se
   mueven los pedidos `dividido` asignados a sus alias; los pedidos financieros
   cerrados no se mueven.
@@ -218,7 +248,7 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `/admin/personalizacion`. Cambia el nombre visible de la cabecera y agrega un
   logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP). El nombre oficial del
   sistema sigue siendo **Inventario POS** y el login conserva
-  `Inventario POS v1.3.0`.
+  `Inventario POS v1.4.0`.
 - Los valores se guardan en la tabla `configuracion_negocio` (fila única
   `id=1`). La cabecera del Administrador y la del Bartender los leen mediante
   `useConfiguracionNegocio`, con copia en `localStorage` y evento
@@ -301,9 +331,10 @@ también empaquetarse como ejecutable de Windows o APK de Android.
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
-   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.3.0
-   agrega la asignación de pedidos a alias, el registro de pagos de divisiones y
-   los totales separados. Queda
+   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.4.0
+   agrega el panel completo de Cuenta General/divisiones, la edición de
+   cantidades con permiso, la creación de alias y los cierres independientes con
+   auditoría. Queda
    opcional eliminar el servicio Render antiguo `Inventario-pos` cuando se
    confirme el nuevo. No se envía ping a Render: la operación interna usa el
    `.exe`.

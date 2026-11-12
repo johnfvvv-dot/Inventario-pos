@@ -378,6 +378,7 @@ export const api = {
       rol?: string;
       activo?: boolean;
       ingreso_stock?: boolean;
+      editar_cantidades?: boolean;
     }
   ) =>
     request(`/usuarios/${usuarioId}`, {
@@ -437,22 +438,109 @@ export const api = {
     request(`/cuentas/barra/${idPositivo(numeroBarra, "Barra")}`),
 
   /** Cierra la cuenta; con liberarMesa=true la mesa queda disponible */
-  cerrarCuentaMesa: (mesaId: number, liberarMesa = false, formaPago = "efectivo") =>
-    request(
-      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar?liberar_mesa=${liberarMesa}&forma_pago=${formaPago}`,
+  cerrarCuentaMesa: (
+    mesaId: number,
+    liberarMesa = false,
+    formaPago = "efectivo",
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams({
+      liberar_mesa: String(liberarMesa),
+      forma_pago: formaPago,
+    });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar?${params.toString()}`,
       { method: "POST" }
-    ),
+    );
+  },
 
   /** Cierra la cuenta agregada de una barra; con liberarBarra=true queda disponible */
   cerrarCuentaBarra: (
     numeroBarra: number,
     liberarBarra = false,
-    formaPago = "efectivo"
-  ) =>
-    request(
-      `/cuentas/barra/${idPositivo(numeroBarra, "Barra")}/cerrar?liberar_barra=${liberarBarra}&forma_pago=${formaPago}`,
+    formaPago = "efectivo",
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams({
+      liberar_barra: String(liberarBarra),
+      forma_pago: formaPago,
+    });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/cuentas/barra/${idPositivo(numeroBarra, "Barra")}/cerrar?${params.toString()}`,
       { method: "POST" }
-    ),
+    );
+  },
+
+  /** Cobra solo la Cuenta General de una mesa, sin tocar las divisiones. */
+  cerrarGeneralMesa: (
+    mesaId: number,
+    formaPago = "efectivo",
+    usuarioId?: number,
+    liberarMesa = true
+  ) => {
+    const params = new URLSearchParams({
+      forma_pago: formaPago,
+      liberar_mesa: String(liberarMesa),
+    });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar-general?${params.toString()}`,
+      { method: "POST" }
+    );
+  },
+
+  /** Cobra solo la Cuenta General agregada de una barra. */
+  cerrarGeneralBarra: (
+    numeroBarra: number,
+    formaPago = "efectivo",
+    usuarioId?: number,
+    liberarBarra = true
+  ) => {
+    const params = new URLSearchParams({
+      forma_pago: formaPago,
+      liberar_barra: String(liberarBarra),
+    });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/cuentas/barra/${idPositivo(numeroBarra, "Barra")}/cerrar-general?${params.toString()}`,
+      { method: "POST" }
+    );
+  },
+
+  /** Crea un alias/cliente en la cuenta abierta (sin pedidos todavía). */
+  crearAlias: (datos: {
+    mesa_id?: number;
+    barra_numero?: number;
+    usuario_id: number;
+    alias: string;
+  }) =>
+    request("/cuentas/alias", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  /** Ajusta la cantidad de una línea de la cuenta de un alias (0 = eliminar). */
+  ajustarLineaAlias: (
+    participanteItemId: number,
+    cantidad: number,
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams();
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    const query = params.toString();
+    return request(
+      `/cuentas/participante-item/${idPositivo(
+        participanteItemId,
+        "Línea del cliente"
+      )}${query ? `?${query}` : ""}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ cantidad }),
+      }
+    );
+  },
 
   /** Transfiere la cuenta abierta a otra mesa */
   transferirCuenta: (mesaId: number, destinoId: number) =>
@@ -555,6 +643,8 @@ export const api = {
     usuario_id: number;
     /** null/ausente = cuenta general; id = alias de una división. */
     participante_id?: number | null;
+    /** Si se envía, crea el alias y le asigna todo el pedido. */
+    nuevo_alias?: string;
     items: { producto_id: number; cantidad: number }[];
   }) =>
     request("/pedidos/", {
@@ -563,16 +653,35 @@ export const api = {
     }),
 
   /** Ajusta la cantidad de una línea de un pedido abierto (0 = eliminar) */
-  ajustarItemPedido: (pedidoId: number, itemId: number, cantidad: number) =>
-    request(`/pedidos/${pedidoId}/items/${itemId}`, {
-      method: "PUT",
-      body: JSON.stringify({ cantidad }),
-    }),
+  ajustarItemPedido: (
+    pedidoId: number,
+    itemId: number,
+    cantidad: number,
+    usuarioId?: number
+  ) => {
+    const params = new URLSearchParams();
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    const query = params.toString();
+    return request(
+      `/pedidos/${idPositivo(pedidoId, "Pedido")}/items/${idPositivo(
+        itemId,
+        "Línea"
+      )}${query ? `?${query}` : ""}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ cantidad }),
+      }
+    );
+  },
 
-  closePedido: (pedidoId: number, formaPago = "efectivo") =>
-    request(`/pedidos/${pedidoId}/cerrar?forma_pago=${formaPago}`, {
-      method: "PUT",
-    }),
+  closePedido: (pedidoId: number, formaPago = "efectivo", usuarioId?: number) => {
+    const params = new URLSearchParams({ forma_pago: formaPago });
+    if (usuarioId) params.append("usuario_id", String(usuarioId));
+    return request(
+      `/pedidos/${idPositivo(pedidoId, "Pedido")}/cerrar?${params.toString()}`,
+      { method: "PUT" }
+    );
+  },
 
   // ---------- División de cuenta ----------
   dividirCuenta: (datos: {

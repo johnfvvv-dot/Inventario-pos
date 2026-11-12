@@ -32,6 +32,9 @@ class Usuario(Base):
     # Permiso para ingresar stock (solo aplica a bartenders; el admin siempre
     # tiene la columna activa). Lo habilita el administrador desde Usuarios.
     ingreso_stock = Column(Integer, default=0)
+    # Permiso para ajustar cantidades de pedidos (solo aplica a bartenders;
+    # el admin siempre puede). Apagado por defecto.
+    editar_cantidades = Column(Integer, nullable=False, default=0)
     creado_en = Column(DateTime, default=ahora_local)
 
     pedidos = relationship("Pedido", back_populates="usuario")
@@ -117,6 +120,9 @@ class Pedido(Base):
     # 1 = pedido financiero creado al cobrar la parte de un alias. Se excluye
     # de la generación de tickets para no duplicar el ticket del cliente.
     es_pago_division = Column(Integer, default=0, nullable=False, index=True)
+    # Usuario que cobró/cerró el pedido. Se guarda sin ForeignKey (igual que
+    # participante_id) para no crear una segunda relación ambigua con Usuario.
+    usuario_cierre_id = Column(Integer, nullable=True, index=True)
 
     mesa = relationship("Mesa", back_populates="pedidos")
     usuario = relationship("Usuario", back_populates="pedidos")
@@ -213,6 +219,9 @@ class ParticipanteItem(Base):
     # Pedido que originó este ítem cuando se asignó después de dividir.
     # NULL en los ítems creados durante la división inicial.
     pedido_id = Column(Integer, nullable=True, index=True)
+    # Línea exacta del pedido que originó el ítem (para editar cantidades sin
+    # ambigüedad). NULL en los ítems de la división inicial.
+    pedido_item_id = Column(Integer, nullable=True, index=True)
 
     participante = relationship("Participante", back_populates="items")
     producto = relationship("Producto")

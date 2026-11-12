@@ -39,7 +39,7 @@ from app.schemas import CLAVE_INICIAL
 from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
@@ -187,7 +187,9 @@ def _migrar_indices_cuentas() -> None:
     indices = [
         ("pedidos", "ix_pedidos_participante_id", "participante_id"),
         ("pedidos", "ix_pedidos_es_pago_division", "es_pago_division"),
+        ("pedidos", "ix_pedidos_usuario_cierre_id", "usuario_cierre_id"),
         ("participante_items", "ix_participante_items_pedido_id", "pedido_id"),
+        ("participante_items", "ix_participante_items_pedido_item_id", "pedido_item_id"),
         ("participantes", "ix_participantes_pedido_pago_id", "pedido_pago_id"),
     ]
     for tabla, nombre, columna in indices:

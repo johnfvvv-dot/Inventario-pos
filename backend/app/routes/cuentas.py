@@ -3,9 +3,21 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.cuentas_servicio import (
+    alias_existente_en_cuenta,
+    bloquear_cuenta,
+    cerrar_division_si_corresponde,
+    crear_division,
+    crear_participante,
+    liberar_mesa_si_corresponde,
+    obtener_o_crear_division_pendiente,
+    recalcular_division,
+    recalcular_participante,
+    registrar_pago_participante,
+    validar_permiso_cantidades,
+)
 from app.database import get_db
 from app.models import (
     Division,
@@ -19,6 +31,8 @@ from app.models import (
 )
 from app.schemas import (
     FORMAS_PAGO,
+    AjusteLineaOut,
+    AliasCreate,
     CuentaMesaOut,
     DivisionCreate,
     DivisionOut,
@@ -27,6 +41,7 @@ from app.schemas import (
     ParticipanteResumen,
     ParticipanteItemOut,
     ParticipanteOut,
+    PedidoItemAjuste,
     PedidoOut,
     PedidoItemOut,
     TransferirCuentaOut,
@@ -72,6 +87,7 @@ def _pedido_out(pedido: Pedido) -> PedidoOut:
         participante_id=pedido.participante_id,
         alias=pedido.participante.alias if pedido.participante else None,
         es_pago_division=bool(pedido.es_pago_division),
+        usuario_cierre_id=pedido.usuario_cierre_id,
     )
 
 
@@ -92,6 +108,8 @@ def _participante_out(participante: Participante) -> ParticipanteOut:
         alias=participante.alias,
         subtotal=participante.subtotal,
         pagado=bool(participante.pagado),
+        forma_pago=participante.forma_pago,
+        fecha_pago=participante.fecha_pago,
         items=items,
     )
 
@@ -122,137 +140,106 @@ def _cargar_divisiones(db: Session, mesa_id: int) -> List[Division]:
     )
 
 
-def _bloquear_cuenta(db: Session, mesa: Mesa) -> None:
-    """Bloquea las filas de la mesa o de todas las plazas de una barra."""
-    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
-        (
-            db.query(Mesa)
-            .filter(Mesa.grupo == mesa.grupo)
-            .order_by(Mesa.id)
-            .with_for_update()
-            .all()
+def _cargar_division(db: Session, division_id: int) -> Optional[Division]:
+    return (
+        db.query(Division)
+        .options(
+            joinedload(Division.participantes).joinedload(Participante.items).joinedload(
+                ParticipanteItem.producto
+            )
         )
-    else:
-        db.query(Mesa).filter(Mesa.id == mesa.id).with_for_update().first()
-
-
-def _recalcular_participante(db: Session, participante: Participante) -> float:
-    subtotal = (
-        db.query(func.coalesce(func.sum(ParticipanteItem.subtotal), 0.0))
-        .filter(ParticipanteItem.participante_id == participante.id)
-        .scalar()
-        or 0.0
+        .filter(Division.id == division_id)
+        .first()
     )
-    participante.subtotal = round(float(subtotal), 2)
-    return participante.subtotal
 
 
-def _recalcular_division(db: Session, division: Division) -> float:
-    total = (
-        db.query(func.coalesce(func.sum(Participante.subtotal), 0.0))
-        .filter(Participante.division_id == division.id)
-        .scalar()
-        or 0.0
-    )
-    division.total = round(float(total), 2)
-    return division.total
-
-
-def _registrar_pago_participante(
+def _resolver_mesas_cuenta(
     db: Session,
-    participante: Participante,
-    forma_pago: str,
-    ahora,
-    usuario_id: Optional[int] = None,
-) -> None:
-    """Marca pagado un alias y crea el pedido financiero de su consumo.
+    mesa_id: Optional[int],
+    barra_numero: Optional[int],
+    bloquear: bool = False,
+) -> tuple[List[Mesa], Mesa]:
+    """Devuelve las plazas de la cuenta y la plaza base para crear divisiones.
 
-    El pedido ``es_pago_division=1`` es la única fuente para caja, ganancia,
-    historial y reportes. La generación de tickets lo excluye y mantiene el
-    ticket del alias desde ``ParticipanteItem``.
+    En una barra la cuenta es agregada: se consideran todas sus plazas y la
+    base es la primera con pedidos abiertos (o la primera plaza).
     """
-    if participante.pagado:
-        return
+    if barra_numero is not None:
+        grupo = f"Barra {barra_numero}"
+        query = db.query(Mesa).filter(Mesa.grupo == grupo).order_by(Mesa.id)
+        if bloquear:
+            query = query.with_for_update()
+        mesas = query.all()
+        if not mesas:
+            raise HTTPException(status_code=404, detail="Barra no encontrada")
+        ids = [m.id for m in mesas]
+        con_pedidos = {
+            row[0]
+            for row in db.query(Pedido.mesa_id)
+            .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
+            .distinct()
+            .all()
+        }
+        base = next((m for m in mesas if m.id in con_pedidos), mesas[0])
+        return mesas, base
 
-    _recalcular_participante(db, participante)
+    if mesa_id is None:
+        raise HTTPException(
+            status_code=400, detail="Indicá la mesa o la barra de la cuenta"
+        )
+    query = db.query(Mesa).filter(Mesa.id == mesa_id)
+    if bloquear:
+        query = query.with_for_update()
+    mesa = query.first()
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
-    # Si ya existe un pedido de pago (por un reintento), no se duplica.
-    if participante.pedido_pago_id:
-        participante.pagado = 1
-        participante.forma_pago = forma_pago
-        participante.fecha_pago = participante.fecha_pago or ahora
-        return
+    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
+        group_query = db.query(Mesa).filter(Mesa.grupo == mesa.grupo).order_by(Mesa.id)
+        if bloquear:
+            group_query = group_query.with_for_update()
+        return group_query.all(), mesa
+    return [mesa], mesa
 
-    division = participante.division
-    if division is None:
-        division = db.query(Division).filter(
-            Division.id == participante.division_id
-        ).first()
-    mesa = division.mesa if division else None
-    if division and mesa is None:
-        mesa = db.query(Mesa).filter(Mesa.id == division.mesa_id).first()
 
-    items = (
-        db.query(ParticipanteItem)
-        .filter(ParticipanteItem.participante_id == participante.id)
-        .order_by(ParticipanteItem.id)
+def _cerrar_pedidos_generales(
+    db: Session,
+    mesas: List[Mesa],
+    forma_pago: str,
+    usuario_id: Optional[int],
+    ahora,
+) -> int:
+    """Cierra solo la cuenta general (pedidos sin alias) de las plazas."""
+    ids = [m.id for m in mesas]
+    pedidos = (
+        db.query(Pedido)
+        .filter(
+            Pedido.mesa_id.in_(ids),
+            Pedido.estado == "abierto",
+            Pedido.participante_id.is_(None),
+        )
         .all()
     )
-    if items and division:
-        pedido_pago = Pedido(
-            mesa_id=division.mesa_id,
-            usuario_id=usuario_id or division.usuario_id,
-            estado="cerrado",
-            total=participante.subtotal,
-            forma_pago=forma_pago,
-            fecha_cierre=ahora,
-            fecha_ocupacion=(
-                division.fecha_ocupacion or division.fecha or ahora
-            ),
-            participante_id=participante.id,
-            es_pago_division=1,
+    if not pedidos:
+        raise HTTPException(
+            status_code=400,
+            detail="No hay una Cuenta General pendiente de cobro.",
         )
-        if mesa is not None:
-            pedido_pago.guardar_origen(mesa)
-        db.add(pedido_pago)
-        db.flush()
 
-        for item in items:
-            db.add(
-                PedidoItem(
-                    pedido_id=pedido_pago.id,
-                    producto_id=item.producto_id,
-                    cantidad=item.cantidad,
-                    precio_unitario=item.precio_unitario,
-                    subtotal=item.subtotal,
+    mesas_por_id = {m.id: m for m in mesas}
+    for pedido in pedidos:
+        pedido.estado = "cerrado"
+        pedido.forma_pago = forma_pago
+        pedido.fecha_cierre = ahora
+        pedido.usuario_cierre_id = usuario_id
+        mesa = mesas_por_id.get(pedido.mesa_id)
+        if mesa:
+            if not pedido.fecha_ocupacion:
+                pedido.fecha_ocupacion = (
+                    mesa.fecha_ocupacion or pedido.fecha or ahora
                 )
-            )
-        participante.pedido_pago_id = pedido_pago.id
-
-    participante.pagado = 1
-    participante.forma_pago = forma_pago
-    participante.fecha_pago = ahora
-
-
-def _liberar_mesa_si_corresponde(db: Session, mesa_id: int) -> None:
-    """Libera una mesa/plaza cuando ya no tiene nada pendiente de cobro."""
-    mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
-    if not mesa:
-        return
-    db.flush()
-    pedidos_abiertos = (
-        db.query(Pedido)
-        .filter(Pedido.mesa_id == mesa.id, Pedido.estado == "abierto")
-        .count()
-    )
-    divisiones_pendientes = (
-        db.query(Division)
-        .filter(Division.mesa_id == mesa.id, Division.estado == "pendiente")
-        .count()
-    )
-    if pedidos_abiertos == 0 and divisiones_pendientes == 0:
-        mesa.estado = "disponible"
-        mesa.fecha_ocupacion = None
+            pedido.guardar_origen(mesa)
+    return len(pedidos)
 
 
 @router.get("/mesa/{mesa_id}", response_model=CuentaMesaOut)
@@ -312,6 +299,8 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
                         alias=p.alias,
                         subtotal=p.subtotal,
                         pagado=bool(p.pagado),
+                        forma_pago=p.forma_pago,
+                        fecha_pago=p.fecha_pago,
                         items=[
                             LineaCuenta(
                                 producto_id=item.producto_id,
@@ -323,6 +312,8 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
                                 subtotal=item.subtotal,
                                 alias=p.alias,
                                 participante_id=p.id,
+                                participante_item_id=item.id,
+                                pedido_id=item.pedido_id,
                             )
                             for item in p.items
                         ],
@@ -399,6 +390,8 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
                         alias=pp.alias,
                         subtotal=pp.subtotal,
                         pagado=bool(pp.pagado),
+                        forma_pago=pp.forma_pago,
+                        fecha_pago=pp.fecha_pago,
                         items=[
                             LineaCuenta(
                                 producto_id=item.producto_id,
@@ -410,6 +403,8 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
                                 subtotal=item.subtotal,
                                 alias=pp.alias,
                                 participante_id=pp.id,
+                                participante_item_id=item.id,
+                                pedido_id=item.pedido_id,
                             )
                             for item in pp.items
                         ],
@@ -427,6 +422,7 @@ def cerrar_cuenta(
     mesa_id: int,
     liberar_mesa: bool = False,
     forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Cierra la cuenta completa de la mesa (pedidos + divisiones).
@@ -440,7 +436,7 @@ def cerrar_cuenta(
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
-    _bloquear_cuenta(db, mesa)
+    bloquear_cuenta(db, mesa)
 
     if forma_pago not in FORMAS_PAGO:
         raise HTTPException(
@@ -458,13 +454,18 @@ def cerrar_cuenta(
             joinedload(Pedido.usuario),
             joinedload(Pedido.items).joinedload(PedidoItem.producto),
         )
-        .filter(Pedido.mesa_id == mesa_id, Pedido.estado == "abierto")
+        .filter(
+            Pedido.mesa_id == mesa_id,
+            Pedido.estado == "abierto",
+            Pedido.participante_id.is_(None),
+        )
         .all()
     )
     for pedido in pedidos:
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
         pedido.fecha_cierre = ahora
+        pedido.usuario_cierre_id = usuario_id
         if not pedido.fecha_ocupacion:
             pedido.fecha_ocupacion = mesa.fecha_ocupacion or pedido.fecha or ahora
         pedido.guardar_origen(mesa)
@@ -478,14 +479,16 @@ def cerrar_cuenta(
         if not division.fecha_ocupacion:
             division.fecha_ocupacion = mesa.fecha_ocupacion or division.fecha or ahora
         for participante in division.participantes:
-            _registrar_pago_participante(
-                db, participante, forma_pago, ahora, division.usuario_id
+            registrar_pago_participante(
+                db,
+                participante,
+                forma_pago,
+                ahora,
+                usuario_cierre_id=usuario_id or division.usuario_id,
             )
         db.flush()
-        _recalcular_division(db, division)
-        if division.participantes and all(p.pagado for p in division.participantes):
-            division.estado = "pagada"
-            division.forma_pago = division.forma_pago or forma_pago
+        recalcular_division(db, division)
+        cerrar_division_si_corresponde(db, division, forma_pago)
 
     # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
     mesa.estado = "disponible" if liberar_mesa else "ocupada"
@@ -502,6 +505,7 @@ def cerrar_cuenta_barra(
     numero_barra: int,
     liberar_barra: bool = False,
     forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Cierra la cuenta completa de una barra (todas sus plazas).
@@ -531,10 +535,14 @@ def cerrar_cuenta_barra(
     ids = [m.id for m in mesas]
     ahora = ahora_local()
 
-    # Cerrar pedidos abiertos de todas las plazas
+    # Cerrar pedidos abiertos de todas las plazas (solo cuenta general)
     pedidos = (
         db.query(Pedido)
-        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
+        .filter(
+            Pedido.mesa_id.in_(ids),
+            Pedido.estado == "abierto",
+            Pedido.participante_id.is_(None),
+        )
         .all()
     )
     mesas_por_id = {m.id: m for m in mesas}
@@ -542,6 +550,7 @@ def cerrar_cuenta_barra(
         pedido.estado = "cerrado"
         pedido.forma_pago = forma_pago
         pedido.fecha_cierre = ahora
+        pedido.usuario_cierre_id = usuario_id
         plaza = mesas_por_id.get(pedido.mesa_id)
         if plaza:
             if not pedido.fecha_ocupacion:
@@ -559,14 +568,16 @@ def cerrar_cuenta_barra(
                     mesa.fecha_ocupacion or division.fecha or ahora
                 )
             for participante in division.participantes:
-                _registrar_pago_participante(
-                    db, participante, forma_pago, ahora, division.usuario_id
+                registrar_pago_participante(
+                    db,
+                    participante,
+                    forma_pago,
+                    ahora,
+                    usuario_cierre_id=usuario_id or division.usuario_id,
                 )
             db.flush()
-            _recalcular_division(db, division)
-            if division.participantes and all(p.pagado for p in division.participantes):
-                division.estado = "pagada"
-                division.forma_pago = division.forma_pago or forma_pago
+            recalcular_division(db, division)
+            cerrar_division_si_corresponde(db, division, forma_pago)
 
         mesa.estado = "disponible" if liberar_barra else "ocupada"
         if liberar_barra:
@@ -598,8 +609,8 @@ def transferir_cuenta(
             detail="El destino debe ser otra mesa o una plaza de barra distinta",
         )
 
-    _bloquear_cuenta(db, origen)
-    _bloquear_cuenta(db, destino)
+    bloquear_cuenta(db, origen)
+    bloquear_cuenta(db, destino)
     db.flush()
 
     # El destino no debe tener ya una cuenta abierta. En una barra se valida
@@ -619,16 +630,14 @@ def transferir_cuenta(
         detalle_ocupado = "El destino ya tiene una cuenta abierta."
 
     pedidos_destino = (
-        db.query(func.count(Pedido.id))
+        db.query(Pedido)
         .filter(Pedido.mesa_id.in_(ids_destino), Pedido.estado == "abierto")
-        .scalar()
-        or 0
+        .count()
     )
     divisiones_destino = (
-        db.query(func.count(Division.id))
+        db.query(Division)
         .filter(Division.mesa_id.in_(ids_destino), Division.estado == "pendiente")
-        .scalar()
-        or 0
+        .count()
     )
     if barra_ocupada or pedidos_destino or divisiones_destino:
         raise HTTPException(
@@ -803,57 +812,25 @@ def dividir_cuenta(datos: DivisionCreate, db: Session = Depends(get_db)):
 
     # Crear la división con los subtotales por alias
     fecha_ocupacion = mesa_division.fecha_ocupacion or ahora_local()
-    division = Division(
-        mesa_id=mesa_division.id,
-        usuario_id=usuario.id,
-        total=0.0,
-        estado="pendiente",
-        fecha_ocupacion=fecha_ocupacion,
-    )
-    db.add(division)
-    db.flush()
+    division = crear_division(db, mesa_division, usuario.id, fecha_ocupacion)
 
-    total = 0.0
     for participante in datos.participantes:
-        subtotal = 0.0
-        items_preparados = []
-        for item in participante.items:
-            entry = pool[item.producto_id]
-            producto = entry["producto"]
-            precio_unitario = entry["precio_unitario"]
-            subtotal_item = round(precio_unitario * item.cantidad, 2)
-            subtotal = round(subtotal + subtotal_item, 2)
-            items_preparados.append((producto, item.cantidad, precio_unitario, subtotal_item))
-
+        items_preparados = [
+            (
+                pool[item.producto_id]["producto"],
+                item.cantidad,
+                pool[item.producto_id]["precio_unitario"],
+            )
+            for item in participante.items
+        ]
         if not items_preparados:
             continue
+        crear_participante(db, division, participante.alias, items_preparados)
 
-        nuevo_participante = Participante(
-            division_id=division.id,
-            alias=participante.alias,
-            subtotal=subtotal,
-            pagado=0,
-        )
-        db.add(nuevo_participante)
-        db.flush()
-
-        for producto, cantidad, precio_unitario, subtotal_item in items_preparados:
-            db.add(
-                ParticipanteItem(
-                    participante_id=nuevo_participante.id,
-                    producto_id=producto.id,
-                    cantidad=cantidad,
-                    precio_unitario=precio_unitario,
-                    subtotal=subtotal_item,
-                )
-            )
-        total = round(total + subtotal, 2)
-
-    if total <= 0:
+    recalcular_division(db, division)
+    if division.total <= 0:
         db.rollback()
         raise HTTPException(status_code=400, detail="La división no tiene productos")
-
-    division.total = total
 
     # El RESTO no asignado queda como un pedido abierto (bloque único)
     resto_items = []
@@ -950,25 +927,23 @@ def pagar_participante(
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa de la división no encontrada")
 
-    _bloquear_cuenta(db, mesa)
+    bloquear_cuenta(db, mesa)
     db.refresh(participante)
     division = db.query(Division).filter(Division.id == division.id).first()
 
     ahora = ahora_local()
-    _registrar_pago_participante(
-        db, participante, forma_pago, ahora, usuario_id or division.usuario_id
+    registrar_pago_participante(
+        db,
+        participante,
+        forma_pago,
+        ahora,
+        usuario_cierre_id=usuario_id or division.usuario_id,
     )
     db.flush()
-    _recalcular_division(db, division)
+    recalcular_division(db, division)
+    cerrar_division_si_corresponde(db, division, forma_pago)
 
-    todos = (
-        db.query(Participante).filter(Participante.division_id == division.id).all()
-    )
-    if todos and all(p.pagado for p in todos):
-        division.estado = "pagada"
-        division.forma_pago = division.forma_pago or forma_pago
-
-    _liberar_mesa_si_corresponde(db, mesa.id)
+    liberar_mesa_si_corresponde(db, mesa.id)
     db.commit()
 
     participante = (
@@ -1012,27 +987,25 @@ def pagar_division(
 
     mesa = division.mesa
     if mesa:
-        _bloquear_cuenta(db, mesa)
+        bloquear_cuenta(db, mesa)
         db.refresh(division)
 
     ahora = ahora_local()
     for participante in division.participantes:
-        _registrar_pago_participante(
+        registrar_pago_participante(
             db,
             participante,
             forma_pago,
             ahora,
-            usuario_id or division.usuario_id,
+            usuario_cierre_id=usuario_id or division.usuario_id,
         )
 
     db.flush()
-    _recalcular_division(db, division)
-    if division.participantes and all(p.pagado for p in division.participantes):
-        division.estado = "pagada"
-        division.forma_pago = division.forma_pago or forma_pago
+    recalcular_division(db, division)
+    cerrar_division_si_corresponde(db, division, forma_pago)
 
     if mesa:
-        _liberar_mesa_si_corresponde(db, mesa.id)
+        liberar_mesa_si_corresponde(db, mesa.id)
 
     db.commit()
     division = (
@@ -1046,6 +1019,304 @@ def pagar_division(
         .first()
     )
     return _division_out(division)
+
+
+@router.post("/alias", response_model=DivisionOut, status_code=201)
+def crear_alias(datos: AliasCreate, db: Session = Depends(get_db)):
+    """Crea un alias vacío en la cuenta abierta de una mesa o barra.
+
+    Reutiliza la misma estructura de divisiones que ``Dividir Cuenta``. El
+    alias se suma a la división pendiente más reciente de la cuenta o se crea
+    una nueva si todavía no hay ninguna.
+    """
+    exigir_turno_abierto(db)
+
+    mesas, mesa_base = _resolver_mesas_cuenta(
+        db, datos.mesa_id, datos.barra_numero, bloquear=True
+    )
+
+    usuario = db.query(Usuario).filter(Usuario.id == datos.usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    alias = datos.alias.strip()
+    if not alias:
+        raise HTTPException(status_code=400, detail="El alias no puede estar vacío")
+
+    ids = [m.id for m in mesas]
+    pedidos_abiertos = (
+        db.query(Pedido)
+        .filter(Pedido.mesa_id.in_(ids), Pedido.estado == "abierto")
+        .count()
+    )
+    divisiones_pendientes = (
+        db.query(Division)
+        .filter(Division.mesa_id.in_(ids), Division.estado == "pendiente")
+        .count()
+    )
+    if not pedidos_abiertos and not divisiones_pendientes:
+        raise HTTPException(
+            status_code=400,
+            detail="La cuenta no tiene productos pendientes para asignar.",
+        )
+
+    existente = alias_existente_en_cuenta(db, mesas, alias)
+    if existente:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ya existe un alias activo llamado {existente.alias}.",
+        )
+
+    division = obtener_o_crear_division_pendiente(db, mesa_base, usuario.id)
+    crear_participante(db, division, alias)
+
+    mesa_base.estado = "ocupada"
+    if not mesa_base.fecha_ocupacion:
+        mesa_base.fecha_ocupacion = ahora_local()
+
+    db.commit()
+
+    division = _cargar_division(db, division.id)
+    return _division_out(division)
+
+
+@router.put("/participante-item/{item_id}", response_model=AjusteLineaOut)
+def ajustar_linea_alias(
+    item_id: int,
+    datos: PedidoItemAjuste,
+    usuario_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Ajusta la cantidad de una línea de la cuenta de un alias.
+
+    ``cantidad=0`` elimina la línea. Si el alias queda vacío se elimina; si la
+    división queda sin clientes también se elimina y la mesa se libera cuando
+    no queda nada pendiente. Requiere el permiso ``editar_cantidades``.
+    """
+    exigir_turno_abierto(db)
+    validar_permiso_cantidades(db, usuario_id)
+
+    item = (
+        db.query(ParticipanteItem)
+        .options(
+            joinedload(ParticipanteItem.participante)
+            .joinedload(Participante.division)
+            .joinedload(Division.mesa)
+        )
+        .filter(ParticipanteItem.id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Línea de la cuenta no encontrada")
+
+    participante = item.participante
+    division = participante.division if participante else None
+    mesa = division.mesa if division else None
+    if not participante or not division or not mesa:
+        raise HTTPException(
+            status_code=409, detail="La línea no pertenece a una cuenta activa."
+        )
+    if participante.pagado or division.estado != "pendiente":
+        raise HTTPException(
+            status_code=409,
+            detail="La parte de este cliente ya fue cobrada y no se puede editar.",
+        )
+
+    bloquear_cuenta(db, mesa)
+
+    # Volver a leer después del bloqueo para evitar carreras con otro cobro.
+    item = (
+        db.query(ParticipanteItem)
+        .options(
+            joinedload(ParticipanteItem.participante)
+            .joinedload(Participante.division)
+            .joinedload(Division.mesa)
+        )
+        .filter(ParticipanteItem.id == item_id)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Línea de la cuenta no encontrada")
+    participante = item.participante
+    division = participante.division
+    mesa = division.mesa
+    if participante.pagado or division.estado != "pendiente":
+        raise HTTPException(
+            status_code=409,
+            detail="La parte de este cliente ya fue cobrada y no se puede editar.",
+        )
+
+    cantidad = datos.cantidad
+
+    # Misma lógica de inventario que el ajuste de un pedido general: la
+    # diferencia se descuenta del stock y, al eliminar la línea, se devuelve.
+    producto = (
+        db.query(Producto)
+        .filter(Producto.id == item.producto_id)
+        .with_for_update()
+        .first()
+    )
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    diferencia = cantidad - item.cantidad
+    if diferencia > 0 and producto.stock < diferencia:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Stock insuficiente de {producto.nombre}: "
+                f"disponible {producto.stock}"
+            ),
+        )
+    producto.stock -= diferencia
+
+    pedido_item = None
+    if item.pedido_item_id:
+        pedido_item = (
+            db.query(PedidoItem)
+            .filter(PedidoItem.id == item.pedido_item_id)
+            .first()
+        )
+
+    if cantidad == 0:
+        if pedido_item:
+            pedido = pedido_item.pedido
+            db.delete(pedido_item)
+            db.flush()
+            restantes_pedido = (
+                db.query(PedidoItem)
+                .filter(PedidoItem.pedido_id == pedido.id)
+                .all()
+            )
+            if restantes_pedido:
+                pedido.total = round(
+                    sum(linea.subtotal for linea in restantes_pedido), 2
+                )
+            else:
+                db.delete(pedido)
+        db.delete(item)
+        db.flush()
+    else:
+        item.cantidad = cantidad
+        item.subtotal = round(float(item.precio_unitario) * cantidad, 2)
+        if pedido_item:
+            pedido_item.cantidad = cantidad
+            pedido_item.subtotal = item.subtotal
+            db.flush()
+            pedido = db.query(Pedido).filter(Pedido.id == pedido_item.pedido_id).first()
+            if pedido:
+                pedido.total = round(
+                    sum(
+                        linea.subtotal
+                        for linea in db.query(PedidoItem)
+                        .filter(PedidoItem.pedido_id == pedido.id)
+                        .all()
+                    ),
+                    2,
+                )
+
+    recalcular_participante(db, participante)
+    restantes_alias = (
+        db.query(ParticipanteItem)
+        .filter(ParticipanteItem.participante_id == participante.id)
+        .count()
+    )
+
+    eliminado = restantes_alias == 0
+    division_id_out: Optional[int] = division.id
+    total_division = 0.0
+    if eliminado:
+        division_id = division.id
+        db.delete(participante)
+        db.flush()
+        otros_clientes = (
+            db.query(Participante)
+            .filter(Participante.division_id == division_id)
+            .count()
+        )
+        if otros_clientes == 0:
+            db.delete(division)
+            db.flush()
+            division_id_out = None
+            liberar_mesa_si_corresponde(db, mesa.id)
+        else:
+            recalcular_division(db, division)
+            total_division = division.total
+            liberar_mesa_si_corresponde(db, mesa.id)
+        participante_id_out = None
+        subtotal_out = 0.0
+    else:
+        recalcular_division(db, division)
+        total_division = division.total
+        participante_id_out = participante.id
+        subtotal_out = participante.subtotal
+
+    db.commit()
+
+    return AjusteLineaOut(
+        participante_id=participante_id_out,
+        division_id=division_id_out,
+        eliminado=eliminado,
+        subtotal=subtotal_out,
+        total_division=total_division,
+    )
+
+
+@router.post("/mesa/{mesa_id}/cerrar-general", response_model=CuentaMesaOut)
+def cerrar_general_mesa(
+    mesa_id: int,
+    forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
+    liberar_mesa: bool = True,
+    db: Session = Depends(get_db),
+):
+    """Cobra solo la Cuenta General de una mesa, sin tocar las divisiones."""
+    exigir_turno_abierto(db)
+
+    mesas, _ = _resolver_mesas_cuenta(db, mesa_id, None, bloquear=True)
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ahora = ahora_local()
+    _cerrar_pedidos_generales(db, mesas, forma_pago, usuario_id, ahora)
+
+    if liberar_mesa:
+        for mesa in mesas:
+            liberar_mesa_si_corresponde(db, mesa.id)
+
+    db.commit()
+    return consultar_cuenta(mesa_id, db)
+
+
+@router.post("/barra/{numero_barra}/cerrar-general", response_model=CuentaMesaOut)
+def cerrar_general_barra(
+    numero_barra: int,
+    forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
+    liberar_barra: bool = True,
+    db: Session = Depends(get_db),
+):
+    """Cobra solo la Cuenta General agregada de una barra."""
+    exigir_turno_abierto(db)
+
+    mesas, _ = _resolver_mesas_cuenta(db, None, numero_barra, bloquear=True)
+    if forma_pago not in FORMAS_PAGO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+
+    ahora = ahora_local()
+    _cerrar_pedidos_generales(db, mesas, forma_pago, usuario_id, ahora)
+
+    if liberar_barra:
+        for mesa in mesas:
+            liberar_mesa_si_corresponde(db, mesa.id)
+
+    db.commit()
+    return cuenta_barra(numero_barra, db)
 
 
 @router.get("/mesa/{mesa_id}/divisiones", response_model=List[DivisionOut])

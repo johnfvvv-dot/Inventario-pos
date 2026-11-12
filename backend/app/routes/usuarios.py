@@ -30,6 +30,7 @@ def _a_usuario_out(usuario: Usuario) -> UsuarioOut:
         rol=usuario.rol,
         activo=bool(usuario.activo),
         ingreso_stock=bool(usuario.ingreso_stock),
+        editar_cantidades=bool(usuario.editar_cantidades),
         creado_en=usuario.creado_en or ahora_local(),
     )
 
@@ -167,6 +168,8 @@ def actualizar_usuario(
         usuario.activo = 1 if datos.activo else 0
     if datos.ingreso_stock is not None:
         usuario.ingreso_stock = 1 if datos.ingreso_stock else 0
+    if datos.editar_cantidades is not None:
+        usuario.editar_cantidades = 1 if datos.editar_cantidades else 0
 
     db.commit()
     db.refresh(usuario)

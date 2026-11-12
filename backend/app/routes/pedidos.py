@@ -1,11 +1,21 @@
 """Endpoints para gestión de pedidos y ventas por mesa."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from app.cuentas_servicio import (
+    alias_existente_en_cuenta,
+    bloquear_cuenta,
+    crear_participante,
+    liberar_mesa_si_corresponde,
+    mesas_de_cuenta,
+    obtener_o_crear_division_pendiente,
+    recalcular_division,
+    recalcular_participante,
+    validar_permiso_cantidades,
+)
 from app.database import get_db
 from app.models import (
     Division,
@@ -60,6 +70,7 @@ def _pedido_to_out(pedido: Pedido) -> PedidoOut:
         participante_id=pedido.participante_id,
         alias=pedido.participante.alias if pedido.participante else None,
         es_pago_division=bool(pedido.es_pago_division),
+        usuario_cierre_id=pedido.usuario_cierre_id,
     )
 
 
@@ -92,24 +103,6 @@ def _cargar_pedidos_mesa(db: Session, mesa_id: int) -> List[Pedido]:
     )
 
 
-def _bloquear_cuenta(db: Session, mesa: Mesa) -> None:
-    """Bloquea la fila (o filas) que representan la cuenta de una mesa/barra.
-
-    En PostgreSQL ``FOR UPDATE`` serializa la creación de pedidos, los cobros
-    y los cierres. En SQLite se ignora y la escritura ya queda serializada.
-    """
-    if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
-        (
-            db.query(Mesa)
-            .filter(Mesa.grupo == mesa.grupo)
-            .order_by(Mesa.id)
-            .with_for_update()
-            .all()
-        )
-    else:
-        db.query(Mesa).filter(Mesa.id == mesa.id).with_for_update().first()
-
-
 def _misma_cuenta(division: Division, mesa: Mesa) -> bool:
     """True si la división pertenece a la misma mesa o a la misma barra."""
     if division.mesa_id == mesa.id:
@@ -123,28 +116,6 @@ def _misma_cuenta(division: Division, mesa: Mesa) -> bool:
     ):
         return True
     return False
-
-
-def _recalcular_participante(db: Session, participante: Participante) -> float:
-    subtotal = (
-        db.query(func.coalesce(func.sum(ParticipanteItem.subtotal), 0.0))
-        .filter(ParticipanteItem.participante_id == participante.id)
-        .scalar()
-        or 0.0
-    )
-    participante.subtotal = round(float(subtotal), 2)
-    return participante.subtotal
-
-
-def _recalcular_division(db: Session, division: Division) -> float:
-    total = (
-        db.query(func.coalesce(func.sum(Participante.subtotal), 0.0))
-        .filter(Participante.division_id == division.id)
-        .scalar()
-        or 0.0
-    )
-    division.total = round(float(total), 2)
-    return division.total
 
 
 @router.post("/", response_model=PedidoOut, status_code=201)
@@ -173,6 +144,7 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     division = None
     mesa_destino = mesa
     estado_pedido = "abierto"
+    nuevo_alias = (datos.nuevo_alias or "").strip()
 
     if datos.participante_id is not None:
         # Primera lectura para saber qué cuenta (mesa o barra) hay que bloquear.
@@ -196,7 +168,7 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
         if not mesa_destino:
             raise HTTPException(status_code=404, detail="Mesa de la división no encontrada")
 
-        _bloquear_cuenta(db, mesa_destino)
+        bloquear_cuenta(db, mesa_destino)
 
         # Releer bajo el lock para que un pago simultáneo no pase inadvertido.
         participante = (
@@ -235,7 +207,16 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
 
         estado_pedido = "dividido"
     else:
-        _bloquear_cuenta(db, mesa)
+        bloquear_cuenta(db, mesa)
+        if nuevo_alias:
+            existente = alias_existente_en_cuenta(
+                db, mesas_de_cuenta(db, mesa), nuevo_alias
+            )
+            if existente:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Ya existe un alias activo llamado {existente.alias}.",
+                )
 
     # Validar y bloquear todos los productos en orden de id para evitar
     # interbloqueos entre pedidos concurrentes.
@@ -271,10 +252,24 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
             )
         usado[producto.id] = solicitado
 
-    if not mesa_destino.fecha_ocupacion:
-        mesa_destino.fecha_ocupacion = ahora_local()
-
     try:
+        if nuevo_alias:
+            # Crear el alias dentro de la misma cuenta. La división se crea si
+            # la mesa/barra todavía no tenía una cuenta dividida.
+            division = obtener_o_crear_division_pendiente(
+                db, mesa_destino, usuario.id
+            )
+            participante = crear_participante(db, division, nuevo_alias)
+            mesa_division = division.mesa or db.query(Mesa).filter(
+                Mesa.id == division.mesa_id
+            ).first()
+            if mesa_division:
+                mesa_destino = mesa_division
+            estado_pedido = "dividido"
+
+        if not mesa_destino.fecha_ocupacion:
+            mesa_destino.fecha_ocupacion = ahora_local()
+
         nuevo_pedido = Pedido(
             mesa_id=mesa_destino.id,
             usuario_id=usuario.id,
@@ -289,41 +284,42 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
         db.flush()  # obtener ID sin confirmar todavía
 
         total = 0.0
+        items_creados = []
         for item in datos.items:
             producto = productos[item.producto_id]
             subtotal = round(producto.precio * item.cantidad, 2)
             producto.stock -= item.cantidad
-            db.add(
-                PedidoItem(
-                    pedido_id=nuevo_pedido.id,
-                    producto_id=producto.id,
-                    cantidad=item.cantidad,
-                    precio_unitario=producto.precio,
-                    subtotal=subtotal,
-                )
+            pedido_item = PedidoItem(
+                pedido_id=nuevo_pedido.id,
+                producto_id=producto.id,
+                cantidad=item.cantidad,
+                precio_unitario=producto.precio,
+                subtotal=subtotal,
             )
+            db.add(pedido_item)
+            items_creados.append((pedido_item, producto, item.cantidad))
             total += subtotal
 
+        db.flush()  # obtener IDs de las líneas para vincular los alias
         nuevo_pedido.total = round(total, 2)
 
         if participante and division:
-            for item in datos.items:
-                producto = productos[item.producto_id]
+            for pedido_item, producto, cantidad in items_creados:
                 db.add(
                     ParticipanteItem(
                         participante_id=participante.id,
                         producto_id=producto.id,
-                        cantidad=item.cantidad,
+                        cantidad=cantidad,
                         precio_unitario=producto.precio,
-                        subtotal=round(producto.precio * item.cantidad, 2),
+                        subtotal=round(producto.precio * cantidad, 2),
                         pedido_id=nuevo_pedido.id,
+                        pedido_item_id=pedido_item.id,
                     )
                 )
             db.flush()
-            _recalcular_participante(db, participante)
+            recalcular_participante(db, participante)
             # La división suma los subtotales ya guardados de sus alias.
-            db.flush()
-            _recalcular_division(db, division)
+            recalcular_division(db, division)
 
         mesa_destino.estado = "ocupada"
         db.commit()
@@ -343,17 +339,21 @@ def ajustar_item_pedido(
     pedido_id: int,
     item_id: int,
     datos: PedidoItemAjuste,
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Ajusta la cantidad de una línea de un pedido abierto.
 
-    cantidad=0 elimina la línea; devuelve el stock al inventario.
+    cantidad=0 elimina la línea; devuelve el stock al inventario. Requiere el
+    permiso ``editar_cantidades`` para bartenders; el Administrador siempre
+    puede.
     """
     exigir_turno_abierto(db)
+    validar_permiso_cantidades(db, usuario_id)
 
     pedido = (
         db.query(Pedido)
-        .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))
+        .options(joinedload(Pedido.mesa))
         .filter(Pedido.id == pedido_id)
         .first()
     )
@@ -364,11 +364,29 @@ def ajustar_item_pedido(
             status_code=400, detail="Solo se pueden editar pedidos abiertos"
         )
 
+    if pedido.mesa:
+        bloquear_cuenta(db, pedido.mesa)
+
+    pedido = (
+        db.query(Pedido)
+        .options(joinedload(Pedido.items).joinedload(PedidoItem.producto))
+        .filter(Pedido.id == pedido_id)
+        .populate_existing()
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+
     item = next((i for i in pedido.items if i.id == item_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Línea no encontrada")
 
-    producto = db.query(Producto).filter(Producto.id == item.producto_id).first()
+    producto = (
+        db.query(Producto)
+        .filter(Producto.id == item.producto_id)
+        .with_for_update()
+        .first()
+    )
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
@@ -406,12 +424,17 @@ def ajustar_item_pedido(
         pedido.estado = "cerrado"
         pedido.forma_pago = "efectivo"
         pedido.fecha_cierre = ahora_local()
+        pedido.usuario_cierre_id = usuario_id
         if not pedido.fecha_ocupacion:
             pedido.fecha_ocupacion = (
                 pedido.mesa.fecha_ocupacion if pedido.mesa else None
             ) or pedido.fecha
         if pedido.mesa:
             pedido.guardar_origen(pedido.mesa)
+
+    db.flush()
+    if pedido.mesa_id:
+        liberar_mesa_si_corresponde(db, pedido.mesa_id)
 
     db.commit()
     pedido_cargado = _cargar_pedido(db, pedido.id)
@@ -473,6 +496,7 @@ def pedidos_por_barra(numero_barra: int, db: Session = Depends(get_db)):
 def cerrar_pedido(
     pedido_id: int,
     forma_pago: str = "efectivo",
+    usuario_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """Cerrar un pedido (cobrar) y liberar la mesa si no quedan cuentas pendientes."""
@@ -503,9 +527,13 @@ def cerrar_pedido(
             detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
         )
 
+    if pedido.mesa:
+        bloquear_cuenta(db, pedido.mesa)
+
     pedido.estado = "cerrado"
     pedido.forma_pago = forma_pago
     pedido.fecha_cierre = ahora_local()
+    pedido.usuario_cierre_id = usuario_id
     if not pedido.fecha_ocupacion:
         pedido.fecha_ocupacion = (
             pedido.mesa.fecha_ocupacion if pedido.mesa else None
@@ -514,27 +542,9 @@ def cerrar_pedido(
         pedido.guardar_origen(pedido.mesa)
 
     # La mesa se libera solo si no quedan pedidos abiertos NI divisiones pendientes
+    db.flush()
     if pedido.mesa_id:
-        db.flush()  # volcar cambios para que los COUNT sean exactos
-        abiertos = (
-            db.query(Pedido)
-            .filter(
-                Pedido.mesa_id == pedido.mesa_id,
-                Pedido.estado == "abierto",
-                Pedido.id != pedido.id,
-            )
-            .count()
-        )
-        divisiones_pendientes = (
-            db.query(Division)
-            .filter(Division.mesa_id == pedido.mesa_id, Division.estado == "pendiente")
-            .count()
-        )
-        if abiertos == 0 and divisiones_pendientes == 0:
-            mesa = db.query(Mesa).filter(Mesa.id == pedido.mesa_id).first()
-            if mesa:
-                mesa.estado = "disponible"
-                mesa.fecha_ocupacion = None
+        liberar_mesa_si_corresponde(db, pedido.mesa_id)
 
     db.commit()
     pedido_cargado = _cargar_pedido(db, pedido.id)

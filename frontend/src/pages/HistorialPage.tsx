@@ -17,6 +17,7 @@ interface PedidoHistorial {
   mesa_numero: number | null;
   mesa_etiqueta: string | null;
   usuario_nombre: string;
+  usuario_cierre_nombre?: string;
   alias?: string | null;
   productos: string[];
 }
@@ -166,7 +167,8 @@ export default function HistorialPage() {
           "Fecha",
           "Mesa / Barra",
           "Cliente",
-          "Usuario",
+          "Usuario creador",
+          "Cobrado por",
           "Forma de pago",
           "Total",
           "Productos",
@@ -177,6 +179,7 @@ export default function HistorialPage() {
           etiquetaOrigen(p),
           p.alias || "Cuenta general",
           p.usuario_nombre,
+          p.usuario_cierre_nombre || "",
           p.forma_pago,
           String(p.total),
           p.productos.join(" | "),
@@ -299,7 +302,8 @@ export default function HistorialPage() {
               <th>Fecha</th>
               <th>Mesa / Barra</th>
               <th>Cliente</th>
-              <th>Usuario</th>
+              <th>Usuario creador</th>
+              <th>Cobrado por</th>
               <th>Forma de pago</th>
               <th>Productos</th>
               <th>Total</th>
@@ -319,6 +323,7 @@ export default function HistorialPage() {
                   )}
                 </td>
                 <td>{p.usuario_nombre}</td>
+                <td>{p.usuario_cierre_nombre || "—"}</td>
                 <td>
                   <span className="badge badge-success">{p.forma_pago}</span>
                 </td>
@@ -330,7 +335,7 @@ export default function HistorialPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={8} className="empty-state">
+                <td colSpan={9} className="empty-state">
                   No hay ventas que coincidan con los filtros.
                 </td>
               </tr>

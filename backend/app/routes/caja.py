@@ -846,6 +846,20 @@ def historial_ventas(
         .all()
     )
 
+    ids_cierre = {
+        pedido.usuario_cierre_id
+        for pedido in pedidos
+        if pedido.usuario_cierre_id
+    }
+    usuarios_cierre = (
+        {
+            u.id: u
+            for u in db.query(Usuario).filter(Usuario.id.in_(ids_cierre)).all()
+        }
+        if ids_cierre
+        else {}
+    )
+
     resultados = []
     for pedido in pedidos:
         productos_txt = [
@@ -879,6 +893,11 @@ def historial_ventas(
                 ),
                 "mesa_etiqueta": mesa_etiqueta,
                 "usuario_nombre": usuario.nombre if usuario else "",
+                "usuario_cierre_nombre": (
+                    usuarios_cierre[pedido.usuario_cierre_id].nombre
+                    if pedido.usuario_cierre_id in usuarios_cierre
+                    else ""
+                ),
                 "alias": pedido.participante.alias
                 if pedido.participante
                 else None,

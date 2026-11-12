@@ -193,18 +193,7 @@ def listar_mesas(db: Session = Depends(get_db)):
                 posicion=activa.posicion or 1,
                 total_cuenta=total,
                 tiene_cuenta_pendiente=tiene,
-                detalle_pendiente=(
-                    (
-                        f"{sum(i['clientes'] for i in info_pos)} cliente(s) pendiente(s) · "
-                        if sum(i["clientes"] for i in info_pos)
-                        else ""
-                    )
-                    + (
-                        f"{sum(1 for m in posiciones if m.estado == 'ocupada')} plaza(s) en uso"
-                        if ocupada
-                        else ""
-                    )
-                ).strip(" ·"),
+                detalle_pendiente="",
                 posiciones=[
                     PosicionBarra(
                         id=m.id,
@@ -226,22 +215,6 @@ def listar_mesas(db: Session = Depends(get_db)):
             mesa.id,
             {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
         )
-        pendientes = []
-        if info["pedidos"]:
-            pendientes.append(
-                f"{info['pedidos']} pedido abierto" + ("s" if info["pedidos"] > 1 else "")
-            )
-        if info["clientes"]:
-            pendientes.append(
-                f"{info['clientes']} cliente" + ("s" if info["clientes"] > 1 else "")
-                + " pendiente" + ("s" if info["clientes"] > 1 else "")
-            )
-        elif info["divisiones"]:
-            pendientes.append(
-                f"{info['divisiones']} división pendiente"
-                + ("s" if info["divisiones"] > 1 else "")
-            )
-
         resultado.append(
             MesaListadoOut(
                 id=mesa.id,
@@ -252,8 +225,10 @@ def listar_mesas(db: Session = Depends(get_db)):
                 grupo=mesa.grupo,
                 posicion=mesa.posicion or 1,
                 total_cuenta=info["total"],
-                tiene_cuenta_pendiente=bool(pendientes),
-                detalle_pendiente=" · ".join(pendientes),
+                tiene_cuenta_pendiente=bool(
+                    info["pedidos"] or info["divisiones"] or info["clientes"]
+                ),
+                detalle_pendiente="",
             )
         )
     return resultado + resultado_barras

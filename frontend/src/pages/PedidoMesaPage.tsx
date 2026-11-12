@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
-import { formatearPrecio } from "../utils/format";
+import { formatearFechaHora, formatearPrecio } from "../utils/format";
 import {
   MENSAJE_TURNO_REQUERIDO,
   useTurno,
@@ -11,7 +11,7 @@ import {
 import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
-import CobroModal from "../components/CobroModal";
+import CrearAliasModal from "../components/CrearAliasModal";
 import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 import AsignarPedidoModal, {
   type DestinoPedido,
@@ -48,6 +48,16 @@ interface ItemCarrito {
   cantidad: number;
 }
 
+interface LineaItem {
+  id?: number;
+  producto_id?: number;
+  producto_nombre: string;
+  cantidad: number;
+  subtotal: number;
+  participante_item_id?: number | null;
+  pedido_id?: number | null;
+}
+
 interface Pedido {
   id: number;
   mesa?: { numero: number } | null;
@@ -55,13 +65,7 @@ interface Pedido {
   estado: string;
   participante_id?: number | null;
   alias?: string | null;
-  items: {
-    id?: number;
-    producto_id?: number;
-    producto_nombre: string;
-    cantidad: number;
-    subtotal: number;
-  }[];
+  items: LineaItem[];
 }
 
 interface ParticipanteCuenta {
@@ -69,7 +73,9 @@ interface ParticipanteCuenta {
   alias: string;
   subtotal: number;
   pagado: boolean;
-  items: { producto_nombre: string; cantidad: number; subtotal: number }[];
+  forma_pago?: string | null;
+  fecha_pago?: string | null;
+  items: LineaItem[];
 }
 
 interface DivisionCuenta {
@@ -81,6 +87,9 @@ interface DivisionCuenta {
 }
 
 interface CuentaData {
+  mesa_id: number;
+  mesa_numero: number;
+  estado_mesa: string;
   total: number;
   total_general: number;
   total_divisiones: number;
@@ -88,13 +97,22 @@ interface CuentaData {
   divisiones: DivisionCuenta[];
 }
 
+/** El Administrador siempre puede; el Bartender necesita el permiso. */
+const leerPermisoCantidades = (): boolean => {
+  try {
+    const usuario = JSON.parse(localStorage.getItem("user") || "{}");
+    return usuario?.rol === "admin" || Boolean(usuario?.editar_cantidades);
+  } catch {
+    return false;
+  }
+};
+
 export default function PedidoMesaPage() {
   const [searchParams] = useSearchParams();
   const { turno, cargando: cargandoTurno, solicitarApertura } = useTurno();
   const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [mesaId, setMesaId] = useState<number | "">("");
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
@@ -105,7 +123,8 @@ export default function PedidoMesaPage() {
   const [mostrarCuenta, setMostrarCuenta] = useState(false);
   const [mostrarDivision, setMostrarDivision] = useState(false);
   const [mostrarTransferir, setMostrarTransferir] = useState(false);
-  const [pedidoACobrar, setPedidoACobrar] = useState<Pedido | null>(null);
+  const [mostrarCrearAlias, setMostrarCrearAlias] = useState(false);
+  const [ajustando, setAjustando] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | "">("");
 
@@ -115,6 +134,9 @@ export default function PedidoMesaPage() {
   const [mostrarAsignacion, setMostrarAsignacion] = useState(false);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [procesandoAsignacion, setProcesandoAsignacion] = useState(false);
+  const [permisoEditar, setPermisoEditar] = useState<boolean>(
+    leerPermisoCantidades
+  );
 
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
@@ -162,15 +184,58 @@ export default function PedidoMesaPage() {
 
   const aliasActivos = destinos.filter((d) => !d.esGeneral && !d.pagado);
 
-  // Los pedidos asignados a un alias se ocultan cuando ese cliente ya pagó:
-  // siguen guardados para el historial, pero ya no forman parte de la cuenta.
-  const pedidosVisibles = pedidos.filter((p) => {
-    if (p.estado === "abierto") return true;
-    if (p.estado !== "dividido" || p.participante_id == null) return false;
-    return destinos.some(
-      (d) => d.participanteId === p.participante_id && !d.pagado
-    );
-  });
+  // Cada cliente es un bloque independiente, sin agrupar por división.
+  const clientes = cuenta
+    ? cuenta.divisiones.flatMap((division) =>
+        division.participantes.map((participante) => ({
+          ...participante,
+          divisionId: division.id,
+        }))
+      )
+    : [];
+
+  // La Cuenta General también se muestra como líneas planas para que su
+  // estructura sea idéntica a la de cada cuenta de cliente.
+  const lineasGenerales = cuenta
+    ? cuenta.pedidos.flatMap((pedido) =>
+        pedido.items.map((item, indice) => ({
+          ...item,
+          pedidoId: pedido.id,
+          indice,
+        }))
+      )
+    : [];
+
+  // Refresca los permisos desde el servidor y cuando el Administrador los
+  // cambia, para que una sesión abierta del Bartender no quede desactualizada.
+  useEffect(() => {
+    let activo = true;
+
+    const actualizar = async () => {
+      if (!usuarioId) return;
+      try {
+        const datos: any = await api.getUsuario(usuarioId);
+        if (!activo || !datos) return;
+        const sesion = JSON.parse(localStorage.getItem("user") || "{}");
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ ...sesion, ...datos })
+        );
+      } catch {
+        // Sin conexión se conserva el permiso guardado en la sesión.
+      }
+      if (activo) setPermisoEditar(leerPermisoCantidades());
+    };
+
+    actualizar();
+    window.addEventListener("usuario-actualizado", actualizar);
+    window.addEventListener("storage", actualizar);
+    return () => {
+      activo = false;
+      window.removeEventListener("usuario-actualizado", actualizar);
+      window.removeEventListener("storage", actualizar);
+    };
+  }, [usuarioId]);
 
   const cargarCatalogos = async () => {
     try {
@@ -182,25 +247,6 @@ export default function PedidoMesaPage() {
       setMesas(m);
       setProductos(inv.items);
       setCategorias(cats);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const cargarPedidos = async (id: number, barra?: number | null) => {
-    try {
-      const data: any = barra
-        ? await api.getPedidosBarra(barra)
-        : await api.getPedidosMesa(id);
-      // La cuenta general son los pedidos abiertos. Los pedidos asignados a
-      // un alias quedan "dividido" y se muestran solo como información.
-      setPedidos(
-        data.filter(
-          (p: Pedido) =>
-            p.estado === "abierto" ||
-            (p.estado === "dividido" && p.participante_id != null)
-        )
-      );
     } catch (err: any) {
       setError(err.message);
     }
@@ -271,19 +317,12 @@ export default function PedidoMesaPage() {
       setErrorAsignacion(null);
       setError(null);
       setMensaje(`Pedido agregado a ${etiquetaDestino}.`);
-      await Promise.all([
-        cargarCatalogos(),
-        cargarPedidos(Number(mesaId), barraNumero),
-        cargarCuenta(),
-      ]);
+      await Promise.all([cargarCatalogos(), cargarCuenta()]);
     } catch (err: any) {
       if (desdeModal) {
         setErrorAsignacion(err.message);
         // El alias pudo pagar mientras se confirmaba: refrescar opciones.
-        await Promise.all([
-          cargarCuenta(),
-          cargarPedidos(Number(mesaId), barraNumero),
-        ]);
+        await cargarCuenta();
       } else {
         setError(err.message);
       }
@@ -308,10 +347,8 @@ export default function PedidoMesaPage() {
 
   useEffect(() => {
     if (mesaId) {
-      cargarPedidos(Number(mesaId), barraNumero);
       cargarCuenta();
     } else {
-      setPedidos([]);
       setCuenta(null);
       setDestinos([]);
     }
@@ -435,40 +472,95 @@ export default function PedidoMesaPage() {
     crearPedido(participanteId, destino?.alias || "la cuenta general", true);
   };
 
-  /** Ajusta la cantidad de una linea de un pedido abierto */
-  const ajustarLinea = async (pedidoId: number, itemId: number, cantidad: number) => {
+  /**
+   * Crea el alias y le asigna el pedido actual en una sola operación.
+   *
+   * Reutiliza "Dividir Cuenta" en el backend: `nuevo_alias` crea la división
+   * y el participante, y el pedido nace directamente asignado a ese cliente.
+   */
+  const crearAliasConPedido = async (alias: string): Promise<void> => {
+    if (!turno) throw new Error(MENSAJE_TURNO_REQUERIDO);
+    if (mesaId === "") throw new Error("Seleccioná una mesa o barra.");
+    if (carrito.length === 0) {
+      throw new Error("Agregá al menos un producto antes de crear el alias.");
+    }
+
+    setError(null);
+    setMensaje(null);
+    await api.createPedido({
+      mesa_id: Number(mesaId),
+      usuario_id: usuarioId,
+      nuevo_alias: alias,
+      items: carrito.map((i) => ({
+        producto_id: i.producto_id,
+        cantidad: i.cantidad,
+      })),
+    });
+
+    setCarrito([]);
+    setCantidades({});
+    setMensaje(
+      `Alias "${alias}" creado. El pedido quedó asignado a esa cuenta de cliente.`
+    );
+    await Promise.all([cargarCatalogos(), cargarCuenta()]);
+  };
+
+  /** Ajusta una línea de la Cuenta General (0 = eliminar). */
+  const ajustarLineaGeneral = async (
+    pedidoId: number,
+    itemId: number,
+    cantidad: number
+  ) => {
     if (!turno) {
       setError(MENSAJE_TURNO_REQUERIDO);
       return;
     }
+    if (!permisoEditar) {
+      setError(
+        "No tenés permiso para editar pedidos. El Administrador debe habilitarlo desde Usuarios."
+      );
+      return;
+    }
+    setError(null);
+    setAjustando(`general-${itemId}`);
     try {
-      await api.ajustarItemPedido(pedidoId, itemId, cantidad);
-      await Promise.all([
-        cargarPedidos(Number(mesaId), barraNumero),
-        cargarCatalogos(),
-        cargarCuenta(),
-      ]);
+      await api.ajustarItemPedido(pedidoId, itemId, cantidad, usuarioId);
+      await Promise.all([cargarCuenta(), cargarCatalogos()]);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setAjustando(null);
     }
   };
 
-  const cerrarPedido = async (pedidoId: number, formaPago = "efectivo") => {
+  /** Ajusta una línea de la cuenta de un alias (0 = eliminar). */
+  const ajustarLineaAlias = async (
+    participanteItemId: number,
+    cantidad: number
+  ) => {
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return;
+    }
+    if (!permisoEditar) {
+      setError(
+        "No tenés permiso para editar pedidos. El Administrador debe habilitarlo desde Usuarios."
+      );
+      return;
+    }
+    setError(null);
+    setAjustando(`alias-${participanteItemId}`);
     try {
-      await api.closePedido(pedidoId, formaPago);
-      setPedidoACobrar(null);
-      setMensaje(`Pedido #${pedidoId} cerrado y cobrado (${formaPago})`);
-      await Promise.all([
-        cargarCatalogos(),
-        mesaId
-          ? cargarPedidos(Number(mesaId), barraNumero)
-          : Promise.resolve(),
-        mesaId ? cargarCuenta() : Promise.resolve(),
-      ]);
+      await api.ajustarLineaAlias(participanteItemId, cantidad, usuarioId);
+      await Promise.all([cargarCuenta(), cargarCatalogos()]);
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setAjustando(null);
     }
   };
+
+  const puedeEditar = permisoEditar;
 
   return (
     <div className="page">
@@ -674,110 +766,206 @@ export default function PedidoMesaPage() {
             <strong>{formatearPrecio(total)}</strong>
           </div>
 
-          <button
-            className="btn-primary btn-block"
-            onClick={confirmarPedido}
-            disabled={!turno || cargandoTurno}
-            title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
-          >
-            Confirmar pedido
-          </button>
+          <div className="pedido-actual-acciones">
+            <button
+              className="btn-secondary"
+              onClick={() => setMostrarCrearAlias(true)}
+              disabled={
+                !turno || cargandoTurno || mesaId === "" || carrito.length === 0
+              }
+              title={
+                !turno
+                  ? MENSAJE_TURNO_REQUERIDO
+                  : mesaId === ""
+                  ? "Seleccioná una mesa o barra"
+                  : carrito.length === 0
+                  ? "Agregá productos para crear la cuenta del cliente"
+                  : "Crear un alias y asignarle este pedido"
+              }
+            >
+              Crear alias
+            </button>
+            <button
+              className="btn-primary"
+              onClick={confirmarPedido}
+              disabled={!turno || cargandoTurno}
+              title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
+            >
+              Confirmar pedido
+            </button>
+          </div>
         </section>
       </div>
 
       <section className="panel">
-        <h3>Pedidos de {etiquetaCuenta}</h3>
-        {pedidosVisibles.length === 0 ? (
-          <p className="empty-state">No hay pedidos abiertos.</p>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Productos</th>
-                  <th>Total</th>
-                  <th>Destino</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pedidosVisibles.map((p) => {
-                  const asignado =
-                    p.estado === "dividido" && p.participante_id != null;
-                  return (
-                    <tr key={p.id}>
-                      <td>{p.id}</td>
-                      <td>
-                        {p.items.map((i) => (
-                          <div key={i.producto_id} className="linea-pedido">
-                            <span>
-                              {i.cantidad} × {i.producto_nombre}
-                            </span>
-                            {!asignado && i.id !== undefined && (
-                              <span className="linea-acciones">
-                                <button
-                                  className="btn-icon"
-                                  title="Quitar una unidad"
-                                  disabled={!turno}
-                                  onClick={() =>
-                                    ajustarLinea(p.id, i.id as number, i.cantidad - 1)
-                                  }
-                                >
-                                  −
-                                </button>
-                                <button
-                                  className="btn-icon"
-                                  title="Añadir una unidad"
-                                  disabled={!turno}
-                                  onClick={() =>
-                                    ajustarLinea(p.id, i.id as number, i.cantidad + 1)
-                                  }
-                                >
-                                  +
-                                </button>
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </td>
-                      <td>{formatearPrecio(p.total)}</td>
-                      <td>
-                        {asignado ? (
-                          <span className="badge badge-warning badge-cliente">
-                            Asignado a {p.alias}
-                          </span>
-                        ) : (
-                          <button
-                            className="btn-primary btn-small"
-                            onClick={() => setPedidoACobrar(p)}
-                          >
-                            Cobrar / cerrar
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="cuenta-panel-head">
+          <div>
+            <h3>Pedidos de {etiquetaCuenta}</h3>
+            <span className="muted small">
+              Cuenta General y cuentas de clientes activas.
+            </span>
           </div>
-        )}
-        <p className="muted small">
-          Los pedidos asignados a un alias se cobran desde la cuenta, con
-          "Cerrar división". No se pueden cobrar por separado.
-        </p>
-      </section>
+        </div>
 
-      {/* Ventana de cobro de un pedido */}
-      {pedidoACobrar && (
-        <CobroModal
-          titulo={`Cobrar pedido #${pedidoACobrar.id}`}
-          total={pedidoACobrar.total}
-          error={error}
-          onClose={() => setPedidoACobrar(null)}
-          confirmar={(formaPago) => cerrarPedido(pedidoACobrar.id, formaPago)}
-        />
-      )}
+        {!cuenta ? (
+          <p className="empty-state">
+            {mesaId === ""
+              ? "Seleccioná una mesa o barra para ver su cuenta."
+              : "Cargando la cuenta..."}
+          </p>
+        ) : (
+          <>
+            <div className="cuenta-grupo">
+              <div className="cuenta-grupo-head">
+                <div>
+                  <h4>Cuenta General</h4>
+                  <span className="muted small">
+                    {cuenta.pedidos.length} pedido(s)
+                  </span>
+                </div>
+                <strong>{formatearPrecio(cuenta.total_general)}</strong>
+              </div>
+
+              {lineasGenerales.length === 0 ? (
+                <p className="muted small">Sin pedidos en la Cuenta General.</p>
+              ) : (
+                lineasGenerales.map((item) => (
+                  <div
+                    className="linea-pedido"
+                    key={`general-${item.pedidoId}-${
+                      item.id ?? `${item.producto_id ?? item.indice}-${item.indice}`
+                    }`}
+                  >
+                    <span>
+                      {item.cantidad} × {item.producto_nombre}{" "}
+                      <span className="muted small">
+                        · {formatearPrecio(item.subtotal)}
+                      </span>
+                    </span>
+                    {puedeEditar && item.id !== undefined && (
+                      <span className="linea-acciones">
+                        <button
+                          className="btn-icon"
+                          title="Quitar una unidad"
+                          disabled={ajustando !== null}
+                          onClick={() =>
+                            ajustarLineaGeneral(
+                              item.pedidoId,
+                              item.id as number,
+                              item.cantidad - 1
+                            )
+                          }
+                        >
+                          −
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="Añadir una unidad"
+                          disabled={ajustando !== null}
+                          onClick={() =>
+                            ajustarLineaGeneral(
+                              item.pedidoId,
+                              item.id as number,
+                              item.cantidad + 1
+                            )
+                          }
+                        >
+                          +
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {clientes.map((cliente) => (
+              <div key={`cliente-${cliente.id}`} className="cuenta-grupo">
+                <div className="cuenta-grupo-head">
+                  <div>
+                    <h4>
+                      Cuenta de cliente {cliente.alias}{" "}
+                      {cliente.pagado && (
+                        <span className="badge badge-success">pagado</span>
+                      )}
+                    </h4>
+                    <span className="muted small">
+                      {cliente.items.length} producto(s)
+                    </span>
+                  </div>
+                  <strong>{formatearPrecio(cliente.subtotal)}</strong>
+                </div>
+
+                {cliente.pagado && (
+                  <span className="cuenta-pago-info">
+                    Pagado con {cliente.forma_pago || "—"}
+                    {cliente.fecha_pago
+                      ? ` · ${formatearFechaHora(cliente.fecha_pago)}`
+                      : ""}
+                  </span>
+                )}
+
+                {cliente.items.length === 0 ? (
+                  <p className="muted small">
+                    Sin productos en esta cuenta de cliente.
+                  </p>
+                ) : (
+                  cliente.items.map((item, indice) => (
+                    <div
+                      className="linea-pedido"
+                      key={
+                        item.participante_item_id ??
+                        `${cliente.id}-${
+                          item.producto_id ?? indice
+                        }-${indice}`
+                      }
+                    >
+                      <span>
+                        {item.cantidad} × {item.producto_nombre}{" "}
+                        <span className="muted small">
+                          · {formatearPrecio(item.subtotal)}
+                        </span>
+                      </span>
+                      {puedeEditar &&
+                        !cliente.pagado &&
+                        item.participante_item_id != null && (
+                          <span className="linea-acciones">
+                            <button
+                              className="btn-icon"
+                              title="Quitar una unidad"
+                              disabled={ajustando !== null}
+                              onClick={() =>
+                                ajustarLineaAlias(
+                                  item.participante_item_id as number,
+                                  item.cantidad - 1
+                                )
+                              }
+                            >
+                              −
+                            </button>
+                            <button
+                              className="btn-icon"
+                              title="Añadir una unidad"
+                              disabled={ajustando !== null}
+                              onClick={() =>
+                                ajustarLineaAlias(
+                                  item.participante_item_id as number,
+                                  item.cantidad + 1
+                                )
+                              }
+                            >
+                              +
+                            </button>
+                          </span>
+                        )}
+                    </div>
+                  ))
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </section>
 
       {/* Ventana de asignación del pedido a un alias o a la cuenta general */}
       {mostrarAsignacion && (
@@ -797,6 +985,16 @@ export default function PedidoMesaPage() {
         />
       )}
 
+      {/* Ventana para crear un alias y asignarle el pedido actual */}
+      {mostrarCrearAlias && mesaId !== "" && (
+        <CrearAliasModal
+          titulo="Crear alias para este pedido"
+          descripcion={`Se creará una cuenta de cliente en ${etiquetaCuenta} y el pedido actual se asignará a ese alias.`}
+          onCrear={crearAliasConPedido}
+          onClose={() => setMostrarCrearAlias(false)}
+        />
+      )}
+
       {/* Ventana de cuenta de la mesa */}
       {mostrarCuenta && mesaId !== "" && (
         <CuentaModal
@@ -812,7 +1010,6 @@ export default function PedidoMesaPage() {
             setMostrarTransferir(true);
           }}
           onActualizado={() => {
-            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
             cargarCuenta();
           }}
@@ -826,7 +1023,6 @@ export default function PedidoMesaPage() {
           barraNumero={barraNumero}
           onClose={() => setMostrarDivision(false)}
           onConfirmado={() => {
-            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
             cargarCuenta();
           }}
@@ -841,7 +1037,6 @@ export default function PedidoMesaPage() {
           onClose={() => setMostrarTransferir(false)}
           onTransferido={() => {
             setMostrarTransferir(false);
-            cargarPedidos(Number(mesaId), barraNumero);
             cargarCatalogos();
             cargarCuenta();
           }}

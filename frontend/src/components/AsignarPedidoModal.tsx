@@ -95,8 +95,6 @@ export default function AsignarPedidoModal({
           <span className="muted small">
             {destino.esGeneral
               ? `${destino.itemsCount} pedido(s) general(es)`
-              : destino.divisionId
-              ? `División #${destino.divisionId} · ${destino.itemsCount} producto(s)`
               : `${destino.itemsCount} producto(s)`}
           </span>
         </span>
@@ -167,7 +165,7 @@ export default function AsignarPedidoModal({
         <p className="muted small asignacion-nota">
           Los alias marcados como <strong>Pagado</strong> no admiten pedidos
           nuevos. Si el cliente desea consumir más, usa la cuenta general o crea
-          una nueva división.
+          un alias nuevo desde "Pedido actual".
         </p>
       </div>
     </div>
