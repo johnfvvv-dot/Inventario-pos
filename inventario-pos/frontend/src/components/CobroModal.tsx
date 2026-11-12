@@ -11,20 +11,27 @@ interface Props {
   titulo: string;
   total: number;
   confirmar: (formaPago: string) => void;
+  /** Si se indica, muestra el botón "Aceptar y liberar mesa". */
+  confirmarLiberar?: (formaPago: string) => void;
   onClose: () => void;
   procesando?: boolean;
   error?: string | null;
   extra?: string;
+  textoConfirmar?: string;
+  textoLiberar?: string;
 }
 
 export default function CobroModal({
   titulo,
   total,
   confirmar,
+  confirmarLiberar,
   onClose,
   procesando = false,
   error = null,
   extra,
+  textoConfirmar = "Aceptar",
+  textoLiberar = "Aceptar y liberar mesa",
 }: Props) {
   const [formaPago, setFormaPago] = useState("efectivo");
 
@@ -54,6 +61,7 @@ export default function CobroModal({
                 type="button"
                 className={`forma-pago ${formaPago === f.id ? "activa" : ""}`}
                 onClick={() => setFormaPago(f.id)}
+                disabled={procesando}
               >
                 {f.label}
               </button>
@@ -63,7 +71,7 @@ export default function CobroModal({
 
         {error && <p className="error-msg">{error}</p>}
 
-        <div className="modal-actions">
+        <div className="modal-actions modal-actions-wrap">
           <button className="btn-secondary" onClick={onClose} disabled={procesando}>
             Cancelar
           </button>
@@ -72,8 +80,17 @@ export default function CobroModal({
             onClick={() => confirmar(formaPago)}
             disabled={procesando}
           >
-            {procesando ? "Cobrando..." : `Confirmar cobro (${formaPago})`}
+            {procesando ? "Procesando..." : textoConfirmar}
           </button>
+          {confirmarLiberar && (
+            <button
+              className="btn-warning"
+              onClick={() => confirmarLiberar(formaPago)}
+              disabled={procesando}
+            >
+              {procesando ? "Procesando..." : textoLiberar}
+            </button>
+          )}
         </div>
       </div>
     </div>

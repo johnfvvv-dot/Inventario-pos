@@ -4,14 +4,14 @@ Sistema web y de escritorio de inventario y punto de venta para pequeños
 negocios (bares, restaurantes y cafeterías). Integra inventario, mesas, barras,
 pedidos, cuentas, caja, reportes e historial en una sola aplicación.
 
-**Versión actual:** 1.3.0
+**Versión actual:** 1.4.0
 
 - **Backend:** FastAPI (Python) + SQLAlchemy
 - **Frontend:** React 18 + TypeScript
 - **Base de datos:** Neon PostgreSQL (modo híbrido) / SQLite (respaldo local)
 - **Ejecución:** `.exe` local + Render Free como respaldo + Cloudflare Pages
 
-## Modo híbrido (v1.3.0)
+## Modo híbrido (v1.4.0)
 
 El negocio opera con un único `InventarioPOS.exe` en el PC del mostrador y el
 frontend siempre publicado en Cloudflare Pages:
@@ -25,7 +25,7 @@ frontend siempre publicado en Cloudflare Pages:
 - Mientras la ventana del `.exe` esté abierta, el backend local sigue activo.
   No se instala como servicio de Windows: si se cierra la consola, el backend
   se detiene y el frontend pasa a Render.
-- El login solo muestra **`Inventario POS v1.3.0`**. No hay botón de conexión ni
+- El login solo muestra **`Inventario POS v1.4.0`**. No hay botón de conexión ni
   textos sobre el servidor activo; la detección es transparente.
 
 ### Lógica de detección
@@ -80,7 +80,7 @@ Opciones reales para el celular en la misma WiFi:
 Para habilitar la opción 1, permite el puerto **8000** en el firewall de
 Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
 
-## Funcionalidades (v1.3.0)
+## Funcionalidades (v1.4.0)
 
 ### Módulos
 
@@ -115,10 +115,16 @@ Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
   El pedido completo tiene un solo destino: al elegirlo se suman sus productos
   al subtotal del alias sin modificar a los demás. Los alias ya pagados se
   muestran deshabilitados como **Pagado** y no admiten pedidos nuevos.
-- **Cuentas por mesa y barra:** total en vivo separado en **cuenta general** y
-  **divisiones pendientes**, detalle por pedido y por división, cierre con
-  confirmación (Aceptar / Liberar mesa o barra) sin liberar la mesa/barra por
-  defecto. Las barras se cierran y liberan con el mismo flujo que las mesas.
+- **Cuentas por mesa y barra (v1.4.0):** total en vivo separado en **Cuenta
+  General** y **cuentas de clientes pendientes**. El panel de **Pedidos de mesa**
+  muestra la Cuenta General y cada cuenta de cliente como bloques con la misma
+  estructura, con cantidades, subtotales y botones **− / +** según permiso. Los
+  cobros se hacen desde **Ver cuenta**: **Cobrar Cuenta General**, **Cobrar
+  cuenta [cliente]** (solo la parte de un alias) y **Cobrar cuenta total**
+  (todo, con opción de liberar la mesa/barra). Cobrar primero la Cuenta General
+  no libera el lugar si quedan cuentas de clientes pendientes. Las tarjetas de
+  mesa/barra ya no muestran textos de “pedidos abiertos” ni “clientes
+  pendientes”; conservan estado, valor pendiente y acciones.
 - **División de cuenta:** reparto entre clientes con alias, cantidad exacta por
   producto, subtotales por cliente, resto de la cuenta conservado como bloque
   único y cobro individual de cada alias. Funciona en mesas y en la cuenta
@@ -128,6 +134,22 @@ Windows para redes privadas. La consola del `.exe` muestra la IP LAN activa.
   cerrado con su forma de pago; así el corte de caja, la ganancia y el historial
   contabilizan el dinero real. Ese pedido financiero no duplica el ticket del
   alias y los pagos ya realizados no se sobrescriben al cerrar la cuenta.
+- **Edición de pedidos (v1.4.0):** los botones **− / +** funcionan en los
+  pedidos de la Cuenta General y en las líneas de cada cuenta de cliente. La
+  cantidad `0` elimina la línea. El Administrador siempre puede editar; el
+  Bartender necesita el permiso **“Edición de pedidos”** habilitado por usuario
+  desde **Usuarios**. Sin permiso la pantalla queda en solo lectura y el backend
+  responde `403`.
+- **Crear alias / cliente (v1.4.0):** se crea únicamente desde **Pedidos →
+  Pedido actual**, antes de confirmar, y el pedido actual queda asignado al
+  alias en la misma operación (`nuevo_alias`). El primer pedido puede iniciar
+  una división sin pasar por la Cuenta General. Los pedidos posteriores eligen
+  entre la Cuenta General o cualquier alias activo. Reutiliza la lógica de
+  **Dividir Cuenta**: el alias se suma a la división pendiente más reciente o se
+  crea una nueva si todavía no existe.
+- **Auditoría de cierres (v1.4.0):** cada cobro guarda el usuario que cierra en
+  `pedidos.usuario_cierre_id`; el Historial muestra la columna **“Cobrado por”**
+  junto con el alias, la forma de pago y la fecha/hora.
 - **Liberación controlada:** una mesa o barra con cuentas pendientes no se puede
   liberar; se muestra el aviso correspondiente con acceso directo al pedido
   abierto.
@@ -195,9 +217,9 @@ Panel Mesas
  │              └─ si hay alias activos: elegir alias o Cuenta General
  ├─ [Cuenta]  → ┌─ Resumen general + divisiones pendientes
  │              ├─ Dividir cuenta ────► alias con cantidades por producto
- │              ├─ Cerrar división ───► cobra 1 cliente, los demás siguen
+ │              ├─ Cobrar cuenta [cliente] ► cobra 1 cliente, los demás siguen
  │              ├─ Transferir cuenta ─► mueve la cuenta a otra mesa/plaza libre
- │              └─ Cerrar cuenta ─────► [Aceptar | Liberar mesa/barra] + pago
+ │              └─ Cobrar cuenta total ─► [Aceptar | Liberar mesa/barra] + pago
  ├─ [Liberar]  → si hay pendientes: aviso + "Ver el pedido abierto"
  └─ [×]         → eliminar mesa o barra completa (solo sin cuentas pendientes)
 ```
@@ -326,8 +348,8 @@ yarn start
 ### Cobrar y cerrar una cuenta
 
 1. En **Mesas**, pulsa **Cuenta** sobre la mesa o barra.
-2. Desde allí puedes **Dividir cuenta**, **Cerrar división** de un alias,
-   **Transferir cuenta** o **Cerrar cuenta**. El resumen separa la cuenta
+2. Desde allí puedes **Dividir cuenta**, **Cobrar cuenta [cliente]**,
+   **Transferir cuenta** o **Cobrar cuenta total**. El resumen separa la cuenta
    general de las divisiones pendientes.
 3. Al cerrar, elige la forma de pago y si deseas **Liberar mesa/barra**. Los
    alias que ya pagaron conservan su pago y no se vuelven a cobrar.
@@ -438,7 +460,7 @@ navegador, la PWA o el APK está ejecutando un **build anterior**. La versión
 nuevo no puede apuntar a ngrok.
 
 1. Abre https://inventario-pos-bfw.pages.dev y confirma al pie del login que
-   diga **Inventario POS v1.3.0**.
+   diga **Inventario POS v1.4.0**.
 2. Si aparece la versión vieja, cierra todas las pestañas, borra los datos del
    sitio (o desinstala la PWA) y vuelve a abrir la URL.
 3. En el PC, cierra cualquier `InventarioPOS.exe` viejo y usa el nuevo de
@@ -626,7 +648,8 @@ git push -u origin feature/nueva-funcionalidad
 | `v1.2.0` | — | Modo híbrido: `.exe` con Neon, detección local/Render, botón de conexión local y respaldo en Cloudflare Pages |
 | `v1.2.1` | — | Elimina el endpoint forzado por `REACT_APP_API_URL`, rechaza URLs ngrok, limpia caché del service worker y muestra la versión en el login. Incluye personalización visual del negocio y tickets internos desde Corte de caja |
 | `v1.2.2` | — | Estandariza la tipografía del modal de apertura, aplica máscara de miles sin decimales al Fondo Inicial de Caja y permite imprimir todos los tickets del turno con salto de página |
-| `v1.3.0` (actual) | — | Asigna pedidos nuevos a alias de cuentas divididas o a la Cuenta General, registra los pagos de divisiones en caja e historial, separa totales pendientes y evita sobrescribir pagos ya realizados |
+| `v1.3.0` | — | Asigna pedidos nuevos a alias de cuentas divididas o a la Cuenta General, registra los pagos de divisiones en caja e historial, separa totales pendientes y evita sobrescribir pagos ya realizados |
+| `v1.4.0` (actual) | — | Limpia las tarjetas de mesa/barra, muestra Cuenta General y cuentas de clientes completas en Pedidos, agrega edición de pedidos con permiso, creación de alias desde Pedido actual, cierre independiente de Cuenta General o de cada cuenta de cliente con modal de pago y auditoría del usuario que cobra |
 
 ## Despliegue en la nube
 

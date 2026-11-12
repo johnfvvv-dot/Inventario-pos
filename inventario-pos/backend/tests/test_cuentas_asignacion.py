@@ -27,6 +27,7 @@ from app.models import (  # noqa: E402
     Participante,
     Pedido,
     PedidoItem,
+    Usuario,
 )
 
 
@@ -101,6 +102,14 @@ class CuentasAsignacionTest(unittest.TestCase):
         respuesta = self.client.get("/api/caja/resumen?dias=1")
         self.assertEqual(respuesta.status_code, 200, respuesta.text)
         return float(respuesta.json()["totales"]["total"])
+
+    def stock_de(self, producto: dict) -> int:
+        respuesta = self.client.get("/api/inventario/?limite=500")
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        fila = next(
+            p for p in respuesta.json()["items"] if p["id"] == producto["id"]
+        )
+        return int(fila["stock"])
 
     # ------------------------------------------------------------------
     # Casos
@@ -389,6 +398,283 @@ class CuentasAsignacionTest(unittest.TestCase):
         finally:
             db.close()
 
+    def crear_usuario_bartender(self, alias: str) -> dict:
+        respuesta = self.client.post(
+            "/api/usuarios/",
+            json={
+                "alias": alias,
+                "nombre": alias,
+                "rol": "bartender",
+                "password": "1234",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        return respuesta.json()
+
+    def test_permiso_editar_cantidades(self):
+        mesa = self.crear_mesa(105)
+        respuesta = self.crear_pedido(
+            mesa["id"], [(self.p1, 2), (self.p2, 1)]
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido = respuesta.json()
+        item_hamburguesa = next(
+            i for i in pedido["items"] if i["producto_id"] == self.p1["id"]
+        )
+
+        bartender = self.crear_usuario_bartender("Bartender Cantidades")
+        self.assertFalse(bartender["editar_cantidades"])
+        url = (
+            f"/api/pedidos/{pedido['id']}/items/{item_hamburguesa['id']}"
+            f"?usuario_id={bartender['id']}"
+        )
+
+        # Sin permiso, el backend rechaza el ajuste.
+        respuesta = self.client.put(url, json={"cantidad": 3})
+        self.assertEqual(respuesta.status_code, 403, respuesta.text)
+
+        # El administrador habilita el permiso y ahora sí puede ajustar.
+        respuesta = self.client.put(
+            f"/api/usuarios/{bartender['id']}",
+            json={"editar_cantidades": True},
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertTrue(respuesta.json()["editar_cantidades"])
+
+        respuesta = self.client.put(url, json={"cantidad": 3})
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertEqual(respuesta.json()["total"], 30.0)
+
+        respuesta = self.client.put(url, json={"cantidad": 2})
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertEqual(respuesta.json()["total"], 21.0)
+
+    def test_alias_ajuste_y_cierre_general_independiente(self):
+        total_inicial = self.resumen_total()
+        mesa = self.crear_mesa(106)
+        respuesta = self.crear_pedido(mesa["id"], [(self.p1, 1)])
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido_general = respuesta.json()
+
+        # Crear alias vacío desde el panel de la cuenta.
+        respuesta = self.client.post(
+            "/api/cuentas/alias",
+            json={
+                "mesa_id": mesa["id"],
+                "usuario_id": 1,
+                "alias": "Cliente Vacío",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        division = respuesta.json()
+        self.assertEqual(division["total"], 0.0)
+        self.assertEqual(
+            [p["alias"] for p in division["participantes"]], ["Cliente Vacío"]
+        )
+
+        # El mismo alias no se puede duplicar en la cuenta.
+        respuesta = self.client.post(
+            "/api/cuentas/alias",
+            json={
+                "mesa_id": mesa["id"],
+                "usuario_id": 1,
+                "alias": "cliente vacío",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 409, respuesta.text)
+
+        # Crear alias directamente al cargar un pedido desde Pedidos.
+        respuesta = self.client.post(
+            "/api/pedidos/",
+            json={
+                "mesa_id": mesa["id"],
+                "usuario_id": 1,
+                "nuevo_alias": "Cliente Pedido",
+                "items": [{"producto_id": self.p3["id"], "cantidad": 1}],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido_alias = respuesta.json()
+        self.assertEqual(pedido_alias["estado"], "dividido")
+        self.assertEqual(pedido_alias["alias"], "Cliente Pedido")
+        self.assertIsNotNone(pedido_alias["participante_id"])
+
+        cuenta = self.cuenta(mesa["id"])
+        self.assertEqual(len(cuenta["divisiones"]), 1)
+        aliases = {
+            p["alias"]: p for p in cuenta["divisiones"][0]["participantes"]
+        }
+        self.assertEqual(set(aliases), {"Cliente Vacío", "Cliente Pedido"})
+        cliente_pedido = aliases["Cliente Pedido"]
+        item_alias = cliente_pedido["items"][0]
+
+        bartender = self.crear_usuario_bartender("Bartender Alias")
+        url_ajuste = (
+            f"/api/cuentas/participante-item/{item_alias['participante_item_id']}"
+            f"?usuario_id={bartender['id']}"
+        )
+        respuesta = self.client.put(url_ajuste, json={"cantidad": 2})
+        self.assertEqual(respuesta.status_code, 403, respuesta.text)
+
+        respuesta = self.client.put(
+            f"/api/usuarios/{bartender['id']}",
+            json={"editar_cantidades": True},
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        stock_antes_ajuste = self.stock_de(self.p3)
+        respuesta = self.client.put(url_ajuste, json={"cantidad": 2})
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        ajuste = respuesta.json()
+        self.assertFalse(ajuste["eliminado"])
+        self.assertEqual(ajuste["subtotal"], 4.0)
+        self.assertEqual(ajuste["total_division"], 4.0)
+        # Aumentar la cantidad descuenta la diferencia del inventario.
+        self.assertEqual(self.stock_de(self.p3), stock_antes_ajuste - 1)
+
+        # El pedido vinculado y su total también se actualizan.
+        db = SessionLocal()
+        try:
+            pedido_db = db.query(Pedido).filter(Pedido.id == pedido_alias["id"]).first()
+            self.assertEqual(pedido_db.total, 4.0)
+            item_db = next(
+                i for i in pedido_db.items if i.producto_id == self.p3["id"]
+            )
+            self.assertEqual(item_db.cantidad, 2)
+        finally:
+            db.close()
+
+        # Cobrar primero la Cuenta General no toca las divisiones ni libera la mesa.
+        respuesta = self.client.post(
+            f"/api/cuentas/mesa/{mesa['id']}/cerrar-general"
+            f"?forma_pago=efectivo&usuario_id={bartender['id']}"
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        cuenta = respuesta.json()
+        self.assertEqual(cuenta["total_general"], 0.0)
+        self.assertEqual(cuenta["total_divisiones"], 4.0)
+        self.assertEqual(cuenta["estado_mesa"], "ocupada")
+        self.assertEqual(len(cuenta["divisiones"]), 1)
+
+        # El pedido general quedó auditado con el usuario que cobró.
+        db = SessionLocal()
+        try:
+            pedido_db = (
+                db.query(Pedido)
+                .filter(Pedido.id == pedido_general["id"])
+                .first()
+            )
+            self.assertEqual(pedido_db.estado, "cerrado")
+            self.assertEqual(pedido_db.usuario_cierre_id, bartender["id"])
+            pedido_alias_db = (
+                db.query(Pedido).filter(Pedido.id == pedido_alias["id"]).first()
+            )
+            self.assertEqual(pedido_alias_db.estado, "dividido")
+        finally:
+            db.close()
+
+        # Cobrar el alias tampoco duplica el cobro general.
+        respuesta = self.client.post(
+            f"/api/cuentas/participante/{cliente_pedido['id']}/pagar"
+            f"?forma_pago=tarjeta&usuario_id={bartender['id']}"
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        pagado = respuesta.json()
+        self.assertTrue(pagado["pagado"])
+        self.assertEqual(pagado["forma_pago"], "tarjeta")
+        self.assertIsNotNone(pagado["fecha_pago"])
+
+        db = SessionLocal()
+        try:
+            cliente_db = (
+                db.query(Participante)
+                .filter(Participante.id == cliente_pedido["id"])
+                .first()
+            )
+            pago_db = (
+                db.query(Pedido)
+                .filter(Pedido.id == cliente_db.pedido_pago_id)
+                .first()
+            )
+            self.assertEqual(pago_db.total, 4.0)
+            self.assertEqual(pago_db.usuario_cierre_id, bartender["id"])
+            self.assertEqual(pago_db.participante_id, cliente_pedido["id"])
+            pago_id = pago_db.id
+        finally:
+            db.close()
+
+        # La división sigue pendiente por el alias vacío y la mesa ocupada.
+        cuenta = self.cuenta(mesa["id"])
+        self.assertEqual(cuenta["estado_mesa"], "ocupada")
+        self.assertEqual(len(cuenta["divisiones"]), 1)
+        self.assertEqual(cuenta["divisiones"][0]["total_pendiente"], 0.0)
+
+        # Caja suma exactamente la cuenta general (9) y el alias (4).
+        self.assertAlmostEqual(
+            self.resumen_total() - total_inicial, 13.0, places=2
+        )
+
+        # El ticket del alias aparece una sola vez y el pago financiero no.
+        tickets = self.client.get("/api/caja/tickets").json()["tickets"]
+        self.assertTrue(
+            any(
+                t["id"] == f"participante-{cliente_pedido['id']}"
+                for t in tickets
+            )
+        )
+        self.assertTrue(
+            any(t["id"] == f"pedido-{pedido_general['id']}" for t in tickets)
+        )
+        # El pedido financiero del alias no genera un ticket duplicado.
+        self.assertFalse(any(t["id"] == f"pedido-{pago_id}" for t in tickets))
+
+    def test_eliminar_linea_alias_limpia_division_y_mesa(self):
+        mesa = self.crear_mesa(107)
+        respuesta = self.crear_pedido(mesa["id"], [(self.p1, 1)])
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+
+        respuesta = self.dividir(
+            [
+                {
+                    "alias": "Cliente Único",
+                    "items": [{"producto_id": self.p1["id"], "cantidad": 1}],
+                }
+            ],
+            mesa_id=mesa["id"],
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        division = respuesta.json()
+        participante = division["participantes"][0]
+        item_id = participante["items"][0]["id"]
+
+        # El pedido descontó 1 unidad; dividir no vuelve a tocar el stock.
+        stock_con_pedido = self.stock_de(self.p1)
+
+        respuesta = self.client.put(
+            f"/api/cuentas/participante-item/{item_id}?usuario_id=1",
+            json={"cantidad": 0},
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        ajuste = respuesta.json()
+        self.assertTrue(ajuste["eliminado"])
+
+        # Al eliminar la línea se devuelve la unidad al inventario.
+        self.assertEqual(self.stock_de(self.p1), stock_con_pedido + 1)
+        self.assertIsNone(ajuste["participante_id"])
+        self.assertIsNone(ajuste["division_id"])
+        self.assertEqual(ajuste["total_division"], 0.0)
+
+        db = SessionLocal()
+        try:
+            self.assertEqual(
+                db.query(Division).filter(Division.id == division["id"]).count(),
+                0,
+            )
+            mesa_db = db.query(Mesa).filter(Mesa.id == mesa["id"]).first()
+            self.assertEqual(mesa_db.estado, "disponible")
+            self.assertIsNone(mesa_db.fecha_ocupacion)
+        finally:
+            db.close()
+
     def test_resumen_mesa_solo_muestra_pendiente(self):
         mesa = self.crear_mesa(104)
         respuesta = self.crear_pedido(mesa["id"], [(self.p1, 2)])
@@ -421,7 +707,82 @@ class CuentasAsignacionTest(unittest.TestCase):
         listado = self.client.get("/api/mesas/").json()
         fila = next(m for m in listado if m["id"] == mesa["id"])
         self.assertEqual(fila["total_cuenta"], 9.0)
-        self.assertIn("1 cliente pendiente", fila["detalle_pendiente"])
+        self.assertTrue(fila["tiene_cuenta_pendiente"])
+        # Las tarjetas ya no muestran el detalle textual de pendientes.
+        self.assertEqual(fila["detalle_pendiente"], "")
+
+
+    def test_primer_pedido_puede_iniciar_division_sin_cuenta_general(self):
+        mesa = self.crear_mesa(108)
+
+        # El primer pedido de la mesa puede nacer directamente en un alias:
+        # no se crea una Cuenta General previa.
+        respuesta = self.client.post(
+            "/api/pedidos/",
+            json={
+                "mesa_id": mesa["id"],
+                "usuario_id": 1,
+                "nuevo_alias": "John",
+                "items": [{"producto_id": self.p1["id"], "cantidad": 2}],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido = respuesta.json()
+        self.assertEqual(pedido["estado"], "dividido")
+        self.assertEqual(pedido["alias"], "John")
+        self.assertIsNotNone(pedido["participante_id"])
+
+        cuenta = self.cuenta(mesa["id"])
+        self.assertEqual(cuenta["total_general"], 0.0)
+        self.assertEqual(cuenta["total_divisiones"], 18.0)
+        self.assertEqual(cuenta["total"], 18.0)
+        self.assertEqual(cuenta["estado_mesa"], "ocupada")
+        self.assertEqual(len(cuenta["divisiones"]), 1)
+        participantes = cuenta["divisiones"][0]["participantes"]
+        self.assertEqual([p["alias"] for p in participantes], ["John"])
+        self.assertEqual(participantes[0]["subtotal"], 18.0)
+        self.assertEqual(len(participantes[0]["items"]), 1)
+
+        # Los pedidos posteriores pueden elegir Cuenta General o el alias John.
+        respuesta = self.crear_pedido(mesa["id"], [(self.p3, 1)])
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        self.assertEqual(respuesta.json()["estado"], "abierto")
+
+        respuesta = self.crear_pedido(
+            mesa["id"],
+            [(self.p3, 1)],
+            participante_id=pedido["participante_id"],
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        self.assertEqual(respuesta.json()["estado"], "dividido")
+
+        cuenta = self.cuenta(mesa["id"])
+        self.assertEqual(cuenta["total_general"], 2.0)
+        self.assertEqual(cuenta["total_divisiones"], 20.0)
+        self.assertEqual(cuenta["total"], 22.0)
+
+    def test_administrador_siempre_puede_editar_cantidades(self):
+        mesa = self.crear_mesa(109)
+        respuesta = self.crear_pedido(mesa["id"], [(self.p1, 1)])
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido = respuesta.json()
+        item = pedido["items"][0]
+
+        # El Administrador no depende del permiso de edición de pedidos.
+        db = SessionLocal()
+        try:
+            admin = db.query(Usuario).filter(Usuario.id == 1).first()
+            self.assertEqual(admin.rol, "admin")
+            self.assertFalse(bool(admin.editar_cantidades))
+        finally:
+            db.close()
+
+        respuesta = self.client.put(
+            f"/api/pedidos/{pedido['id']}/items/{item['id']}?usuario_id=1",
+            json={"cantidad": 2},
+        )
+        self.assertEqual(respuesta.status_code, 200, respuesta.text)
+        self.assertEqual(respuesta.json()["total"], 18.0)
 
 
 if __name__ == "__main__":

@@ -13,10 +13,13 @@ export default function BartenderLayout() {
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId = usuario?.id;
   const negocio = useConfiguracionNegocio();
-  // El permiso lo define el Administrador desde Usuarios y se guarda en la
-  // base. Por defecto el Bartender solo consulta el inventario.
+  // Los permisos los define el Administrador desde Usuarios y se guardan en
+  // la base. Por defecto el Bartender solo consulta inventario y cantidades.
   const [ingresoStock, setIngresoStock] = useState<boolean>(
     Boolean(usuario?.ingreso_stock)
+  );
+  const [editarCantidades, setEditarCantidades] = useState<boolean>(
+    Boolean(usuario?.editar_cantidades)
   );
 
   useEffect(() => {
@@ -28,15 +31,26 @@ export default function BartenderLayout() {
         const datos: any = await api.getUsuario(usuarioId);
         if (!vigente) return;
 
-        const habilitado = Boolean(datos?.ingreso_stock);
-        setIngresoStock(habilitado);
+        const habilitadoStock = Boolean(datos?.ingreso_stock);
+        const habilitadoCantidades = Boolean(datos?.editar_cantidades);
+        setIngresoStock(habilitadoStock);
+        setEditarCantidades(habilitadoCantidades);
 
-        // Mantiene sincronizada la sesión guardada en el navegador.
+        // Mantiene sincronizada la sesión guardada en el navegador. El evento
+        // permite que las pantallas abiertas reaccionen sin recargar.
         const sesion = JSON.parse(localStorage.getItem("user") || "{}");
-        if (Boolean(sesion.ingreso_stock) !== habilitado) {
-          localStorage.setItem(
-            "user",
-            JSON.stringify({ ...sesion, ingreso_stock: habilitado })
+        const cambioStock = Boolean(sesion.ingreso_stock) !== habilitadoStock;
+        const cambioCantidades =
+          Boolean(sesion.editar_cantidades) !== habilitadoCantidades;
+        if (cambioStock || cambioCantidades) {
+          const actualizada = {
+            ...sesion,
+            ingreso_stock: habilitadoStock,
+            editar_cantidades: habilitadoCantidades,
+          };
+          localStorage.setItem("user", JSON.stringify(actualizada));
+          window.dispatchEvent(
+            new CustomEvent("usuario-actualizado", { detail: actualizada })
           );
         }
       } catch {
@@ -104,7 +118,12 @@ export default function BartenderLayout() {
           </nav>
 
           <main className="admin-content">
-            <Outlet context={{ ingresoStockHabilitado: ingresoStock }} />
+            <Outlet
+              context={{
+                ingresoStockHabilitado: ingresoStock,
+                editarCantidadesHabilitado: editarCantidades,
+              }}
+            />
           </main>
         </div>
       </div>

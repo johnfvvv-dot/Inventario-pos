@@ -44,6 +44,7 @@ class UsuarioUpdate(BaseModel):
     rol: Optional[str] = Field(default=None, max_length=20)
     activo: Optional[bool] = None
     ingreso_stock: Optional[bool] = None
+    editar_cantidades: Optional[bool] = None
 
 
 class CambiarClaveIn(BaseModel):
@@ -57,6 +58,7 @@ class UsuarioOut(BaseModel):
     rol: str
     activo: bool = True
     ingreso_stock: bool = False
+    editar_cantidades: bool = False
     creado_en: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +138,7 @@ class PedidoHistorialOut(BaseModel):
     mesa_numero: Optional[int] = None
     mesa_etiqueta: Optional[str] = None
     usuario_nombre: str = ""
+    usuario_cierre_nombre: str = ""
     productos: List[str] = []
 
 
@@ -332,12 +335,32 @@ class PedidoCreate(BaseModel):
     usuario_id: int = Field(..., gt=0)
     # NULL o ausente = cuenta general de la mesa/barra.
     participante_id: Optional[int] = Field(default=None, gt=0)
+    # Si se envía, crea el alias y le asigna todo el pedido en una transacción.
+    nuevo_alias: Optional[str] = Field(default=None, min_length=1, max_length=60)
     items: List[PedidoItemCreate]
+
+    @model_validator(mode="after")
+    def _destino_unico(self):
+        if self.participante_id is not None and self.nuevo_alias:
+            raise ValueError(
+                "Elegí un alias existente o creá uno nuevo, pero no ambos."
+            )
+        return self
 
 
 class PedidoItemAjuste(BaseModel):
     """Ajuste de cantidad de una línea de un pedido abierto."""
     cantidad: int = Field(..., ge=0)
+
+
+class AjusteLineaOut(BaseModel):
+    """Resultado de ajustar una línea de la cuenta de un alias."""
+
+    participante_id: Optional[int] = None
+    division_id: Optional[int] = None
+    eliminado: bool = False
+    subtotal: float = 0.0
+    total_division: float = 0.0
 
 
 class PedidoOut(BaseModel):
@@ -353,6 +376,7 @@ class PedidoOut(BaseModel):
     participante_id: Optional[int] = None
     alias: Optional[str] = None
     es_pago_division: bool = False
+    usuario_cierre_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -367,6 +391,9 @@ class LineaCuenta(BaseModel):
     subtotal: float
     alias: Optional[str] = None
     participante_id: Optional[int] = None
+    # Identificadores para editar la línea desde el panel de pedidos.
+    participante_item_id: Optional[int] = None
+    pedido_id: Optional[int] = None
 
 
 class ParticipanteResumen(BaseModel):
@@ -374,6 +401,8 @@ class ParticipanteResumen(BaseModel):
     alias: str
     subtotal: float
     pagado: bool
+    forma_pago: Optional[str] = None
+    fecha_pago: Optional[datetime] = None
     items: List[LineaCuenta]
 
 
@@ -422,6 +451,21 @@ class DivisionCreate(BaseModel):
     participantes: List[ParticipanteCreate]
 
 
+class AliasCreate(BaseModel):
+    """Crea un cliente/alias vacío para una mesa o barra."""
+
+    mesa_id: Optional[int] = Field(default=None, gt=0)
+    barra_numero: Optional[int] = Field(default=None, gt=0)
+    usuario_id: int = Field(..., gt=0)
+    alias: str = Field(..., min_length=1, max_length=60)
+
+    @model_validator(mode="after")
+    def _cuenta_unica(self):
+        if (self.mesa_id is None) == (self.barra_numero is None):
+            raise ValueError("Indicá la mesa o la barra, pero no ambas.")
+        return self
+
+
 class ParticipanteItemOut(BaseModel):
     id: int
     producto_id: int
@@ -436,6 +480,8 @@ class ParticipanteOut(BaseModel):
     alias: str
     subtotal: float
     pagado: bool
+    forma_pago: Optional[str] = None
+    fecha_pago: Optional[datetime] = None
     items: List[ParticipanteItemOut]
 
 

@@ -30,7 +30,6 @@ interface Mesa {
   posicion: number;
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
-  detalle_pendiente?: string;
   posiciones?: Posicion[];
 }
 
@@ -239,6 +238,7 @@ export default function MesasPage() {
             min="1"
             value={nuevaMesa.numero}
             onChange={(e) => setNuevaMesa((m) => ({ ...m, numero: e.target.value }))}
+            placeholder="Ej: 1"
             required
           />
         </div>
@@ -282,7 +282,7 @@ export default function MesasPage() {
           />
         </div>
         <button type="submit" className="btn-primary">
-          + Crear barra
+          Crear barra
         </button>
       </form>
 
@@ -304,11 +304,6 @@ export default function MesasPage() {
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
                 {formatearPrecio(mesa.total_cuenta || 0)}
-              </div>
-            )}
-            {mesa.detalle_pendiente && (
-              <div className="muted small mesa-detalle">
-                {mesa.detalle_pendiente}
               </div>
             )}
 

@@ -1,19 +1,25 @@
 /**
- * Ventana emergente con la cuenta actual de una mesa.
- * - Muestra el total, el detalle por pedido y las divisiones pendientes.
- * - Permite cerrar la cuenta SIN liberar la mesa (genera una nueva cuenta).
- * - Permite abrir la ventana de división entre clientes.
+ * Ventana emergente con la cuenta actual de una mesa o barra.
+ *
+ * - La Cuenta General y cada Cuenta de Cliente tienen la misma estructura.
+ * - "Cobrar Cuenta General" cobra solo los pedidos generales.
+ * - "Cobrar cuenta [cliente]" cobra solo la parte de un cliente.
+ * - "Cobrar cuenta total" cobra la Cuenta General y todas las partes
+ *   pendientes, con opción de liberar el lugar.
  */
 
 import { useEffect, useState } from "react";
-import { api, FORMAS_PAGO } from "../services/api";
-import { formatearPrecio } from "../utils/format";
+import { api } from "../services/api";
+import { formatearFechaHora, formatearPrecio } from "../utils/format";
+import CobroModal from "./CobroModal";
 
 interface LineaItem {
   producto_id: number;
   producto_nombre: string;
   cantidad: number;
   subtotal: number;
+  participante_item_id?: number | null;
+  pedido_id?: number | null;
 }
 
 interface Participante {
@@ -21,6 +27,8 @@ interface Participante {
   alias: string;
   subtotal: number;
   pagado: boolean;
+  forma_pago?: string | null;
+  fecha_pago?: string | null;
   items: LineaItem[];
 }
 
@@ -52,6 +60,11 @@ interface Cuenta {
   divisiones: Division[];
 }
 
+type Cobro =
+  | { tipo: "general"; total: number }
+  | { tipo: "alias"; participanteId: number; alias: string; total: number }
+  | { tipo: "cuenta"; total: number };
+
 interface Props {
   mesaId: number;
   /** Si se indica, la cuenta es la agregada de la barra con ese numero */
@@ -74,13 +87,15 @@ export default function CuentaModal({
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
-  const [confirmacion, setConfirmacion] = useState(false);
-  const [formaPago, setFormaPago] = useState("efectivo");
+  const [errorCobro, setErrorCobro] = useState<string | null>(null);
+  const [cobro, setCobro] = useState<Cobro | null>(null);
 
   const esBarra = barraNumero != null;
   const etiqueta = esBarra ? "barra" : "mesa";
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
+  const nombreUsuario: string =
+    usuario?.nombre || usuario?.alias || "el usuario actual";
 
   const cargar = async () => {
     try {
@@ -100,66 +115,91 @@ export default function CuentaModal({
     return () => clearTimeout(timer);
   }, [mesaId, barraNumero]);
 
-  const cerrarCuenta = async (liberar = false) => {
+  const confirmarCobro = async (formaPago: string, liberar = false) => {
+    if (!cobro) return;
     setProcesando(true);
+    setErrorCobro(null);
     setError(null);
+    setMensaje(null);
     try {
-      if (barraNumero != null) {
-        // Cobra la cuenta agregada de la barra y libera todas sus plazas si se pidió
-        await api.cerrarCuentaBarra(barraNumero, liberar, formaPago);
-      } else {
-        // 1) Cobrar toda la cuenta (pedidos + divisiones)
-        await api.cerrarCuentaMesa(mesaId, false, formaPago);
-        // 2) Si se pidió liberar, el backend valida que no queden cuentas pendientes
-        if (liberar) {
-          await api.liberarMesa(mesaId);
+      if (cobro.tipo === "general") {
+        if (barraNumero != null) {
+          await api.cerrarGeneralBarra(
+            barraNumero,
+            formaPago,
+            usuarioId,
+            true
+          );
+        } else {
+          await api.cerrarGeneralMesa(mesaId, formaPago, usuarioId, true);
         }
+        setMensaje(
+          `Cuenta General cobrada con ${formaPago} por ${nombreUsuario}. Las cuentas de clientes pendientes, si existen, siguen abiertas.`
+        );
+      } else if (cobro.tipo === "alias") {
+        await api.pagarParticipante(
+          cobro.participanteId,
+          formaPago,
+          usuarioId
+        );
+        setMensaje(
+          `Cuenta de cliente "${cobro.alias}" cobrada con ${formaPago} por ${nombreUsuario}.`
+        );
+      } else {
+        if (barraNumero != null) {
+          await api.cerrarCuentaBarra(
+            barraNumero,
+            liberar,
+            formaPago,
+            usuarioId
+          );
+        } else {
+          await api.cerrarCuentaMesa(
+            mesaId,
+            liberar,
+            formaPago,
+            usuarioId
+          );
+        }
+        setCobro(null);
+        onActualizado?.();
+        onClose();
+        return;
       }
-      setConfirmacion(false);
-      setMensaje(
-        liberar
-          ? `Cuenta cerrada y ${etiqueta} liberada.`
-          : `Cuenta cerrada. La ${etiqueta} permanece ocupada para una nueva cuenta.`
-      );
-      await cargar();
-      onActualizado?.();
-      onClose();
-    } catch (err: any) {
-      setError(err.message);
-      setProcesando(false);
-    }
-  };
-
-  const pagarDivision = async (divisionId: number) => {
-    setProcesando(true);
-    setError(null);
-    try {
-      await api.pagarDivision(divisionId, formaPago, usuarioId);
-      setMensaje("División cobrada.");
+      setCobro(null);
       await cargar();
       onActualizado?.();
     } catch (err: any) {
-      setError(err.message);
+      setErrorCobro(err.message);
     } finally {
       setProcesando(false);
     }
   };
 
-  /** Cierra solo la cuenta de un alias: ese cliente paga su parte */
-  const cerrarAlias = async (participanteId: number, alias: string) => {
-    setProcesando(true);
-    setError(null);
-    try {
-      await api.pagarParticipante(participanteId, formaPago, usuarioId);
-      setMensaje(`"${alias}" pagó su parte. La cuenta sigue abierta para los demás.`);
-      await cargar();
-      onActualizado?.();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setProcesando(false);
-    }
+  const cerrarCobro = () => {
+    if (procesando) return;
+    setCobro(null);
+    setErrorCobro(null);
   };
+
+  const lineasGenerales = cuenta
+    ? cuenta.pedidos.flatMap((pedido) =>
+        pedido.items.map((item, indice) => ({
+          ...item,
+          pedidoId: pedido.id,
+          indice,
+        }))
+      )
+    : [];
+
+  const clientes = cuenta
+    ? cuenta.divisiones.flatMap((division) =>
+        division.participantes.map((participante) => ({
+          ...participante,
+          divisionId: division.id,
+        }))
+      )
+    : [];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -167,9 +207,7 @@ export default function CuentaModal({
         <div className="modal-head">
           <h3>
             {cuenta
-              ? `Cuenta ${
-                  barraNumero != null ? "Barra" : "Mesa"
-                } ${cuenta.mesa_numero}`
+              ? `Cuenta ${esBarra ? "Barra" : "Mesa"} ${cuenta.mesa_numero}`
               : "Cargando cuenta..."}
           </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
@@ -184,11 +222,11 @@ export default function CuentaModal({
           <>
             <div className="cuenta-resumen">
               <div className="cuenta-resumen-item">
-                <span>Cuenta general</span>
+                <span>Cuenta General</span>
                 <strong>{formatearPrecio(cuenta.total_general || 0)}</strong>
               </div>
               <div className="cuenta-resumen-item">
-                <span>Divisiones pendientes</span>
+                <span>Cuentas de clientes pendientes</span>
                 <strong>{formatearPrecio(cuenta.total_divisiones || 0)}</strong>
               </div>
               <div className="cuenta-total">
@@ -198,188 +236,196 @@ export default function CuentaModal({
             </div>
 
             <div className="cuenta-scroll">
-              {cuenta.pedidos.length === 0 && cuenta.divisiones.length === 0 && (
+              {cuenta.pedidos.length === 0 && clientes.length === 0 && (
                 <p className="empty-state">La cuenta está vacía.</p>
               )}
 
-              {cuenta.pedidos.length > 0 && (
-                <div className="cuenta-grupo-titulo">
-                  <h4>
-                    Cuenta general de {esBarra ? "la barra" : "la mesa"}
-                  </h4>
-                  <span className="badge badge-warning">
-                    {cuenta.pedidos.length} pedido(s)
-                  </span>
+              <div className="cuenta-grupo">
+                <div className="cuenta-grupo-head">
+                  <div>
+                    <h4>Cuenta General de {esBarra ? "la barra" : "la mesa"}</h4>
+                    <span className="muted small">
+                      {cuenta.pedidos.length} pedido(s) ·{" "}
+                      {formatearPrecio(cuenta.total_general || 0)}
+                    </span>
+                  </div>
+                  {cuenta.total_general > 0 && (
+                    <button
+                      className="btn-primary btn-small cuenta-cobro-btn"
+                      onClick={() =>
+                        setCobro({
+                          tipo: "general",
+                          total: cuenta.total_general,
+                        })
+                      }
+                      disabled={procesando}
+                    >
+                      Cobrar Cuenta General
+                    </button>
+                  )}
                 </div>
-              )}
 
-              {cuenta.pedidos.map((pedido) => (
-                <div key={`p-${pedido.id}`} className="cuenta-bloque">
-                  <h4>Pedido #{pedido.id}</h4>
-                  {pedido.items.map((item, i) => (
-                    <div key={i} className="cuenta-linea">
+                {lineasGenerales.length === 0 ? (
+                  <p className="muted small">
+                    Sin productos pendientes en la Cuenta General.
+                  </p>
+                ) : (
+                  lineasGenerales.map((item, indice) => (
+                    <div
+                      className="cuenta-linea"
+                      key={`general-${item.pedidoId}-${
+                        item.producto_id ?? indice
+                      }-${item.indice}`}
+                    >
                       <span>
                         {item.cantidad} × {item.producto_nombre}
                       </span>
                       <strong>{formatearPrecio(item.subtotal)}</strong>
                     </div>
-                  ))}
-                  <div className="cuenta-linea cuenta-subtotal">
-                    <span>Subtotal pedido</span>
-                    <strong>{formatearPrecio(pedido.total)}</strong>
+                  ))
+                )}
+              </div>
+
+              {clientes.map((cliente) => (
+                <div
+                  key={`cliente-${cliente.id}`}
+                  className="cuenta-grupo"
+                >
+                  <div className="cuenta-grupo-head">
+                    <div>
+                      <h4>
+                        Cuenta de cliente {cliente.alias}{" "}
+                        {cliente.pagado && (
+                          <span className="badge badge-success">pagado</span>
+                        )}
+                      </h4>
+                      <span className="muted small">
+                        {cliente.items.length} producto(s) ·{" "}
+                        {formatearPrecio(cliente.subtotal)}
+                      </span>
+                    </div>
+                    {!cliente.pagado && (
+                      <button
+                        className="btn-primary btn-small cuenta-cobro-btn"
+                        title={`Cobrar solo la cuenta de ${cliente.alias}`}
+                        onClick={() =>
+                          setCobro({
+                            tipo: "alias",
+                            participanteId: cliente.id,
+                            alias: cliente.alias,
+                            total: cliente.subtotal,
+                          })
+                        }
+                        disabled={procesando}
+                      >
+                        Cobrar cuenta {cliente.alias}
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
 
-              {cuenta.divisiones.length > 0 && (
-                <div className="cuenta-grupo-titulo">
-                  <h4>Divisiones de clientes</h4>
-                  <span className="muted small">
-                    Los alias pagados no admiten pedidos nuevos.
-                  </span>
-                </div>
-              )}
-
-              {cuenta.divisiones.map((division) => (
-                <div key={`d-${division.id}`} className="cuenta-bloque">
-                  <div className="cuenta-bloque-head">
-                    <h4>División #{division.id}</h4>
-                    <span className="muted small">
-                      Total {formatearPrecio(division.total)} · Pendiente{" "}
-                      {formatearPrecio(division.total_pendiente)}
+                  {cliente.pagado && (
+                    <span className="cuenta-pago-info">
+                      Pagado con {cliente.forma_pago || "—"}
+                      {cliente.fecha_pago
+                        ? ` · ${formatearFechaHora(cliente.fecha_pago)}`
+                        : ""}
                     </span>
-                  </div>
+                  )}
 
-                  {division.participantes.map((p) => (
-                    <div key={p.id} className="cuenta-participante">
-                      <div className="cuenta-linea">
+                  {cliente.items.length === 0 ? (
+                    <p className="muted small">
+                      Sin productos en esta cuenta de cliente.
+                    </p>
+                  ) : (
+                    cliente.items.map((item, indice) => (
+                      <div
+                        className="cuenta-linea"
+                        key={`cliente-${cliente.id}-${
+                          item.producto_id ?? indice
+                        }-${indice}`}
+                      >
                         <span>
-                          <strong>{p.alias}</strong>{" "}
-                          {p.pagado ? (
-                            <span className="badge badge-success">pagado</span>
-                          ) : (
-                            <span className="badge badge-warning">pendiente</span>
-                          )}
+                          {item.cantidad} × {item.producto_nombre}
                         </span>
-                        <span>
-                          {formatearPrecio(p.subtotal)}
-                          {!p.pagado && (
-                            <button
-                              className="btn-secondary btn-small"
-                              title={`Cerrar la división de ${p.alias}`}
-                              onClick={() => cerrarAlias(p.id, p.alias)}
-                              disabled={procesando}
-                            >
-                              Cerrar división
-                            </button>
-                          )}
-                        </span>
+                        <strong>{formatearPrecio(item.subtotal)}</strong>
                       </div>
-                      {p.items.map((item, i) => (
-                        <div key={i} className="cuenta-linea small">
-                          <span>
-                            {item.cantidad} × {item.producto_nombre}
-                          </span>
-                          <span>{formatearPrecio(item.subtotal)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-
-                  {division.participantes.some((p) => !p.pagado) && (
-                    <div className="cuenta-linea cuenta-subtotal">
-                      <span>Pendiente de cobro</span>
-                      <strong>{formatearPrecio(division.total_pendiente)}</strong>
-                    </div>
+                    ))
                   )}
                 </div>
               ))}
             </div>
 
-            <div className="form-group">
-              <label>Forma de pago</label>
-              <div className="formas-pago">
-                {FORMAS_PAGO.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`forma-pago ${formaPago === f.id ? "activa" : ""}`}
-                    onClick={() => setFormaPago(f.id)}
-                    disabled={procesando}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+            <div className="modal-actions modal-actions-wrap">
+              {onDividir && (
+                <button
+                  className="btn-secondary"
+                  onClick={onDividir}
+                  disabled={procesando}
+                >
+                  Dividir cuenta
+                </button>
+              )}
+              {onTransferir && (
+                <button
+                  className="btn-secondary"
+                  onClick={onTransferir}
+                  disabled={procesando}
+                >
+                  Transferir cuenta
+                </button>
+              )}
+              <button
+                className="btn-primary"
+                onClick={() =>
+                  setCobro({
+                    tipo: "cuenta",
+                    total: cuenta.total,
+                  })
+                }
+                disabled={procesando || cuenta.total === 0}
+              >
+                Cobrar cuenta total
+              </button>
             </div>
 
-            {confirmacion ? (
-              <div className="confirm-panel">
-                <p className="confirm-pregunta">
-                  ¿Cerrar la cuenta de esta {etiqueta}? La {etiqueta} seguirá ocupada.
-                </p>
-                <p className="muted small">
-                  Se cobrarán la cuenta general y los clientes pendientes. Los
-                  alias que ya pagaron conservan su forma de pago y su fecha.
-                </p>
-                <div className="modal-actions">
-                  <button
-                    className="btn-secondary"
-                    onClick={() => setConfirmacion(false)}
-                    disabled={procesando}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    className="btn-primary"
-                    onClick={() => cerrarCuenta(false)}
-                    disabled={procesando}
-                  >
-                    {procesando ? "Procesando..." : "Aceptar"}
-                  </button>
-                  <button
-                    className="btn-warning"
-                    onClick={() => cerrarCuenta(true)}
-                    disabled={procesando}
-                  >
-                    Liberar {etiqueta}
-                  </button>
-                </div>
-                <p className="muted small">
-                  Cobro con <strong>{formaPago}</strong>. "Aceptar" cobra la cuenta y
-                  mantiene la {etiqueta} ocupada. "Liberar {etiqueta}" cobra y deja la{" "}
-                  {etiqueta} disponible.
-                </p>
-              </div>
-            ) : (
-              <div className="modal-actions">
-                {onDividir && (
-                  <button className="btn-secondary" onClick={onDividir} disabled={procesando}>
-                    Dividir cuenta
-                  </button>
-                )}
-                {onTransferir && (
-                  <button className="btn-secondary" onClick={onTransferir} disabled={procesando}>
-                    Transferir cuenta
-                  </button>
-                )}
-                <button
-                  className="btn-primary"
-                  onClick={() => setConfirmacion(true)}
-                  disabled={procesando || cuenta.total === 0}
-                >
-                  {procesando ? "Procesando..." : "Cerrar cuenta"}
-                </button>
-              </div>
-            )}
             <p className="muted small">
-              "Cerrar división" cobra la parte de un solo cliente y mantiene abierta la
-              cuenta de los demás. "Cerrar cuenta" cobra la cuenta general y las partes
-              pendientes; "Aceptar" mantiene la {etiqueta} ocupada y "Liberar{" "}
-              {etiqueta}" la deja disponible. Los nuevos pedidos se asignan al
-              confirmarlos desde la pantalla de pedido.
+              "Cobrar Cuenta General" cobra únicamente los pedidos generales.
+              "Cobrar cuenta [Nombre del cliente]" cobra solo la parte de un
+              cliente. "Cobrar cuenta total" cobra la Cuenta General y todas las
+              cuentas de clientes pendientes.
             </p>
           </>
+        )}
+
+        {cobro && (
+          <CobroModal
+            titulo={
+              cobro.tipo === "general"
+                ? "Cobrar Cuenta General"
+                : cobro.tipo === "alias"
+                ? `Cobrar cuenta de "${cobro.alias}"`
+                : `Cobrar cuenta total de la ${etiqueta}`
+            }
+            total={cobro.total}
+            extra={
+              cobro.tipo === "general"
+                ? "Solo se cobra la Cuenta General. Las cuentas de clientes pendientes, si existen, permanecen abiertas."
+                : cobro.tipo === "alias"
+                ? `Se registra el pago de ${cobro.alias} con ${nombreUsuario}.`
+                : "Se cobrarán la Cuenta General y todas las cuentas de clientes pendientes. \"Aceptar\" mantiene el lugar ocupado; \"Aceptar y liberar mesa\" lo deja disponible."
+            }
+            procesando={procesando}
+            error={errorCobro}
+            confirmar={(formaPago) => confirmarCobro(formaPago, false)}
+            confirmarLiberar={
+              cobro.tipo === "cuenta"
+                ? (formaPago) => confirmarCobro(formaPago, true)
+                : undefined
+            }
+            textoConfirmar="Aceptar"
+            textoLiberar="Aceptar y liberar mesa"
+            onClose={cerrarCobro}
+          />
         )}
       </div>
     </div>
