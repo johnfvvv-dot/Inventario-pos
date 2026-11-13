@@ -906,8 +906,9 @@ export default function ReportesPage() {
             <Icono nombre="ganancias" />
           </span>
           <p className="reportes-kpi-label">Ganancias</p>
-          <div className="reportes-kpi-valor-fila">
-            <p className="reportes-kpi-valor">{formatearPrecio(ganancia)}</p>
+          <p className="reportes-kpi-valor">{formatearPrecio(ganancia)}</p>
+          <div className="reportes-kpi-detalle-fila">
+            <p className="reportes-kpi-detalle">{filtro.etiqueta}</p>
             <span
               className="reportes-margen"
               title="Margen de ganancia sobre las ventas"
@@ -915,7 +916,6 @@ export default function ReportesPage() {
               {margenGanancia.toFixed(1)}%
             </span>
           </div>
-          <p className="reportes-kpi-detalle">{filtro.etiqueta}</p>
         </article>
 
         <article className="reportes-kpi reportes-kpi--operaciones">
