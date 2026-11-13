@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
+import Icon from "./Icon";
 
 interface PosicionBarra {
   id: number;
@@ -188,9 +189,12 @@ export default function TransferirModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Transferir cuenta</h3>
+          <h3>
+            <Icon nombre="transferencia" size={17} />
+            Transferir cuenta
+          </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 

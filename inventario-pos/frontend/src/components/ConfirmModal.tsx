@@ -3,6 +3,8 @@
  * Muestra un mensaje y ofrece "Aceptar" / "Cancelar".
  */
 
+import Icon from "./Icon";
+
 interface Props {
   titulo?: string;
   mensaje: string;
@@ -32,7 +34,7 @@ export default function ConfirmModal({
         <div className="modal-head">
           <h3>{titulo}</h3>
           <button className="btn-icon" onClick={onCancelar} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -46,6 +48,7 @@ export default function ConfirmModal({
             {cancelar}
           </button>
           <button className="btn-primary" onClick={onConfirmar} disabled={procesando}>
+            <Icon nombre="check" size={15} />
             {procesando ? "Procesando..." : aceptar}
           </button>
         </div>

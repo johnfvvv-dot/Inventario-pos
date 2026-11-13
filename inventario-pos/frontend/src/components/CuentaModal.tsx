@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { api } from "../services/api";
 import { formatearFechaHora, formatearPrecio } from "../utils/format";
 import CobroModal from "./CobroModal";
+import Icon from "./Icon";
 
 interface LineaItem {
   producto_id: number;
@@ -211,7 +212,7 @@ export default function CuentaModal({
               : "Cargando cuenta..."}
           </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -221,12 +222,18 @@ export default function CuentaModal({
         {cuenta && (
           <>
             <div className="cuenta-resumen">
-              <div className="cuenta-resumen-item">
-                <span>Cuenta General</span>
+              <div className="cuenta-resumen-item cuenta-resumen-item--general">
+                <span>
+                  <Icon nombre="recibo" size={14} />
+                  Cuenta General
+                </span>
                 <strong>{formatearPrecio(cuenta.total_general || 0)}</strong>
               </div>
-              <div className="cuenta-resumen-item">
-                <span>Cuentas de clientes pendientes</span>
+              <div className="cuenta-resumen-item cuenta-resumen-item--clientes">
+                <span>
+                  <Icon nombre="usuarios" size={14} />
+                  Cuentas de clientes pendientes
+                </span>
                 <strong>{formatearPrecio(cuenta.total_divisiones || 0)}</strong>
               </div>
               <div className="cuenta-total">
@@ -240,7 +247,7 @@ export default function CuentaModal({
                 <p className="empty-state">La cuenta está vacía.</p>
               )}
 
-              <div className="cuenta-grupo">
+              <div className="cuenta-grupo cuenta-grupo--general">
                 <div className="cuenta-grupo-head">
                   <div>
                     <h4>Cuenta General de {esBarra ? "la barra" : "la mesa"}</h4>
@@ -289,7 +296,7 @@ export default function CuentaModal({
               {clientes.map((cliente) => (
                 <div
                   key={`cliente-${cliente.id}`}
-                  className="cuenta-grupo"
+                  className="cuenta-grupo cuenta-grupo--cliente"
                 >
                   <div className="cuenta-grupo-head">
                     <div>
@@ -362,6 +369,7 @@ export default function CuentaModal({
                   onClick={onDividir}
                   disabled={procesando}
                 >
+                  <Icon nombre="filtrar" size={16} />
                   Dividir cuenta
                 </button>
               )}
@@ -371,6 +379,7 @@ export default function CuentaModal({
                   onClick={onTransferir}
                   disabled={procesando}
                 >
+                  <Icon nombre="transferencia" size={16} />
                   Transferir cuenta
                 </button>
               )}
@@ -384,6 +393,7 @@ export default function CuentaModal({
                 }
                 disabled={procesando || cuenta.total === 0}
               >
+                <Icon nombre="caja" size={16} />
                 Cobrar cuenta total
               </button>
             </div>

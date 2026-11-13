@@ -7,6 +7,7 @@ import {
   formatearFechaHora,
   formatearPrecio,
 } from "../utils/format";
+import Icon from "../components/Icon";
 
 interface PedidoHistorial {
   id: number;
@@ -46,6 +47,15 @@ type Filtros = typeof FILTROS_VACIOS;
 
 const etiquetaMesa = (m: Mesa) =>
   m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
+
+/** Color semántico de la píldora según la forma de pago. */
+const claseFormaPago = (forma: string): string => {
+  const texto = (forma || "").toLowerCase();
+  if (texto.includes("efectivo")) return "badge badge-pago-efectivo";
+  if (texto.includes("transfer")) return "badge badge-pago-transferencia";
+  if (texto.includes("tarjeta")) return "badge badge-pago-tarjeta";
+  return "badge badge-neutral";
+};
 
 /**
  * Devuelve siempre el origen del pedido ("Mesa N" / "Barra N").
@@ -207,12 +217,20 @@ export default function HistorialPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Historial de ventas</h2>
-        <div className="filters">
+        <div>
+          <h2>Historial de ventas</h2>
+          <p className="page-subtitulo">
+            Registro detallado de transacciones cobradas, responsables y
+            desglose de productos
+          </p>
+        </div>
+        <div className="filters page-head-acciones">
           <button className="btn-secondary" onClick={aplicar}>
+            <Icon nombre="filtrar" size={16} />
             Aplicar filtros
           </button>
           <button className="btn-secondary" onClick={limpiar}>
+            <Icon nombre="cerrar" size={16} />
             Limpiar
           </button>
           <button
@@ -220,7 +238,8 @@ export default function HistorialPage() {
             onClick={exportarCSV}
             disabled={exportando}
           >
-            {exportando ? "Exportando..." : "⬇ Exportar CSV"}
+            <Icon nombre="descargar" size={16} />
+            {exportando ? "Exportando..." : "Exportar CSV"}
           </button>
         </div>
       </div>
@@ -228,7 +247,7 @@ export default function HistorialPage() {
       {error && <p className="error-msg">{error}</p>}
 
       {/* Filtros */}
-      <div className="filtros-barra">
+      <div className="filtros-barra historial-filtros">
         <div className="form-group">
           <label>Desde</label>
           <input
@@ -294,54 +313,60 @@ export default function HistorialPage() {
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Fecha</th>
-              <th>Mesa / Barra</th>
-              <th>Cliente</th>
-              <th>Usuario creador</th>
-              <th>Cobrado por</th>
-              <th>Forma de pago</th>
-              <th>Productos</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{formatearFechaHora(p.fecha)}</td>
-                <td>{etiquetaOrigen(p)}</td>
-                <td>
-                  {p.alias ? (
-                    <span className="badge badge-warning">{p.alias}</span>
-                  ) : (
-                    <span className="muted small">Cuenta general</span>
-                  )}
-                </td>
-                <td>{p.usuario_nombre}</td>
-                <td>{p.usuario_cierre_nombre || "—"}</td>
-                <td>
-                  <span className="badge badge-success">{p.forma_pago}</span>
-                </td>
-                <td className="muted small">{p.productos.join(", ")}</td>
-                <td>
-                  <strong>{formatearPrecio(p.total)}</strong>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
+      <div className="panel tabla-card">
+        <div className="table-wrap">
+          <table className="historial-tabla">
+            <thead>
               <tr>
-                <td colSpan={9} className="empty-state">
-                  No hay ventas que coincidan con los filtros.
-                </td>
+                <th>#</th>
+                <th>Fecha</th>
+                <th>Mesa / Barra</th>
+                <th>Cliente</th>
+                <th>Usuario creador</th>
+                <th>Cobrado por</th>
+                <th>Forma de pago</th>
+                <th>Productos</th>
+                <th>Total</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.id}</td>
+                  <td>{formatearFechaHora(p.fecha)}</td>
+                  <td>{etiquetaOrigen(p)}</td>
+                  <td>
+                    {p.alias ? (
+                      <span className="badge badge-warning">{p.alias}</span>
+                    ) : (
+                      <span className="muted small">Cuenta general</span>
+                    )}
+                  </td>
+                  <td>{p.usuario_nombre}</td>
+                  <td>{p.usuario_cierre_nombre || "—"}</td>
+                  <td>
+                    <span className={claseFormaPago(p.forma_pago)}>
+                      {p.forma_pago}
+                    </span>
+                  </td>
+                  <td className="muted small historial-productos">
+                    {p.productos.join(", ")}
+                  </td>
+                  <td className="historial-total">
+                    <strong>{formatearPrecio(p.total)}</strong>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="empty-state">
+                    No hay ventas que coincidan con los filtros.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="paginacion">

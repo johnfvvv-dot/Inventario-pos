@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { formatearPrecio } from "../utils/format";
+import Icon from "./Icon";
 
 interface Props {
   total: number;
@@ -48,14 +49,17 @@ export default function CierreTurnoModal({
         aria-labelledby="titulo-cierre-turno"
       >
         <div className="modal-head">
-          <h3 id="titulo-cierre-turno">Cerrar turno de caja</h3>
+          <h3 id="titulo-cierre-turno">
+            <Icon nombre="candado" size={17} />
+            Cerrar turno de caja
+          </h3>
           <button
             className="btn-icon"
             onClick={onCancelar}
             title="Cerrar"
             disabled={procesando}
           >
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -96,10 +100,11 @@ export default function CierreTurnoModal({
             Cancelar
           </button>
           <button
-            className="btn-primary"
+            className="btn-warning"
             onClick={() => onConfirmar(observaciones.trim())}
             disabled={procesando}
           >
+            <Icon nombre="candado" size={15} />
             {procesando ? "Cerrando..." : "Confirmar cierre"}
           </button>
         </div>

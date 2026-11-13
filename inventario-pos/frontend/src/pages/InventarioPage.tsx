@@ -5,6 +5,7 @@ import { useOutletContext } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
 import ConfirmModal from "../components/ConfirmModal";
+import Icon from "../components/Icon";
 
 interface Producto {
   id: number;
@@ -258,19 +259,29 @@ export default function InventarioPage() {
   };
 
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const maxStockPagina = Math.max(
+    1,
+    ...productos.map((p) => Number(p.stock) || 0)
+  );
   const nombreCategoria = (id?: number | null) =>
     categorias.find((c) => c.id === id)?.nombre || "—";
 
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Inventario de productos</h2>
-        <div className="filters">
+        <div>
+          <h2>Inventario de productos</h2>
+          <p className="page-subtitulo">
+            Gestión de catálogo, precios y control de existencias
+          </p>
+        </div>
+        <div className="filters page-head-acciones">
           {!soloLectura && (
             <button
               className="btn-secondary"
               onClick={() => setMostrarCategorias(true)}
             >
+              <Icon nombre="etiquetas" size={16} />
               Categorías ({categorias.length})
             </button>
           )}
@@ -281,24 +292,25 @@ export default function InventarioPage() {
             <span className="badge badge-success">Ingreso de Stock activo</span>
           )}
           {!soloLectura && (
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setError(null);
-              setEditando(null);
-              setNuevoProducto({
-                nombre: "",
-                descripcion: "",
-                precio: "",
-                precio_compra: "",
-                stock: "",
-                categoria_id: "",
-              });
-              setMostrarForm(true);
-            }}
-          >
-            + Añadir producto
-          </button>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setError(null);
+                setEditando(null);
+                setNuevoProducto({
+                  nombre: "",
+                  descripcion: "",
+                  precio: "",
+                  precio_compra: "",
+                  stock: "",
+                  categoria_id: "",
+                });
+                setMostrarForm(true);
+              }}
+            >
+              <Icon nombre="mas" size={16} />
+              Añadir producto
+            </button>
           )}
         </div>
       </div>
@@ -307,39 +319,51 @@ export default function InventarioPage() {
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {/* Filtros */}
-      <div className="filtros-barra">
-        <input
-          type="search"
-          className="input-busqueda"
-          placeholder="Buscar producto..."
-          value={buscar}
-          onChange={(e) => {
-            setBuscar(e.target.value);
-            setPagina(0);
-          }}
-        />
-        <select
-          value={categoriaFiltro}
-          onChange={(e) => {
-            setCategoriaFiltro(e.target.value ? Number(e.target.value) : "");
-            setPagina(0);
-          }}
-        >
-          <option value="">Todas las categorías</option>
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre} ({c.total_productos})
-            </option>
-          ))}
-        </select>
-        <span className="muted small">
+      <div className="filtros-barra inventario-filtros">
+        <div className="form-group inventario-buscar">
+          <label htmlFor="inventario-buscar">Buscar producto</label>
+          <div className="inventario-buscar-campo">
+            <Icon nombre="buscar" size={15} />
+            <input
+              id="inventario-buscar"
+              type="search"
+              className="input-busqueda"
+              placeholder="Nombre o descripción..."
+              value={buscar}
+              onChange={(e) => {
+                setBuscar(e.target.value);
+                setPagina(0);
+              }}
+            />
+          </div>
+        </div>
+        <div className="form-group inventario-categoria">
+          <label htmlFor="inventario-categoria">Categoría</label>
+          <select
+            id="inventario-categoria"
+            value={categoriaFiltro}
+            onChange={(e) => {
+              setCategoriaFiltro(e.target.value ? Number(e.target.value) : "");
+              setPagina(0);
+            }}
+          >
+            <option value="">Todas las categorías</option>
+            {categorias.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre} ({c.total_productos})
+              </option>
+            ))}
+          </select>
+        </div>
+        <span className="badge badge-neutral inventario-contador">
           {total} producto{total !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Tabla */}
-      <div className="table-wrap">
-        <table>
+      <div className="panel tabla-card">
+        <div className="table-wrap">
+          <table>
           <thead>
             <tr>
               <th>#</th>
@@ -360,19 +384,38 @@ export default function InventarioPage() {
                   {p.descripcion && <div className="muted small">{p.descripcion}</div>}
                 </td>
                 <td className="muted small">{nombreCategoria(p.categoria_id)}</td>
-                <td>{formatearPrecio(p.precio)}</td>
+                <td className="inventario-precio">{formatearPrecio(p.precio)}</td>
                 <td>
-                  <span
-                    className={
-                      p.stock === 0
-                        ? "badge badge-danger"
-                        : p.stock < 10
-                        ? "badge badge-warning"
-                        : "badge badge-success"
-                    }
-                  >
-                    {p.stock}
-                  </span>
+                  <div className="inventario-stock">
+                    <span
+                      className={
+                        p.stock === 0
+                          ? "badge badge-danger"
+                          : p.stock < 10
+                          ? "badge badge-warning"
+                          : "badge badge-success"
+                      }
+                    >
+                      {p.stock}
+                    </span>
+                    <span className="inventario-stock-barra" aria-hidden="true">
+                      <span
+                        className={
+                          p.stock === 0
+                            ? "inventario-stock-fill danger"
+                            : p.stock < 10
+                            ? "inventario-stock-fill warning"
+                            : "inventario-stock-fill ok"
+                        }
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (p.stock / maxStockPagina) * 100
+                          )}%`,
+                        }}
+                      />
+                    </span>
+                  </div>
                 </td>
                 {mostrarIngresoStock && (
                   <td>
@@ -430,14 +473,14 @@ export default function InventarioPage() {
                       title="Editar"
                       onClick={() => abrirEdicion(p)}
                     >
-                      ✎
+                      <Icon nombre="editar" size={15} />
                     </button>
                     <button
                       className="btn-icon danger"
                       title="Eliminar"
                       onClick={() => setPorEliminar(p)}
                     >
-                      ×
+                      <Icon nombre="eliminar" size={15} />
                     </button>
                   </td>
                 )}
@@ -461,6 +504,7 @@ export default function InventarioPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Paginación */}
@@ -510,7 +554,7 @@ export default function InventarioPage() {
                 onClick={() => setMostrarForm(false)}
                 title="Cerrar"
               >
-                ×
+                <Icon nombre="cerrar" size={15} />
               </button>
             </div>
             <form onSubmit={guardarProducto}>
@@ -603,6 +647,7 @@ export default function InventarioPage() {
               {error && <p className="error-msg">{error}</p>}
               <div className="modal-actions">
                 <button type="submit" className="btn-primary">
+                  <Icon nombre="check" size={15} />
                   Guardar
                 </button>
                 <button
@@ -632,7 +677,7 @@ export default function InventarioPage() {
                 onClick={() => setMostrarCategorias(false)}
                 title="Cerrar"
               >
-                ×
+                <Icon nombre="cerrar" size={15} />
               </button>
             </div>
 
@@ -646,7 +691,8 @@ export default function InventarioPage() {
                 />
               </div>
               <button type="submit" className="btn-primary">
-                + Crear
+                <Icon nombre="mas" size={15} />
+                Crear
               </button>
             </form>
 
@@ -670,7 +716,7 @@ export default function InventarioPage() {
                           title="Eliminar"
                           onClick={() => eliminarCategoria(c.id)}
                         >
-                          ×
+                          <Icon nombre="eliminar" size={15} />
                         </button>
                       </td>
                     </tr>

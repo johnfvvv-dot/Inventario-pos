@@ -1,6 +1,7 @@
 /** Ventana de cambio de clave de un usuario. */
 
 import { useState } from "react";
+import Icon from "./Icon";
 
 interface Props {
   alias: string;
@@ -38,9 +39,12 @@ export default function CambiarClaveModal({
     <div className="modal-overlay" onClick={onCancelar}>
       <div className="modal-box modal-confirm" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Cambiar clave de "{alias}"</h3>
+          <h3>
+            <Icon nombre="candado" size={17} />
+            Cambiar clave de "{alias}"
+          </h3>
           <button className="btn-icon" onClick={onCancelar} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -74,6 +78,7 @@ export default function CambiarClaveModal({
             Cancelar
           </button>
           <button className="btn-primary" onClick={confirmar} disabled={procesando}>
+            <Icon nombre="check" size={15} />
             {procesando ? "Guardando..." : "Aceptar"}
           </button>
         </div>

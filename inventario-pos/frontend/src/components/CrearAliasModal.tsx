@@ -8,6 +8,7 @@
  */
 
 import { FormEvent, useState } from "react";
+import Icon from "./Icon";
 
 interface Props {
   titulo?: string;
@@ -59,7 +60,10 @@ export default function CrearAliasModal({
         onSubmit={enviar}
       >
         <div className="modal-head">
-          <h3>{titulo}</h3>
+          <h3>
+            <Icon nombre="usuario" size={17} />
+            {titulo}
+          </h3>
           <button
             type="button"
             className="btn-icon"
@@ -67,11 +71,14 @@ export default function CrearAliasModal({
             title="Cerrar"
             disabled={procesando}
           >
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
-        <p className="muted small">{descripcion}</p>
+        <p className="muted small modal-nota">
+          <Icon nombre="info" size={14} />
+          {descripcion}
+        </p>
 
         <div className="form-group">
           <label>Alias / nombre del cliente *</label>
@@ -101,6 +108,7 @@ export default function CrearAliasModal({
             className="btn-primary"
             disabled={procesando}
           >
+            <Icon nombre="check" size={15} />
             {procesando ? "Creando..." : "Crear alias"}
           </button>
         </div>

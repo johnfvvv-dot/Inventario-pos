@@ -12,6 +12,7 @@ import {
   useConfiguracionNegocio,
 } from "../hooks/useConfiguracionNegocio";
 import { api } from "../services/api";
+import Icon from "../components/Icon";
 
 const TAMANO_MAXIMO = 8 * 1024 * 1024;
 const LADO_LOGO = 256;
@@ -149,20 +150,24 @@ export default function PersonalizacionPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Personalización</h2>
+        <div>
+          <h2>Personalización</h2>
+          <p className="page-subtitulo">
+            Cambia el nombre y el logotipo que identifican al negocio en la
+            cabecera y en los tickets internos. El nombre oficial del sistema
+            continúa siendo <strong>Inventario POS</strong>.
+          </p>
+        </div>
       </div>
-
-      <p className="muted small">
-        Cambia el nombre y el logotipo que identifican al negocio en la
-        cabecera y en los tickets internos. El nombre oficial del sistema
-        continúa siendo <strong>Inventario POS</strong>.
-      </p>
 
       {error && <p className="error-msg">{error}</p>}
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
-      <section className="panel">
-        <h3>Identidad del negocio</h3>
+      <section className="panel panel-acento panel-acento--azul">
+        <h3>
+          <Icon nombre="paleta" size={15} />
+          Identidad del negocio
+        </h3>
 
         <div className="personalizacion-grid">
           <form onSubmit={guardar}>
@@ -196,6 +201,7 @@ export default function PersonalizacionPage() {
                   onClick={() => inputLogo.current?.click()}
                   disabled={guardando}
                 >
+                  <Icon nombre="imagen" size={16} />
                   Elegir imagen
                 </button>
                 {logo && (
@@ -205,6 +211,7 @@ export default function PersonalizacionPage() {
                     onClick={quitarLogo}
                     disabled={guardando}
                   >
+                    <Icon nombre="eliminar" size={16} />
                     Quitar logo
                   </button>
                 )}
@@ -231,6 +238,7 @@ export default function PersonalizacionPage() {
             )}
 
             <button className="btn-primary" type="submit" disabled={guardando}>
+              <Icon nombre="check" size={16} />
               {guardando ? "Guardando..." : "Guardar cambios"}
             </button>
           </form>
@@ -257,8 +265,11 @@ export default function PersonalizacionPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <h3>Alcance de la personalización</h3>
+      <section className="panel panel-aviso panel-aviso--cian">
+        <h3>
+          <Icon nombre="info" size={15} />
+          Alcance de la personalización
+        </h3>
         <p className="muted small">
           El nombre y el logo se guardan en la base de datos del sistema y se
           comparten entre el equipo local y la nube. Los tickets internos se

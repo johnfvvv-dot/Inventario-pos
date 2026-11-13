@@ -44,16 +44,34 @@ export default function AdminLayout() {
 
         <div className="admin-body">
           <nav className="admin-nav">
-            <MenuLink to="/admin/inventario" rutas={["/admin"]}>
+            <MenuLink
+              to="/admin/inventario"
+              rutas={["/admin"]}
+              icono="inventario"
+            >
               Inventario
             </MenuLink>
-            <MenuLink to="/admin/mesas">Mesas</MenuLink>
-            <MenuLink to="/admin/pedidos">Pedidos</MenuLink>
-            <MenuLink to="/admin/reportes">Reportes</MenuLink>
-            <MenuLink to="/admin/corte-caja">Corte de caja</MenuLink>
-            <MenuLink to="/admin/historial">Historial</MenuLink>
-            <MenuLink to="/admin/personalizacion">Personalización</MenuLink>
-            <MenuLink to="/admin/usuarios">Usuarios</MenuLink>
+            <MenuLink to="/admin/mesas" icono="mesas">
+              Mesas
+            </MenuLink>
+            <MenuLink to="/admin/pedidos" icono="pedidos">
+              Pedidos
+            </MenuLink>
+            <MenuLink to="/admin/reportes" icono="reportes">
+              Reportes
+            </MenuLink>
+            <MenuLink to="/admin/corte-caja" icono="corte">
+              Corte de caja
+            </MenuLink>
+            <MenuLink to="/admin/historial" icono="historial">
+              Historial
+            </MenuLink>
+            <MenuLink to="/admin/personalizacion" icono="personalizacion">
+              Personalización
+            </MenuLink>
+            <MenuLink to="/admin/usuarios" icono="usuarios">
+              Usuarios
+            </MenuLink>
           </nav>
 
           <main className="admin-content">

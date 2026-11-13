@@ -1,11 +1,10 @@
 /** Pantalla de Reportes - Administrador. Gráficos + exportación CSV. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  BarElement,
   LineElement,
   PointElement,
   ArcElement,
@@ -13,8 +12,9 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type ChartOptions,
 } from "chart.js";
-import { Bar, Line, Doughnut } from "react-chartjs-2";
+import { Line, Doughnut } from "react-chartjs-2";
 import { api } from "../services/api";
 import {
   fechaParaArchivo,
@@ -26,7 +26,6 @@ import {
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  BarElement,
   LineElement,
   PointElement,
   ArcElement,
@@ -131,6 +130,113 @@ const rangoActual = (rango: Rango) => {
   inicio.setDate(inicio.getDate() - (RANGOS[rango].dias - 1));
   return { desde: isoLocal(inicio), hasta: isoAhora() };
 };
+
+/* -------------------- ICONOS (SVG inline) -------------------- */
+
+type NombreIcono =
+  | "actualizar"
+  | "descargar"
+  | "info"
+  | "limpiar"
+  | "ventas"
+  | "ganancias"
+  | "operaciones"
+  | "ticket"
+  | "productos"
+  | "stock";
+
+const ICONOS: Record<NombreIcono, ReactNode> = {
+  actualizar: (
+    <>
+      <path d="M23 4v6h-6" />
+      <path d="M1 20v-6h6" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+      <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </>
+  ),
+  descargar: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </>
+  ),
+  limpiar: (
+    <>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </>
+  ),
+  ventas: (
+    <>
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </>
+  ),
+  ganancias: (
+    <>
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </>
+  ),
+  operaciones: (
+    <>
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
+    </>
+  ),
+  ticket: (
+    <>
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+      <line x1="8" y1="7" x2="16" y2="7" />
+      <line x1="8" y1="11" x2="16" y2="11" />
+      <line x1="8" y1="15" x2="12" y2="15" />
+    </>
+  ),
+  productos: (
+    <>
+      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+      <line x1="12" y1="22.08" x2="12" y2="12" />
+    </>
+  ),
+  stock: (
+    <>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </>
+  ),
+};
+
+function Icono({ nombre }: { nombre: NombreIcono }) {
+  return (
+    <svg
+      className="reportes-icono"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {ICONOS[nombre]}
+    </svg>
+  );
+}
 
 export default function ReportesPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -395,7 +501,7 @@ export default function ReportesPage() {
     return serie.top_productos;
   }, [serie]);
 
-  const ventasPorDia = useMemo(() => {
+  const comparativoPorDia = useMemo(() => {
     if (!serie) return { etiquetas: [], series: [] };
     return {
       etiquetas: serie.etiquetas.map((e: string) => e.slice(5)), // solo mes-día
@@ -404,30 +510,40 @@ export default function ReportesPage() {
           label: "Ventas",
           data: serie.serie.map((s: any) => s.total),
           borderColor: "#3498db",
-          backgroundColor: "rgba(52,152,219,0.15)",
+          backgroundColor: "rgba(52,152,219,0.10)",
+          pointBackgroundColor: "#3498db",
+          pointBorderColor: "#3498db",
+          borderWidth: 2.5,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
           fill: true,
-          tension: 0.3,
+          tension: 0.35,
+        },
+        {
+          label: "Ganancias",
+          data: serie.serie.map((s: any) => s.ganancia || 0),
+          borderColor: "#27ae60",
+          backgroundColor: "rgba(39,174,96,0.10)",
+          pointBackgroundColor: "#27ae60",
+          pointBorderColor: "#27ae60",
+          borderWidth: 2.5,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          fill: true,
+          tension: 0.35,
         },
       ],
     };
   }, [serie]);
 
-  const gananciasPorDia = useMemo(() => {
-    if (!serie) return { etiquetas: [], series: [] };
-    return {
-      etiquetas: serie.etiquetas.map((e: string) => e.slice(5)),
-      series: [
-        {
-          label: "Ganancia",
-          data: serie.serie.map((s: any) => s.ganancia || 0),
-          borderColor: "#27ae60",
-          backgroundColor: "rgba(39,174,96,0.15)",
-          fill: true,
-          tension: 0.3,
-        },
-      ],
-    };
-  }, [serie]);
+  const maxCantidadTop = useMemo(
+    () =>
+      topProductos.reduce(
+        (maximo: number, p: any) => Math.max(maximo, Number(p.cantidad) || 0),
+        0
+      ),
+    [topProductos]
+  );
 
   const formasPago = useMemo(() => {
     if (!totales) {
@@ -453,11 +569,54 @@ export default function ReportesPage() {
     };
   }, [totales]);
 
-  const opcionesGrafico = {
+  const totalFormasPago = useMemo(
+    () => formasPago.datos.reduce((suma, valor) => suma + valor, 0),
+    [formasPago]
+  );
+
+  // Métricas calculadas con los datos ya disponibles en la vista.
+  const ticketPromedio =
+    totales && totales.operaciones > 0
+      ? totales.total / totales.operaciones
+      : 0;
+
+  const margenGanancia =
+    totales && totales.total > 0 ? (ganancia / totales.total) * 100 : 0;
+
+  const valorInventario = useMemo(
+    () =>
+      productos.reduce(
+        (suma, p) => suma + Number(p.precio || 0) * Number(p.stock || 0),
+        0
+      ),
+    [productos]
+  );
+
+  const maxStock = useMemo(
+    () =>
+      productos.reduce(
+        (maximo, p) => Math.max(maximo, Number(p.stock) || 0),
+        0
+      ),
+    [productos]
+  );
+
+  const opcionesComparativo: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { display: true },
+      legend: {
+        position: "top",
+        align: "end",
+        labels: {
+          usePointStyle: true,
+          boxWidth: 8,
+          boxHeight: 8,
+          padding: 16,
+          font: { size: 11, weight: 600 },
+        },
+      },
       tooltip: {
         callbacks: {
           label: (ctx: any) =>
@@ -468,8 +627,35 @@ export default function ReportesPage() {
     scales: {
       y: {
         beginAtZero: true,
+        border: { display: false },
+        grid: { color: "rgba(44, 62, 80, 0.07)" },
         ticks: {
           callback: (valor: any) => formatearNumero(Number(valor)),
+        },
+      },
+      x: {
+        grid: { display: false },
+        ticks: { maxRotation: 0, autoSkipPadding: 12 },
+      },
+    },
+  };
+
+  const opcionesDona: ChartOptions<"doughnut"> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: "68%",
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx: any) => {
+            const valor = Number(ctx.parsed) || 0;
+            const porcentaje =
+              totalFormasPago > 0 ? (valor / totalFormasPago) * 100 : 0;
+            return `${ctx.label}: ${formatearPrecio(valor)} (${Math.round(
+              porcentaje
+            )}%)`;
+          },
         },
       },
     },
@@ -561,13 +747,74 @@ export default function ReportesPage() {
   };
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <h2>Reportes de ventas e inventario</h2>
-      </div>
+    <div className="page reportes-page">
+      <header className="reportes-head">
+        <div className="reportes-head-texto">
+          <h2>Reportes de ventas e inventario</h2>
+          <p className="reportes-subtitulo">
+            <span>
+              Mostrando <strong>{filtro.etiqueta}</strong>
+            </span>
+            {modo === "rango" && rango === "turno_ayer" && turnoAyer && (
+              <span>
+                Abrió {formatearFechaHora(turnoAyer.fecha_apertura)} · Cerró{" "}
+                {turnoAyer.fecha_cierre
+                  ? formatearFechaHora(turnoAyer.fecha_cierre)
+                  : "aún en curso"}
+              </span>
+            )}
+            {modo === "rango" && rango === "turno_ayer" && !turnoAyer && (
+              <span className="filtros-alerta">
+                No hay turno registrado ayer
+              </span>
+            )}
+          </p>
+        </div>
 
-      {/* Panel de filtros con el mismo estilo que Historial */}
-      <div className="filtros-barra">
+        <div className="reportes-head-acciones">
+          {/*
+            "Actualizar" sí tiene una función real: fuerza una nueva consulta
+            de inventario, años con ventas, turno de ayer y reportes.
+          */}
+          <button
+            type="button"
+            className="btn-secondary reportes-btn"
+            onClick={() => setRecarga((n) => n + 1)}
+          >
+            <Icono nombre="actualizar" />
+            Actualizar
+          </button>
+          <span
+            className="reportes-info"
+            tabIndex={0}
+            aria-describedby="reportes-info-tooltip"
+          >
+            <Icono nombre="info" />
+            <span
+              id="reportes-info-tooltip"
+              className="reportes-info-tooltip"
+              role="tooltip"
+            >
+              «Actualizar» vuelve a consultar inventario, opciones de año,
+              turnos y reportes.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn-primary reportes-btn"
+            onClick={exportarCSV}
+            disabled={exportando}
+          >
+            <Icono nombre="descargar" />
+            {exportando ? "Exportando..." : "Exportar CSV"}
+          </button>
+        </div>
+      </header>
+
+      {error && <p className="error-msg">{error}</p>}
+
+      {/* Filtros en una sola barra horizontal y compacta */}
+      <div className="filtros-barra reportes-filtros">
         <div className="form-group">
           <label htmlFor="reporte-calendario">Calendario</label>
           <input
@@ -629,91 +876,120 @@ export default function ReportesPage() {
           </select>
         </div>
 
-        <div className="filtros-acciones">
-          <button className="btn-secondary" onClick={quitarFiltros}>
-            Quitar Filtros
-          </button>
+        <div className="reportes-filtros-fin">
           <button
-            className="btn-primary"
-            onClick={exportarCSV}
-            disabled={exportando}
+            type="button"
+            className="reportes-quitar"
+            onClick={quitarFiltros}
           >
-            {exportando ? "Exportando..." : "Exportar CSV"}
-          </button>
-          {/*
-            "Actualizar" sí tiene una función real: fuerza una nueva consulta
-            de inventario, años con ventas, turno de ayer y reportes.
-          */}
-          <button
-            className="btn-secondary"
-            onClick={() => setRecarga((n) => n + 1)}
-          >
-            Actualizar
+            <Icono nombre="limpiar" />
+            Quitar filtros
           </button>
         </div>
       </div>
-
-      <p className="muted small filtros-nota">
-        «Actualizar» vuelve a consultar inventario, opciones de año, turnos y
-        reportes.
-      </p>
-
-      <div className="filtros-resumen">
-        <span className="muted small">
-          Mostrando: <strong>{filtro.etiqueta}</strong>
-        </span>
-        {modo === "rango" && rango === "turno_ayer" && turnoAyer && (
-          <span className="muted small">
-            · Abrió {formatearFechaHora(turnoAyer.fecha_apertura)} · Cerró{" "}
-            {turnoAyer.fecha_cierre
-              ? formatearFechaHora(turnoAyer.fecha_cierre)
-              : "aún en curso"}
-          </span>
-        )}
-        {modo === "rango" && rango === "turno_ayer" && !turnoAyer && (
-          <span className="filtros-alerta small">
-            · No hay turno registrado ayer
-          </span>
-        )}
-      </div>
-
-      {error && <p className="error-msg">{error}</p>}
 
       {/* KPIs del período + inventario completo (sin filtros de fecha) */}
-      <div className="kpis">
-        <div className="kpi-card">
-          <h3>Ventas ({filtro.etiqueta})</h3>
-          <h2>{formatearPrecio(totales?.total ?? 0)}</h2>
-        </div>
-        <div className="kpi-card kpi-ganancia">
-          <h3>Ganancias ({filtro.etiqueta})</h3>
-          <h2>{formatearPrecio(ganancia)}</h2>
-        </div>
-        <div className="kpi-card">
-          <h3>Operaciones</h3>
-          <h2>{totales?.operaciones ?? 0}</h2>
-        </div>
-        <div className="kpi-card">
-          <h3>Productos</h3>
-          <h2>{totalProductos}</h2>
-        </div>
-        <div className="kpi-card">
-          <h3>Stock total</h3>
-          <h2>{stockTotal}</h2>
-        </div>
+      <div className="reportes-kpis">
+        <article className="reportes-kpi reportes-kpi--ventas">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="ventas" />
+          </span>
+          <p className="reportes-kpi-label">Ventas</p>
+          <p className="reportes-kpi-valor">
+            {formatearPrecio(totales?.total ?? 0)}
+          </p>
+          <p className="reportes-kpi-detalle">{filtro.etiqueta}</p>
+        </article>
+
+        <article className="reportes-kpi reportes-kpi--ganancias">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="ganancias" />
+          </span>
+          <p className="reportes-kpi-label">Ganancias</p>
+          <div className="reportes-kpi-valor-fila">
+            <p className="reportes-kpi-valor">{formatearPrecio(ganancia)}</p>
+            <span
+              className="reportes-margen"
+              title="Margen de ganancia sobre las ventas"
+            >
+              {margenGanancia.toFixed(1)}%
+            </span>
+          </div>
+          <p className="reportes-kpi-detalle">{filtro.etiqueta}</p>
+        </article>
+
+        <article className="reportes-kpi reportes-kpi--operaciones">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="operaciones" />
+          </span>
+          <p className="reportes-kpi-label">Operaciones</p>
+          <p className="reportes-kpi-valor">{totales?.operaciones ?? 0}</p>
+          <p className="reportes-kpi-detalle">transacciones del periodo</p>
+        </article>
+
+        <article className="reportes-kpi reportes-kpi--ticket">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="ticket" />
+          </span>
+          <p className="reportes-kpi-label">Ticket promedio</p>
+          <p className="reportes-kpi-valor">
+            {formatearPrecio(ticketPromedio)}
+          </p>
+          <p className="reportes-kpi-detalle">Ventas / operaciones</p>
+        </article>
+
+        <article className="reportes-kpi reportes-kpi--productos">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="productos" />
+          </span>
+          <p className="reportes-kpi-label">Productos</p>
+          <p className="reportes-kpi-valor">{totalProductos}</p>
+          <p className="reportes-kpi-detalle">en catálogo</p>
+        </article>
+
+        <article className="reportes-kpi reportes-kpi--stock">
+          <span className="reportes-kpi-icono">
+            <Icono nombre="stock" />
+          </span>
+          <p className="reportes-kpi-label">Stock total</p>
+          <p className="reportes-kpi-valor">{stockTotal}</p>
+          <p className="reportes-kpi-detalle">unidades disponibles</p>
+        </article>
       </div>
 
-      {/* Gráfico de ventas por día */}
+      {/* Comparativo unificado de ventas y ganancias */}
       <section className="panel">
-        <h3>Ventas por día · {filtro.etiqueta}</h3>
-        {ventasPorDia.etiquetas.length > 0 ? (
-          <div className="chart-wrap">
+        <div className="reportes-panel-head">
+          <div>
+            <h3>Ventas y ganancias por día</h3>
+            <p className="muted small">Comparativo del periodo · {filtro.etiqueta}</p>
+          </div>
+          <div className="reportes-chips">
+            <span className="reportes-chip">
+              <span
+                className="reportes-punto"
+                style={{ background: "#3498db" }}
+              />
+              Ventas {formatearPrecio(totales?.total ?? 0)}
+            </span>
+            <span className="reportes-chip">
+              <span
+                className="reportes-punto"
+                style={{ background: "#27ae60" }}
+              />
+              Ganancias {formatearPrecio(ganancia)}
+            </span>
+          </div>
+        </div>
+
+        {comparativoPorDia.etiquetas.length > 0 ? (
+          <div className="chart-wrap reportes-chart">
             <Line
               data={{
-                labels: ventasPorDia.etiquetas,
-                datasets: ventasPorDia.series,
+                labels: comparativoPorDia.etiquetas,
+                datasets: comparativoPorDia.series,
               }}
-              options={opcionesGrafico}
+              options={opcionesComparativo}
             />
           </div>
         ) : (
@@ -721,86 +997,108 @@ export default function ReportesPage() {
         )}
       </section>
 
-      {/* Gráfico de ganancias por día */}
-      <section className="panel">
-        <h3>Ganancias por día · {filtro.etiqueta}</h3>
-        {gananciasPorDia.etiquetas.length > 0 ? (
-          <div className="chart-wrap">
-            <Line
-              data={{
-                labels: gananciasPorDia.etiquetas,
-                datasets: gananciasPorDia.series,
-              }}
-              options={opcionesGrafico}
-            />
-          </div>
-        ) : (
-          <p className="empty-state">Sin ganancias en el periodo.</p>
-        )}
-      </section>
-
-      <div className="report-grid">
+      <div className="reportes-grid">
         {/* Formas de pago */}
         <section className="panel">
-          <h3>Formas de pago</h3>
-          {formasPago.datos.length > 0 ? (
-            <div className="chart-wrap chart-wrap-small">
-              <Doughnut
-                data={{
-                  labels: formasPago.etiquetas,
-                  datasets: [
-                    {
-                      data: formasPago.datos,
-                      backgroundColor: formasPago.colores,
-                      borderWidth: 0,
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: { position: "bottom" },
-                    tooltip: {
-                      callbacks: {
-                        label: (ctx: any) =>
-                          `${ctx.label}: ${formatearPrecio(Number(ctx.parsed))}`,
-                      },
-                    },
-                  },
-                }}
-              />
+          <div className="reportes-panel-head">
+            <div>
+              <h3>Formas de pago</h3>
+              <p className="muted small">Distribución de los cobros del periodo</p>
             </div>
+            <span className="reportes-chip">
+              Total {formatearPrecio(totalFormasPago)}
+            </span>
+          </div>
+
+          {formasPago.datos.length > 0 ? (
+            <>
+              <div className="reportes-dona">
+                <Doughnut
+                  data={{
+                    labels: formasPago.etiquetas,
+                    datasets: [
+                      {
+                        data: formasPago.datos,
+                        backgroundColor: formasPago.colores,
+                        borderWidth: 0,
+                        hoverOffset: 4,
+                      },
+                    ],
+                  }}
+                  options={opcionesDona}
+                />
+                <div className="reportes-dona-centro" aria-hidden="true">
+                  <span>Total</span>
+                  <strong>{formatearPrecio(totalFormasPago)}</strong>
+                </div>
+              </div>
+
+              <ul className="reportes-leyenda">
+                {formasPago.etiquetas.map((etiqueta, indice) => {
+                  const valor = formasPago.datos[indice];
+                  const porcentaje =
+                    totalFormasPago > 0
+                      ? (valor / totalFormasPago) * 100
+                      : 0;
+                  return (
+                    <li key={etiqueta}>
+                      <span
+                        className="reportes-punto"
+                        style={{ background: formasPago.colores[indice] }}
+                      />
+                      <span className="reportes-leyenda-nombre">{etiqueta}</span>
+                      <span className="reportes-leyenda-valor">
+                        {formatearPrecio(valor)}
+                      </span>
+                      <span className="reportes-leyenda-pct">
+                        {Math.round(porcentaje)}%
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           ) : (
             <p className="empty-state">Sin cobros en el periodo.</p>
           )}
         </section>
 
-        {/* Top de productos */}
+        {/* Top de productos con unidades al final de cada barra */}
         <section className="panel">
-          <h3>Productos más vendidos</h3>
-          {topProductos.length > 0 ? (
-            <div className="chart-wrap">
-              <Bar
-                data={{
-                  labels: topProductos.map((p: any) => p.nombre),
-                  datasets: [
-                    {
-                      label: "Unidades",
-                      data: topProductos.map((p: any) => p.cantidad),
-                      backgroundColor: "#3498db",
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  indexAxis: "y",
-                  plugins: { legend: { display: false } },
-                  scales: { x: { beginAtZero: true } },
-                }}
-              />
+          <div className="reportes-panel-head">
+            <div>
+              <h3>Productos más vendidos</h3>
+              <p className="muted small">Unidades vendidas en el periodo</p>
             </div>
+          </div>
+
+          {topProductos.length > 0 ? (
+            <ul className="reportes-top">
+              {topProductos.map((p: any, indice: number) => {
+                const cantidad = Number(p.cantidad) || 0;
+                const ancho =
+                  maxCantidadTop > 0 ? (cantidad / maxCantidadTop) * 100 : 0;
+                return (
+                  <li
+                    className="reportes-top-item"
+                    key={`${p.nombre}-${indice}`}
+                  >
+                    <span className="reportes-top-nombre" title={p.nombre}>
+                      {p.nombre}
+                    </span>
+                    <div className="reportes-top-barra" aria-hidden="true">
+                      <span
+                        className="reportes-top-fill"
+                        style={{ width: `${ancho}%` }}
+                      />
+                    </div>
+                    <span className="reportes-top-unidades">
+                      {formatearNumero(cantidad)} u.
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <p className="empty-state">Sin ventas en el periodo.</p>
           )}
@@ -809,46 +1107,97 @@ export default function ReportesPage() {
 
       {/* Estado del inventario (completo, independiente de los filtros) */}
       <section className="panel">
-        <h3>Estado del inventario</h3>
+        <div className="reportes-panel-head">
+          <div>
+            <h3>Estado del inventario</h3>
+            <p className="muted small">
+              Inventario actual, independiente del periodo seleccionado
+            </p>
+          </div>
+          <div className="reportes-inv-total">
+            <span>Valor total en stock</span>
+            <strong>{formatearPrecio(valorInventario)}</strong>
+          </div>
+        </div>
+
         <div className="table-wrap">
-          <table>
+          <table className="reportes-inv-tabla">
             <thead>
               <tr>
                 <th>Producto</th>
                 <th>Precio</th>
                 <th>Stock</th>
+                <th>Valor en stock</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              {productos.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.nombre}</td>
-                  <td>{formatearPrecio(p.precio)}</td>
-                  <td>{p.stock}</td>
-                  <td>
-                    <span
-                      className={
-                        p.stock === 0
-                          ? "badge badge-danger"
+              {productos.map((p) => {
+                const porcentajeStock =
+                  maxStock > 0 ? (p.stock / maxStock) * 100 : 0;
+                const claseStock =
+                  p.stock === 0 ? "agotado" : p.stock < 10 ? "bajo" : "ok";
+                return (
+                  <tr key={p.id}>
+                    <td>{p.nombre}</td>
+                    <td>{formatearPrecio(p.precio)}</td>
+                    <td>
+                      <div className="reportes-stock-celda">
+                        <span className="reportes-stock-numero">{p.stock}</span>
+                        <div
+                          className="reportes-stock-barra"
+                          aria-hidden="true"
+                        >
+                          <span
+                            className={`reportes-stock-fill reportes-stock-fill--${claseStock}`}
+                            style={{
+                              width: `${porcentajeStock}%`,
+                              minWidth: p.stock > 0 ? 4 : 0,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="reportes-valor-stock">
+                      {formatearPrecio(p.precio * p.stock)}
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          p.stock === 0
+                            ? "badge badge-danger"
+                            : p.stock < 10
+                            ? "badge badge-warning"
+                            : "badge badge-success"
+                        }
+                      >
+                        {p.stock === 0
+                          ? "Agotado"
                           : p.stock < 10
-                          ? "badge badge-warning"
-                          : "badge badge-success"
-                      }
-                    >
-                      {p.stock === 0 ? "Agotado" : p.stock < 10 ? "Bajo" : "OK"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+                          ? "Bajo"
+                          : "OK"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
               {productos.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="empty-state">
+                  <td colSpan={5} className="empty-state">
                     No hay productos registrados.
                   </td>
                 </tr>
               )}
             </tbody>
+            {productos.length > 0 && (
+              <tfoot>
+                <tr className="reportes-inv-pie">
+                  <td colSpan={3}>Total inventario</td>
+                  <td>{formatearPrecio(valorInventario)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </section>

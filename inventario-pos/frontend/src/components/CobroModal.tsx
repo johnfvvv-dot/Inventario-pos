@@ -6,6 +6,13 @@
 import { useState } from "react";
 import { FORMAS_PAGO } from "../services/api";
 import { formatearPrecio } from "../utils/format";
+import Icon, { type NombreIcono } from "./Icon";
+
+const ICONOS_PAGO: Record<string, NombreIcono> = {
+  efectivo: "efectivo",
+  tarjeta: "tarjeta",
+  transferencia: "transferencia",
+};
 
 interface Props {
   titulo: string;
@@ -37,16 +44,24 @@ export default function CobroModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box modal-cobro" onClick={(e) => e.stopPropagation()}>
+      <div
+        className={`modal-box modal-cobro${
+          confirmarLiberar ? " modal-cobro--total" : ""
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
           <h3>{titulo}</h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
         <div className="cobro-total">
-          <span>Total a cobrar</span>
+          <span>
+            <Icon nombre="caja" size={15} />
+            Total a cobrar
+          </span>
           <strong>{formatearPrecio(total)}</strong>
         </div>
 
@@ -63,6 +78,7 @@ export default function CobroModal({
                 onClick={() => setFormaPago(f.id)}
                 disabled={procesando}
               >
+                <Icon nombre={ICONOS_PAGO[f.id] || "caja"} size={17} />
                 {f.label}
               </button>
             ))}
@@ -73,6 +89,7 @@ export default function CobroModal({
 
         <div className="modal-actions modal-actions-wrap">
           <button className="btn-secondary" onClick={onClose} disabled={procesando}>
+            <Icon nombre="cerrar" size={15} />
             Cancelar
           </button>
           <button
@@ -80,14 +97,16 @@ export default function CobroModal({
             onClick={() => confirmar(formaPago)}
             disabled={procesando}
           >
+            <Icon nombre="check" size={15} />
             {procesando ? "Procesando..." : textoConfirmar}
           </button>
           {confirmarLiberar && (
             <button
-              className="btn-warning"
+              className="btn-success"
               onClick={() => confirmarLiberar(formaPago)}
               disabled={procesando}
             >
+              <Icon nombre="check" size={15} />
               {procesando ? "Procesando..." : textoLiberar}
             </button>
           )}

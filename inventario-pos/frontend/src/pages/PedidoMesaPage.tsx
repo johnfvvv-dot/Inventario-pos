@@ -16,6 +16,7 @@ import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 import AsignarPedidoModal, {
   type DestinoPedido,
 } from "../components/AsignarPedidoModal";
+import Icon from "../components/Icon";
 
 interface Mesa {
   id: number;
@@ -565,46 +566,63 @@ export default function PedidoMesaPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Pedido por mesa</h2>
-        <div className="filters">
-          <select
-            className="select-mesa"
-            value={mesaId}
-            onChange={(e) => {
-              setMesaId(e.target.value ? Number(e.target.value) : "");
-              setCarrito([]);
-              setCantidades({});
-              setMensaje(null);
-              setMostrarAsignacion(false);
-              setErrorAsignacion(null);
-            }}
-          >
-            <option value="">— Seleccionar mesa o barra —</option>
-            {mesas.map((m) => (
-              <option key={m.id} value={m.id}>
-                {etiquetaMesa(m)} ({m.estado})
-              </option>
-            ))}
-          </select>
-          <select
-            className="select-categoria"
-            value={categoriaFiltro}
-            onChange={(e) =>
-              setCategoriaFiltro(e.target.value ? Number(e.target.value) : "")
-            }
-          >
-            <option value="">Todas las categorías</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
+        <div>
+          <h2>Pedido por mesa</h2>
+          <p className="page-subtitulo">
+            Toma de comandas rápidas y asignación a cuenta general o por
+            cliente
+          </p>
+        </div>
+        <div className="filters pos-cabecera-filtros">
+          <div className="form-group">
+            <label htmlFor="pedido-mesa">Mesa / barra</label>
+            <select
+              id="pedido-mesa"
+              className="select-mesa"
+              value={mesaId}
+              onChange={(e) => {
+                setMesaId(e.target.value ? Number(e.target.value) : "");
+                setCarrito([]);
+                setCantidades({});
+                setMensaje(null);
+                setMostrarAsignacion(false);
+                setErrorAsignacion(null);
+              }}
+            >
+              <option value="">— Seleccionar mesa o barra —</option>
+              {mesas.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {etiquetaMesa(m)} ({m.estado})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="pedido-categoria">Categoría</label>
+            <select
+              id="pedido-categoria"
+              className="select-categoria"
+              value={categoriaFiltro}
+              onChange={(e) =>
+                setCategoriaFiltro(
+                  e.target.value ? Number(e.target.value) : ""
+                )
+              }
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
           {mesaId !== "" && (
             <button
-              className="btn-secondary"
+              className="btn-secondary pos-ver-cuenta"
               onClick={() => setMostrarCuenta(true)}
             >
+              <Icon nombre="recibo" size={16} />
               Ver cuenta
             </button>
           )}
@@ -618,31 +636,39 @@ export default function PedidoMesaPage() {
 
       {aliasActivos.length > 0 && (
         <div className="aviso-clientes">
-          <div className="aviso-clientes-texto">
-            <strong>
-              {etiquetaCuenta} tiene {aliasActivos.length} cliente
-              {aliasActivos.length > 1 ? "s" : ""} activo
-              {aliasActivos.length > 1 ? "s" : ""}.
-            </strong>{" "}
-            Al confirmar el pedido podrás elegir a quién asignarlo.
+          <div className="aviso-clientes-icono">
+            <Icon nombre="usuarios" size={18} />
           </div>
-          <div className="aviso-clientes-detalle">
-            {aliasActivos.map((d) => (
-              <span key={d.participanteId}>
-                {d.alias}: <strong>{formatearPrecio(d.subtotal)}</strong>
+          <div className="aviso-clientes-contenido">
+            <div className="aviso-clientes-texto">
+              <strong>
+                {etiquetaCuenta} tiene {aliasActivos.length} cliente
+                {aliasActivos.length > 1 ? "s" : ""} activo
+                {aliasActivos.length > 1 ? "s" : ""}.
+              </strong>{" "}
+              Al confirmar el pedido podrás elegir a quién asignarlo.
+            </div>
+            <div className="aviso-clientes-detalle">
+              {aliasActivos.map((d) => (
+                <span key={d.participanteId}>
+                  {d.alias}: <strong>{formatearPrecio(d.subtotal)}</strong>
+                </span>
+              ))}
+              <span>
+                Cuenta general:{" "}
+                <strong>{formatearPrecio(cuenta?.total_general || 0)}</strong>
               </span>
-            ))}
-            <span>
-              Cuenta general:{" "}
-              <strong>{formatearPrecio(cuenta?.total_general || 0)}</strong>
-            </span>
+            </div>
           </div>
         </div>
       )}
 
       <div className="pos-grid">
-        <section className="panel">
-          <h3>Productos disponibles</h3>
+        <section className="panel pos-panel pos-panel--productos">
+          <h3>
+            <Icon nombre="inventario" size={15} />
+            Productos disponibles
+          </h3>
           <div className="table-wrap productos-scroll">
             <table>
               <thead>
@@ -714,7 +740,7 @@ export default function PedidoMesaPage() {
                               : `Agregar una unidad de ${p.nombre}`
                           }
                         >
-                          +
+                          <Icon nombre="mas" size={14} />
                         </button>
                       </div>
                     </td>
@@ -725,8 +751,11 @@ export default function PedidoMesaPage() {
           </div>
         </section>
 
-        <section className="panel">
-          <h3>Pedido actual</h3>
+        <section className="panel pos-panel pos-panel--actual">
+          <h3>
+            <Icon nombre="pedidos" size={15} />
+            Pedido actual
+          </h3>
           {carrito.length === 0 ? (
             <p className="empty-state">Sin productos seleccionados.</p>
           ) : (
@@ -761,7 +790,7 @@ export default function PedidoMesaPage() {
             </div>
           )}
 
-          <div className="total-row">
+          <div className="total-row pos-total">
             <span>Total</span>
             <strong>{formatearPrecio(total)}</strong>
           </div>
@@ -783,6 +812,7 @@ export default function PedidoMesaPage() {
                   : "Crear un alias y asignarle este pedido"
               }
             >
+              <Icon nombre="usuario" size={16} />
               Crear alias
             </button>
             <button
@@ -791,16 +821,20 @@ export default function PedidoMesaPage() {
               disabled={!turno || cargandoTurno}
               title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
             >
+              <Icon nombre="check" size={16} />
               Confirmar pedido
             </button>
           </div>
         </section>
       </div>
 
-      <section className="panel">
+      <section className="panel pedido-cuenta-panel">
         <div className="cuenta-panel-head">
           <div>
-            <h3>Pedidos de {etiquetaCuenta}</h3>
+            <h3>
+              <Icon nombre="recibo" size={15} />
+              Pedidos de {etiquetaCuenta}
+            </h3>
             <span className="muted small">
               Cuenta General y cuentas de clientes activas.
             </span>
@@ -815,7 +849,7 @@ export default function PedidoMesaPage() {
           </p>
         ) : (
           <>
-            <div className="cuenta-grupo">
+            <div className="cuenta-grupo cuenta-grupo--general">
               <div className="cuenta-grupo-head">
                 <div>
                   <h4>Cuenta General</h4>
@@ -880,7 +914,10 @@ export default function PedidoMesaPage() {
             </div>
 
             {clientes.map((cliente) => (
-              <div key={`cliente-${cliente.id}`} className="cuenta-grupo">
+              <div
+                key={`cliente-${cliente.id}`}
+                className="cuenta-grupo cuenta-grupo--cliente"
+              >
                 <div className="cuenta-grupo-head">
                   <div>
                     <h4>

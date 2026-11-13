@@ -12,6 +12,7 @@ import {
   formatearMontoEditable,
   parsearMontoEditable,
 } from "../utils/format";
+import Icon from "./Icon";
 
 interface Props {
   abrirTurno: (fondoInicial: number) => Promise<TurnoCaja>;
@@ -80,7 +81,10 @@ export default function AvisoTurnoModal({
         aria-labelledby="titulo-apertura-turno"
       >
         <div className="modal-head">
-          <h3 id="titulo-apertura-turno">Apertura de turno</h3>
+          <h3 id="titulo-apertura-turno">
+            <Icon nombre="caja" size={17} />
+            Apertura de turno
+          </h3>
           <button
             type="button"
             className="btn-icon"
@@ -88,7 +92,7 @@ export default function AvisoTurnoModal({
             title="Cerrar"
             disabled={procesando}
           >
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -129,6 +133,7 @@ export default function AvisoTurnoModal({
             Ahora no
           </button>
           <button type="submit" className="btn-primary" disabled={procesando}>
+            <Icon nombre="check" size={15} />
             {procesando ? "Abriendo..." : "Abrir turno"}
           </button>
         </div>
