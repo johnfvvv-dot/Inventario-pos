@@ -4559,7 +4559,7 @@ tbody tr:last-child td {
 /* -------------------- USUARIOS -------------------- */
 
 .usuarios-crear {
-  border-top: 3px solid #2563eb;
+  border-top: 3px solid #0284c7;
 }
 
 .usuarios-crear-head {
@@ -4588,8 +4588,8 @@ tbody tr:last-child td {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #dbeafe;
-  color: #2563eb;
+  background: #f0f9ff;
+  color: #0284c7;
 }
 
 .usuarios-form {
@@ -4621,6 +4621,7 @@ tbody tr:last-child td {
 .usuarios-lista {
   padding: 0;
   overflow: hidden;
+  border-top: 3px solid #0284c7;
 }
 
 .usuarios-lista-head {
