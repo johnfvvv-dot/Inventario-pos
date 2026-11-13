@@ -444,7 +444,7 @@ a {
   font-size: 0.9rem;
   font-weight: 500;
   color: var(--muted);
-  transition: background 0.2s, color 0.2s;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .admin-nav a:hover {
@@ -454,9 +454,9 @@ a {
 
 .admin-nav a.activo,
 .admin-nav a.activo:hover {
-  /* Misma paleta que una mesa disponible: badge-success y --success. */
-  background: #e5f7ed;
-  color: var(--success);
+  background: var(--nav-activo-bg, #e5f7ed);
+  color: var(--nav-activo-texto, var(--success));
+  border-left-color: var(--nav-activo-borde, transparent);
 }
 
 .admin-content {
@@ -3272,22 +3272,71 @@ body {
   padding: 0.62rem 0.7rem;
   border-left: 3px solid transparent;
   border-radius: 8px;
-  color: var(--muted);
+  color: #475569;
   font-size: 0.85rem;
   font-weight: 600;
-  transition: background 0.18s, color 0.18s, border-color 0.18s;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .admin-nav a:hover {
   background: #f8fafc;
-  color: var(--text);
+  color: #475569;
+}
+
+/* Tono pastel del ítem activo según el módulo. */
+.admin-nav a.menu-link--inventario {
+  --nav-activo-bg: #ecfdf5;
+  --nav-activo-texto: #047857;
+  --nav-activo-borde: #10b981;
+}
+
+.admin-nav a.menu-link--mesas {
+  --nav-activo-bg: #ecfeff;
+  --nav-activo-texto: #0e7490;
+  --nav-activo-borde: #06b6d4;
+}
+
+.admin-nav a.menu-link--pedidos {
+  --nav-activo-bg: #eff6ff;
+  --nav-activo-texto: #1d4ed8;
+  --nav-activo-borde: #3b82f6;
+}
+
+.admin-nav a.menu-link--reportes {
+  --nav-activo-bg: #eef2ff;
+  --nav-activo-texto: #4338ca;
+  --nav-activo-borde: #6366f1;
+}
+
+.admin-nav a.menu-link--corte-caja {
+  --nav-activo-bg: #fffbeb;
+  --nav-activo-texto: #b45309;
+  --nav-activo-borde: #f59e0b;
+}
+
+.admin-nav a.menu-link--historial {
+  --nav-activo-bg: #f5f3ff;
+  --nav-activo-texto: #6d28d9;
+  --nav-activo-borde: #8b5cf6;
+}
+
+.admin-nav a.menu-link--personalizacion {
+  --nav-activo-bg: #fdf2f8;
+  --nav-activo-texto: #be185d;
+  --nav-activo-borde: #ec4899;
+}
+
+.admin-nav a.menu-link--usuarios {
+  --nav-activo-bg: #f0f9ff;
+  --nav-activo-texto: #0369a1;
+  --nav-activo-borde: #0284c7;
 }
 
 .admin-nav a.activo,
 .admin-nav a.activo:hover {
-  background: #e6f4ea;
-  color: #166534;
-  border-left-color: #22c55e;
+  background: var(--nav-activo-bg, #e6f4ea);
+  color: var(--nav-activo-texto, #166534);
+  border-left-color: var(--nav-activo-borde, #22c55e);
 }
 
 .menu-link-icono {
@@ -3790,7 +3839,7 @@ tbody tr:last-child td {
   .admin-nav a.activo,
   .admin-nav a.activo:hover {
     border-left-color: transparent;
-    border-bottom-color: #22c55e;
+    border-bottom-color: var(--nav-activo-borde, #22c55e);
   }
 }
 

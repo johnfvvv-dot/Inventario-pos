@@ -22,11 +22,12 @@ export default function MenuLink({
   const { pathname } = useLocation();
   const rutaActual = pathname.replace(/\/+$/, "") || "/";
   const activo = [to, ...rutas].includes(rutaActual);
+  const modulo = to.split("/").filter(Boolean).pop() ?? "general";
 
   return (
     <Link
       to={to}
-      className={activo ? "activo" : undefined}
+      className={`menu-link--${modulo}${activo ? " activo" : ""}`}
       aria-current={activo ? "page" : undefined}
     >
       {icono && (
