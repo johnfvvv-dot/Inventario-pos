@@ -719,7 +719,7 @@ export default function PedidoMesaPage() {
                           disabled={p.stock === 0 || !turno}
                         />
                         <button
-                          className="btn-success btn-small"
+                          className="btn-primary btn-small btn-agregar-pedido"
                           disabled={p.stock === 0 || !turno}
                           onClick={() => agregarDesdeInput(p)}
                           title={

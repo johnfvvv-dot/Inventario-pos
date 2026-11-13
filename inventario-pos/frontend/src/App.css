@@ -2630,6 +2630,10 @@ select:focus {
   padding: 0.8rem 1rem;
 }
 
+.filtros-barra.reportes-filtros {
+  border-top: 3px solid #6366f1;
+}
+
 .reportes-filtros .form-group {
   min-width: 0;
 }
@@ -3888,6 +3892,10 @@ tbody tr:last-child td {
   border-top-color: #2563eb;
 }
 
+.panel-acento--rosa {
+  border-top-color: #ec4899;
+}
+
 .panel-aviso {
   background: #ecfeff;
   border-left: 3px solid #0891b2;
@@ -3908,6 +3916,7 @@ tbody tr:last-child td {
   grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 0.9fr) auto;
   align-items: end;
   gap: 0.8rem;
+  border-top: 3px solid #10b981;
 }
 
 .inventario-filtros .form-group {
@@ -4009,12 +4018,12 @@ tbody tr:last-child td {
 
 .mesas-form {
   padding: 1rem 1.1rem;
-  border-top: 3px solid #22c55e;
+  border-top: 3px solid #06b6d4;
 }
 
 .mesas-creacion-grid > .mesas-form:nth-child(2) {
   border-top-style: dashed;
-  border-top-color: #22c55e;
+  border-top-color: #06b6d4;
 }
 
 .mesas-form-head {
@@ -4045,13 +4054,13 @@ tbody tr:last-child td {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #ecfdf5;
-  color: #059669;
+  background: #ecfeff;
+  color: #0891b2;
 }
 
 .mesas-form-icono--barra {
-  background: #ecfdf5;
-  color: #059669;
+  background: #ecfeff;
+  color: #0891b2;
 }
 
 .mesas-form-campos {
@@ -4141,11 +4150,31 @@ tbody tr:last-child td {
 }
 
 .pos-panel--productos {
-  border-top-color: #22c55e;
+  border-top-color: #3b82f6;
 }
 
 .pos-panel--actual {
-  border-top-color: #2563eb;
+  border-top-color: #3b82f6;
+}
+
+.pedido-cuenta-panel {
+  border-top: 3px solid #3b82f6;
+}
+
+.pedido-cuenta-panel .cuenta-panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary.btn-agregar-pedido {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.btn-primary.btn-agregar-pedido:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .pos-panel > h3 {
@@ -4271,7 +4300,14 @@ tbody tr:last-child td {
 /* -------------------- CORTE DE CAJA -------------------- */
 
 .corte-panel {
-  border-top: 3px solid #2563eb;
+  border-top: 3px solid #f59e0b;
+}
+
+.corte-panel .page-head h3,
+.corte-panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .corte-historial {
@@ -4422,6 +4458,7 @@ tbody tr:last-child td {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: end;
   gap: 0.9rem;
+  border-top: 3px solid #8b5cf6;
 }
 
 .historial-filtros .form-group {

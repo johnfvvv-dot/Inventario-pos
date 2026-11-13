@@ -163,7 +163,7 @@ export default function PersonalizacionPage() {
       {error && <p className="error-msg">{error}</p>}
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
-      <section className="panel panel-acento panel-acento--azul">
+      <section className="panel panel-acento panel-acento--rosa">
         <h3>
           <Icon nombre="paleta" size={15} />
           Identidad del negocio
