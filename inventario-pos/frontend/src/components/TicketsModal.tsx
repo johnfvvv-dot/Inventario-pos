@@ -15,6 +15,7 @@ import {
   formatearPrecio,
 } from "../utils/format";
 import { descargarTicketPng } from "../utils/ticketImagen";
+import { parsearPagoMixto } from "../utils/pagoMixto";
 import Icon from "./Icon";
 
 interface TicketItem {
@@ -92,6 +93,8 @@ function TicketCard({
   activo,
   onDescargar,
 }: TicketCardProps) {
+  const pagosMixtos = parsearPagoMixto(ticket.forma_pago);
+
   return (
     <article
       className={`ticket-card${activo ? "" : " ticket-card-oculto"}`}
@@ -152,7 +155,18 @@ function TicketCard({
 
       <div className="ticket-pago">
         <span>Forma de pago</span>
-        <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+        {pagosMixtos.length > 1 ? (
+          <div className="ticket-pago-detalle">
+            <strong>Mixto</strong>
+            {pagosMixtos.map((pago) => (
+              <span key={pago.forma}>
+                {pago.etiqueta}: {formatearPrecio(pago.monto)}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+        )}
       </div>
 
       <p className="ticket-pie">

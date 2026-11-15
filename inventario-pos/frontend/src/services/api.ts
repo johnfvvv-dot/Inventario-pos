@@ -652,6 +652,19 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
+  /** Venta de mostrador cobrada al momento, sin crear ni ocupar una mesa. */
+  createPedidoParaLlevar: (datos: {
+    usuario_id: number;
+    items: { producto_id: number; cantidad: number }[];
+    pagos: { forma_pago: string; monto: number }[];
+    /** Cliente frecuente o persona que recoge (opcional). */
+    alias_cliente?: string;
+  }) =>
+    request("/pedidos/para-llevar", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
   /** Ajusta la cantidad de una línea de un pedido abierto (0 = eliminar) */
   ajustarItemPedido: (
     pedidoId: number,
@@ -795,6 +808,8 @@ export const api = {
     mesa?: number | null;
     producto?: number | null;
     forma_pago?: string | null;
+    /** "para_llevar" limita el historial a ventas de mostrador. */
+    origen?: string | null;
     limite?: number;
     offset?: number;
   } = {}) => {
@@ -804,6 +819,7 @@ export const api = {
     if (filtros.mesa) params.append("mesa", String(filtros.mesa));
     if (filtros.producto) params.append("producto", String(filtros.producto));
     if (filtros.forma_pago) params.append("forma_pago", filtros.forma_pago);
+    if (filtros.origen) params.append("origen", filtros.origen);
     params.append("limite", String(filtros.limite ?? 50));
     params.append("offset", String(filtros.offset ?? 0));
     return request(`/caja/historial?${params.toString()}`);

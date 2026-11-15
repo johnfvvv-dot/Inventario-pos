@@ -33,6 +33,7 @@ from app.schemas import (
     PedidoItemAjuste,
     PedidoItemOut,
     PedidoOut,
+    PedidoParaLlevarCreate,
 )
 from app.tiempo import ahora_local
 from app.turnos import exigir_turno_abierto
@@ -68,7 +69,11 @@ def _pedido_to_out(pedido: Pedido) -> PedidoOut:
         total=pedido.total,
         estado=pedido.estado,
         participante_id=pedido.participante_id,
-        alias=pedido.participante.alias if pedido.participante else None,
+        alias=(
+            pedido.participante.alias
+            if pedido.participante
+            else pedido.alias_cliente
+        ),
         es_pago_division=bool(pedido.es_pago_division),
         usuario_cierre_id=pedido.usuario_cierre_id,
     )
@@ -322,6 +327,139 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
             recalcular_division(db, division)
 
         mesa_destino.estado = "ocupada"
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+
+    pedido_cargado = _cargar_pedido(db, nuevo_pedido.id)
+    return _pedido_to_out(pedido_cargado)
+
+
+@router.post("/para-llevar", response_model=PedidoOut, status_code=201)
+def crear_pedido_para_llevar(
+    datos: PedidoParaLlevarCreate, db: Session = Depends(get_db)
+):
+    """Cobra una venta de mostrador sin crear ni ocupar una mesa.
+
+    El pedido se guarda directamente como cerrado, con el desglose de uno o
+    dos métodos de pago. El stock se descuenta en la misma transacción.
+    """
+    exigir_turno_abierto(db)
+
+    usuario = db.query(Usuario).filter(Usuario.id == datos.usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if not datos.items:
+        raise HTTPException(status_code=400, detail="El pedido no tiene productos")
+
+    alias_cliente = (datos.alias_cliente or "").strip() or None
+
+    formas = [p.forma_pago for p in datos.pagos]
+    if any(forma not in FORMAS_PAGO for forma in formas):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+    if len(set(formas)) != len(formas):
+        raise HTTPException(
+            status_code=400,
+            detail="Los métodos de pago deben ser distintos.",
+        )
+
+    montos = [round(float(p.monto), 2) for p in datos.pagos]
+    if any(monto <= 0 for monto in montos):
+        raise HTTPException(
+            status_code=400,
+            detail="Cada monto de pago debe ser mayor a cero.",
+        )
+
+    ids_productos = sorted({item.producto_id for item in datos.items})
+    productos = {
+        producto.id: producto
+        for producto in (
+            db.query(Producto)
+            .filter(Producto.id.in_(ids_productos))
+            .order_by(Producto.id)
+            .with_for_update()
+            .all()
+        )
+    }
+    for item in datos.items:
+        if item.producto_id not in productos:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Producto con ID {item.producto_id} no encontrado",
+            )
+
+    usado: dict = {}
+    total = 0.0
+    for item in datos.items:
+        producto = productos[item.producto_id]
+        solicitado = usado.get(producto.id, 0) + item.cantidad
+        if producto.stock < solicitado:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Stock insuficiente para {producto.nombre}. "
+                    f"Disponible: {producto.stock}, solicitado: {solicitado}"
+                ),
+            )
+        usado[producto.id] = solicitado
+        total += producto.precio * item.cantidad
+
+    total = round(total, 2)
+    suma_pagos = round(sum(montos), 2)
+    if abs(suma_pagos - total) > 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Los pagos suman {suma_pagos:.2f} y el total del pedido "
+                f"es {total:.2f}."
+            ),
+        )
+
+    ahora = ahora_local()
+    try:
+        nuevo_pedido = Pedido(
+            mesa_id=None,
+            usuario_id=usuario.id,
+            fecha=ahora,
+            total=total,
+            estado="cerrado",
+            forma_pago=("mixto" if len(montos) > 1 else formas[0]),
+            pago_1_forma=formas[0],
+            pago_1_monto=montos[0],
+            pago_2_forma=formas[1] if len(montos) > 1 else None,
+            pago_2_monto=montos[1] if len(montos) > 1 else None,
+            fecha_cierre=ahora,
+            fecha_ocupacion=ahora,
+            mesa_etiqueta_historica="Para llevar",
+            alias_cliente=alias_cliente,
+            es_pago_division=0,
+            usuario_cierre_id=usuario.id,
+        )
+        db.add(nuevo_pedido)
+        db.flush()
+
+        for item in datos.items:
+            producto = productos[item.producto_id]
+            subtotal = round(producto.precio * item.cantidad, 2)
+            producto.stock -= item.cantidad
+            db.add(
+                PedidoItem(
+                    pedido_id=nuevo_pedido.id,
+                    producto_id=producto.id,
+                    cantidad=item.cantidad,
+                    precio_unitario=producto.precio,
+                    subtotal=subtotal,
+                )
+            )
+
         db.commit()
     except HTTPException:
         db.rollback()

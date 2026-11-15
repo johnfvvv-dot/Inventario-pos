@@ -6,6 +6,7 @@
  */
 
 import { formatearFechaHora, formatearPrecio } from "./format";
+import { parsearPagoMixto } from "./pagoMixto";
 
 export interface TicketImagenItem {
   nombre: string;
@@ -174,12 +175,31 @@ function crearCanvasTicket(ticket: TicketImagen, nombreNegocio: string): HTMLCan
     margenArriba: 2,
   });
   lineas.push({ separador: true, margenArriba: 8, margenAbajo: 5 });
-  lineas.push({
-    izquierda: "Forma de pago",
-    derecha: ETIQUETAS_PAGO[ticket.forma_pago] || ticket.forma_pago,
-    font: FUENTE_NEGRITA,
-    margenArriba: 2,
-  });
+  const pagosMixtos = parsearPagoMixto(ticket.forma_pago);
+  if (pagosMixtos.length > 1) {
+    // El detalle combinado no cabe en una sola línea junto a la etiqueta.
+    lineas.push({
+      izquierda: "Forma de pago",
+      derecha: "Mixto",
+      font: FUENTE_NEGRITA,
+      margenArriba: 2,
+    });
+    for (const pago of pagosMixtos) {
+      lineas.push({
+        izquierda: `${pago.etiqueta}: ${formatearPrecio(pago.monto)}`,
+        font: FUENTE_MINI,
+        color: "#4a5568",
+        margenArriba: 2,
+      });
+    }
+  } else {
+    lineas.push({
+      izquierda: "Forma de pago",
+      derecha: ETIQUETAS_PAGO[ticket.forma_pago] || ticket.forma_pago,
+      font: FUENTE_NEGRITA,
+      margenArriba: 2,
+    });
+  }
   lineas.push({
     izquierda: "Documento interno de control.",
     font: FUENTE_MINI,

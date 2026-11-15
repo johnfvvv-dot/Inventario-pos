@@ -13,6 +13,8 @@ import Icon from "./Icon";
 interface Props {
   titulo?: string;
   descripcion?: string;
+  /** Nota inferior; por defecto explica el flujo de mesas y barras. */
+  nota?: string;
   onCrear: (alias: string) => Promise<unknown> | unknown;
   onClose: () => void;
 }
@@ -20,6 +22,7 @@ interface Props {
 export default function CrearAliasModal({
   titulo = "Crear alias / cliente",
   descripcion = "El alias se agrega a la cuenta abierta y podrá recibir pedidos.",
+  nota = "El alias aparece en la cuenta y en el modal de asignación de pedidos. No se cobra nada hasta cerrar su división.",
   onCrear,
   onClose,
 }: Props) {
@@ -114,8 +117,7 @@ export default function CrearAliasModal({
         </div>
 
         <p className="muted small">
-          El alias aparece en la cuenta y en el modal de asignación de pedidos.
-          No se cobra nada hasta cerrar su división.
+          {nota}
         </p>
       </form>
     </div>

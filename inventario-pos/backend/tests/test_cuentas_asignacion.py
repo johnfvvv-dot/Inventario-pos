@@ -785,5 +785,172 @@ class CuentasAsignacionTest(unittest.TestCase):
         self.assertEqual(respuesta.json()["total"], 18.0)
 
 
+    def test_para_llevar_cobro_simple_y_mixto(self):
+        """Venta de mostrador: no ocupa mesa, descuenta stock y divide pagos."""
+        total_inicial = self.resumen_total()
+        resumen_inicial = self.client.get("/api/caja/resumen?dias=1").json()[
+            "por_forma_pago"
+        ]
+        mesas_antes = len(self.client.get("/api/mesas/").json())
+        stock_hamburguesa = self.stock_de(self.p1)
+
+        # Pago con un solo método: 1 hamburguesa = 9, a nombre de Carlos.
+        respuesta = self.client.post(
+            "/api/pedidos/para-llevar",
+            json={
+                "usuario_id": 1,
+                "items": [{"producto_id": self.p1["id"], "cantidad": 1}],
+                "pagos": [{"forma_pago": "efectivo", "monto": 9}],
+                "alias_cliente": "Carlos",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido_simple = respuesta.json()
+        self.assertEqual(pedido_simple["estado"], "cerrado")
+        self.assertIsNone(pedido_simple["mesa"])
+        self.assertEqual(pedido_simple["total"], 9.0)
+        self.assertEqual(pedido_simple["alias"], "Carlos")
+        self.assertEqual(self.stock_de(self.p1), stock_hamburguesa - 1)
+        self.assertEqual(len(self.client.get("/api/mesas/").json()), mesas_antes)
+
+        # El historial lo identifica como "Para llevar".
+        historial = self.client.get(
+            "/api/caja/historial?origen=para_llevar&limite=100"
+        ).json()
+        self.assertTrue(
+            all(h["mesa_etiqueta"] == "Para llevar" for h in historial["items"])
+        )
+        fila_simple = next(
+            h for h in historial["items"] if h["id"] == pedido_simple["id"]
+        )
+        self.assertEqual(fila_simple["forma_pago"], "efectivo")
+        self.assertEqual(fila_simple["alias"], "Carlos")
+        self.assertEqual(
+            fila_simple["pagos"],
+            [{"forma_pago": "efectivo", "monto": 9.0}],
+        )
+
+        # Pago mixto: 2 refrescos = 4 (1.50 efectivo + 2.50 transferencia).
+        respuesta = self.client.post(
+            "/api/pedidos/para-llevar",
+            json={
+                "usuario_id": 1,
+                "items": [{"producto_id": self.p3["id"], "cantidad": 2}],
+                "pagos": [
+                    {"forma_pago": "efectivo", "monto": 1.5},
+                    {"forma_pago": "transferencia", "monto": 2.5},
+                ],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 201, respuesta.text)
+        pedido_mixto = respuesta.json()
+        self.assertEqual(pedido_mixto["total"], 4.0)
+
+        db = SessionLocal()
+        try:
+            fila_db = (
+                db.query(Pedido)
+                .filter(Pedido.id == pedido_mixto["id"])
+                .first()
+            )
+            self.assertEqual(fila_db.forma_pago, "mixto")
+            self.assertEqual(fila_db.pago_1_forma, "efectivo")
+            self.assertAlmostEqual(fila_db.pago_1_monto, 1.5, places=2)
+            self.assertEqual(fila_db.pago_2_forma, "transferencia")
+            self.assertAlmostEqual(fila_db.pago_2_monto, 2.5, places=2)
+        finally:
+            db.close()
+
+        # Historial: texto combinado y filtro por método que incluye mixtos.
+        historial = self.client.get("/api/caja/historial?limite=100").json()["items"]
+        fila_mixta = next(
+            h for h in historial if h["id"] == pedido_mixto["id"]
+        )
+        self.assertIsNone(fila_mixta["alias"])
+        self.assertEqual(
+            fila_mixta["forma_pago"],
+            "Mixto: Efectivo ($1.50) + Transferencia ($2.50)",
+        )
+        self.assertEqual(
+            fila_mixta["pagos"],
+            [
+                {"forma_pago": "efectivo", "monto": 1.5},
+                {"forma_pago": "transferencia", "monto": 2.5},
+            ],
+        )
+        filtrado = self.client.get(
+            "/api/caja/historial?forma_pago=transferencia&limite=100"
+        ).json()["items"]
+        self.assertTrue(any(h["id"] == pedido_mixto["id"] for h in filtrado))
+
+        # El filtro "Mixto" trae solo los pagos combinados.
+        filtrado_mixto = self.client.get(
+            "/api/caja/historial?forma_pago=mixto&limite=100"
+        ).json()["items"]
+        self.assertTrue(
+            any(h["id"] == pedido_mixto["id"] for h in filtrado_mixto)
+        )
+        self.assertFalse(
+            any(h["id"] == pedido_simple["id"] for h in filtrado_mixto)
+        )
+
+        # Corte: cada monto suma a su método sin duplicar el total de la venta.
+        resumen = self.client.get("/api/caja/resumen?dias=1").json()[
+            "por_forma_pago"
+        ]
+        self.assertAlmostEqual(
+            resumen["efectivo"] - resumen_inicial["efectivo"], 10.5, places=2
+        )
+        self.assertAlmostEqual(
+            resumen["transferencia"] - resumen_inicial["transferencia"],
+            2.5,
+            places=2,
+        )
+        self.assertAlmostEqual(self.resumen_total() - total_inicial, 13.0, places=2)
+
+        # Ticket interno con destino y pago combinado.
+        tickets = self.client.get("/api/caja/tickets").json()["tickets"]
+        ticket_simple = next(
+            t for t in tickets if t["id"] == f"pedido-{pedido_simple['id']}"
+        )
+        self.assertEqual(ticket_simple["alias"], "Carlos")
+        ticket = next(
+            t for t in tickets if t["id"] == f"pedido-{pedido_mixto['id']}"
+        )
+        self.assertEqual(ticket["mesa"], "Para llevar")
+        self.assertIsNone(ticket["alias"])
+        self.assertEqual(
+            ticket["forma_pago"],
+            "Mixto: Efectivo ($1.50) + Transferencia ($2.50)",
+        )
+
+        # Un pago que no cubre el total no descuenta stock.
+        stock_antes = self.stock_de(self.p2)
+        respuesta = self.client.post(
+            "/api/pedidos/para-llevar",
+            json={
+                "usuario_id": 1,
+                "items": [{"producto_id": self.p2["id"], "cantidad": 1}],
+                "pagos": [{"forma_pago": "efectivo", "monto": 1}],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 400, respuesta.text)
+        self.assertEqual(self.stock_de(self.p2), stock_antes)
+
+        # Dos montos con el mismo método no son un pago mixto válido.
+        respuesta = self.client.post(
+            "/api/pedidos/para-llevar",
+            json={
+                "usuario_id": 1,
+                "items": [{"producto_id": self.p2["id"], "cantidad": 1}],
+                "pagos": [
+                    {"forma_pago": "efectivo", "monto": 1},
+                    {"forma_pago": "efectivo", "monto": 2},
+                ],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 422, respuesta.text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 /** Pantalla de Pedido por Mesa - POS para mesero/administrador. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearFechaHora, formatearPrecio } from "../utils/format";
@@ -9,6 +9,9 @@ import {
   useTurno,
 } from "../context/TurnoContext";
 import CuentaModal from "../components/CuentaModal";
+import CobroParaLlevarModal, {
+  type PagoParaLlevar,
+} from "../components/CobroParaLlevarModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 import CrearAliasModal from "../components/CrearAliasModal";
@@ -114,7 +117,7 @@ export default function PedidoMesaPage() {
   const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [mesaId, setMesaId] = useState<number | "">("");
+  const [mesaId, setMesaId] = useState<number | "para-llevar" | "">("");
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +128,13 @@ export default function PedidoMesaPage() {
   const [mostrarDivision, setMostrarDivision] = useState(false);
   const [mostrarTransferir, setMostrarTransferir] = useState(false);
   const [mostrarCrearAlias, setMostrarCrearAlias] = useState(false);
+  const [mostrarCobroParaLlevar, setMostrarCobroParaLlevar] = useState(false);
+  const [procesandoParaLlevar, setProcesandoParaLlevar] = useState(false);
+  const [errorParaLlevar, setErrorParaLlevar] = useState<string | null>(null);
+  // Cliente temporal de la venta "Para llevar". Se envía al confirmar el
+  // cobro y se limpia al terminar para no heredarlo al siguiente cliente.
+  const [aliasParaLlevar, setAliasParaLlevar] = useState("");
+  const cobrandoParaLlevarRef = useRef(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | "">("");
@@ -146,6 +156,9 @@ export default function PedidoMesaPage() {
     () => carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
     [carrito]
   );
+
+  /** Venta de mostrador: no tiene mesa física ni cuenta abierta. */
+  const esParaLlevar = mesaId === "para-llevar";
 
   /**
    * Mesa o barra seleccionada en el desplegable.
@@ -177,7 +190,9 @@ export default function PedidoMesaPage() {
   const etiquetaMesa = (m: Mesa) =>
     m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
-  const etiquetaCuenta = barraNumero
+  const etiquetaCuenta = esParaLlevar
+    ? "Para llevar"
+    : barraNumero
     ? `Barra ${barraNumero}`
     : mesaSeleccionada
     ? `Mesa ${mesaSeleccionada.numero}`
@@ -280,7 +295,7 @@ export default function PedidoMesaPage() {
   };
 
   const cargarCuenta = async (): Promise<CuentaData | null> => {
-    if (mesaId === "") return null;
+    if (mesaId === "" || mesaId === "para-llevar") return null;
     try {
       const data: any = barraNumero
         ? await api.getCuentaBarra(barraNumero)
@@ -299,7 +314,7 @@ export default function PedidoMesaPage() {
     etiquetaDestino: string,
     desdeModal = false
   ) => {
-    if (!mesaId) return;
+    if (mesaId === "" || mesaId === "para-llevar") return;
     setProcesandoAsignacion(true);
     if (desdeModal) setErrorAsignacion(null);
     try {
@@ -339,6 +354,7 @@ export default function PedidoMesaPage() {
       setMesaId(Number(mesaParam));
       setCarrito([]);
       setCantidades({});
+      setAliasParaLlevar("");
       setMensaje(null);
       setError(null);
       setMostrarAsignacion(false);
@@ -347,7 +363,7 @@ export default function PedidoMesaPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (mesaId) {
+    if (typeof mesaId === "number") {
       cargarCuenta();
     } else {
       setCuenta(null);
@@ -437,8 +453,8 @@ export default function PedidoMesaPage() {
       setError(MENSAJE_TURNO_REQUERIDO);
       return;
     }
-    if (!mesaId) {
-      setError("Selecciona una mesa");
+    if (mesaId === "") {
+      setError("Selecciona una mesa, barra o Para llevar");
       return;
     }
     if (carrito.length === 0) {
@@ -447,6 +463,14 @@ export default function PedidoMesaPage() {
     }
 
     setError(null);
+
+    // Venta de mostrador: se cobra de inmediato, sin abrir cuenta ni mesa.
+    if (esParaLlevar) {
+      setErrorParaLlevar(null);
+      setMostrarCobroParaLlevar(true);
+      return;
+    }
+
     // Se consulta la cuenta justo antes de confirmar para no asignar a un
     // alias que acaba de pagar o a una división ya cerrada.
     const data = await cargarCuenta();
@@ -462,6 +486,37 @@ export default function PedidoMesaPage() {
     setDestinos(opciones);
     setErrorAsignacion(null);
     setMostrarAsignacion(true);
+  };
+
+  /** Registra la venta Para llevar y deja la pantalla lista para el próximo. */
+  const cobrarParaLlevar = async (pagos: PagoParaLlevar[]) => {
+    if (cobrandoParaLlevarRef.current) return;
+    cobrandoParaLlevarRef.current = true;
+    setProcesandoParaLlevar(true);
+    setErrorParaLlevar(null);
+    try {
+      await api.createPedidoParaLlevar({
+        usuario_id: usuarioId,
+        items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
+        })),
+        pagos,
+        alias_cliente: aliasParaLlevar.trim() || undefined,
+      });
+      setMostrarCobroParaLlevar(false);
+      setCarrito([]);
+      setCantidades({});
+      setAliasParaLlevar("");
+      setError(null);
+      setMensaje("Venta Para llevar cobrada correctamente.");
+      await cargarCatalogos();
+    } catch (err: any) {
+      setErrorParaLlevar(err.message);
+    } finally {
+      cobrandoParaLlevarRef.current = false;
+      setProcesandoParaLlevar(false);
+    }
   };
 
   const confirmarAsignacion = (participanteId: number | null) => {
@@ -481,7 +536,8 @@ export default function PedidoMesaPage() {
    */
   const crearAliasConPedido = async (alias: string): Promise<void> => {
     if (!turno) throw new Error(MENSAJE_TURNO_REQUERIDO);
-    if (mesaId === "") throw new Error("Seleccioná una mesa o barra.");
+    if (mesaId === "" || mesaId === "para-llevar")
+      throw new Error("Seleccioná una mesa o barra.");
     if (carrito.length === 0) {
       throw new Error("Agregá al menos un producto antes de crear el alias.");
     }
@@ -504,6 +560,24 @@ export default function PedidoMesaPage() {
       `Alias "${alias}" creado. El pedido quedó asignado a esa cuenta de cliente.`
     );
     await Promise.all([cargarCatalogos(), cargarCuenta()]);
+  };
+
+  /**
+   * Asigna un cliente a la venta "Para llevar" actual.
+   *
+   * No crea divisiones ni pedidos: el nombre viaja con el cobro inmediato y
+   * se guarda en el pedido cerrado para el historial y el ticket.
+   */
+  const crearAliasParaLlevar = async (alias: string): Promise<void> => {
+    if (!turno) throw new Error(MENSAJE_TURNO_REQUERIDO);
+    if (carrito.length === 0) {
+      throw new Error("Agregá al menos un producto antes de asignar el cliente.");
+    }
+    const limpio = alias.trim();
+    if (!limpio) throw new Error("Escribe el nombre del cliente.");
+    setAliasParaLlevar(limpio);
+    setError(null);
+    setMensaje(`Cliente "${limpio}" asignado a esta venta Para llevar.`);
   };
 
   /** Ajusta una línea de la Cuenta General (0 = eliminar). */
@@ -581,15 +655,26 @@ export default function PedidoMesaPage() {
               className="select-mesa"
               value={mesaId}
               onChange={(e) => {
-                setMesaId(e.target.value ? Number(e.target.value) : "");
+                const valor = e.target.value;
+                setMesaId(
+                  valor === "para-llevar"
+                    ? "para-llevar"
+                    : valor
+                    ? Number(valor)
+                    : ""
+                );
                 setCarrito([]);
                 setCantidades({});
+                setAliasParaLlevar("");
                 setMensaje(null);
                 setMostrarAsignacion(false);
                 setErrorAsignacion(null);
+                setMostrarCobroParaLlevar(false);
+                setErrorParaLlevar(null);
               }}
             >
               <option value="">— Seleccionar mesa o barra —</option>
+              <option value="para-llevar">Para llevar</option>
               {mesas.map((m) => (
                 <option key={m.id} value={m.id}>
                   {etiquetaMesa(m)} ({m.estado})
@@ -617,7 +702,7 @@ export default function PedidoMesaPage() {
               ))}
             </select>
           </div>
-          {mesaId !== "" && (
+          {typeof mesaId === "number" && (
             <button
               className="btn-secondary pos-ver-cuenta"
               onClick={() => setMostrarCuenta(true)}
@@ -634,7 +719,31 @@ export default function PedidoMesaPage() {
 
       {sinTurno && <TurnoRequeridoAviso onAbrir={solicitarApertura} />}
 
-      {aliasActivos.length > 0 && (
+      {esParaLlevar && aliasParaLlevar && (
+        <div className="aviso-clientes aviso-cliente-parallevar">
+          <div className="aviso-clientes-icono">
+            <Icon nombre="usuario" size={18} />
+          </div>
+          <div className="aviso-clientes-contenido">
+            <div className="aviso-clientes-texto">
+              <strong>Cliente asignado: {aliasParaLlevar}</strong>{" "}
+              El ticket y el historial registrarán esta venta a su nombre.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary btn-small aviso-cliente-quitar"
+            onClick={() => {
+              setAliasParaLlevar("");
+              setMensaje(null);
+            }}
+          >
+            Quitar alias
+          </button>
+        </div>
+      )}
+
+      {!esParaLlevar && aliasActivos.length > 0 && (
         <div className="aviso-clientes">
           <div className="aviso-clientes-icono">
             <Icon nombre="usuarios" size={18} />
@@ -806,9 +915,11 @@ export default function PedidoMesaPage() {
                 !turno
                   ? MENSAJE_TURNO_REQUERIDO
                   : mesaId === ""
-                  ? "Seleccioná una mesa o barra"
+                  ? "Seleccioná una mesa, barra o Para llevar"
                   : carrito.length === 0
-                  ? "Agregá productos para crear la cuenta del cliente"
+                  ? "Agregá productos para asignar el cliente"
+                  : esParaLlevar
+                  ? "Asignar un cliente a esta venta Para llevar"
                   : "Crear un alias y asignarle este pedido"
               }
             >
@@ -828,7 +939,8 @@ export default function PedidoMesaPage() {
         </section>
       </div>
 
-      <section className="panel pedido-cuenta-panel">
+      {!esParaLlevar && (
+        <section className="panel pedido-cuenta-panel">
         <div className="cuenta-panel-head">
           <div>
             <h3>
@@ -1003,6 +1115,7 @@ export default function PedidoMesaPage() {
           </>
         )}
       </section>
+      )}
 
       {/* Ventana de asignación del pedido a un alias o a la cuenta general */}
       {mostrarAsignacion && (
@@ -1023,17 +1136,31 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana para crear un alias y asignarle el pedido actual */}
-      {mostrarCrearAlias && mesaId !== "" && (
-        <CrearAliasModal
-          titulo="Crear alias para este pedido"
-          descripcion={`Se creará una cuenta de cliente en ${etiquetaCuenta} y el pedido actual se asignará a ese alias.`}
-          onCrear={crearAliasConPedido}
-          onClose={() => setMostrarCrearAlias(false)}
-        />
-      )}
+      {mostrarCrearAlias &&
+        (typeof mesaId === "number" || esParaLlevar) && (
+          <CrearAliasModal
+            titulo={
+              esParaLlevar
+                ? "Cliente para esta venta Para llevar"
+                : "Crear alias para este pedido"
+            }
+            descripcion={
+              esParaLlevar
+                ? "El nombre se guardará en el pedido Para llevar y aparecerá en el ticket y el historial. No se cobra nada hasta confirmar."
+                : `Se creará una cuenta de cliente en ${etiquetaCuenta} y el pedido actual se asignará a ese alias.`
+            }
+            nota={
+              esParaLlevar
+                ? "Sin cliente asignado, la venta queda a nombre de Mostrador."
+                : undefined
+            }
+            onCrear={esParaLlevar ? crearAliasParaLlevar : crearAliasConPedido}
+            onClose={() => setMostrarCrearAlias(false)}
+          />
+        )}
 
       {/* Ventana de cuenta de la mesa */}
-      {mostrarCuenta && mesaId !== "" && (
+      {mostrarCuenta && typeof mesaId === "number" && (
         <CuentaModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero}
@@ -1054,7 +1181,7 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana de división de cuenta */}
-      {mostrarDivision && mesaId !== "" && (
+      {mostrarDivision && typeof mesaId === "number" && (
         <DivisionModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero}
@@ -1067,7 +1194,7 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana de transferencia de cuenta */}
-      {mostrarTransferir && mesaId !== "" && (
+      {mostrarTransferir && typeof mesaId === "number" && (
         <TransferirModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero ?? undefined}
@@ -1077,6 +1204,26 @@ export default function PedidoMesaPage() {
             cargarCatalogos();
             cargarCuenta();
           }}
+        />
+      )}
+      {/* Ventana de cobro inmediato de una venta Para llevar */}
+      {mostrarCobroParaLlevar && (
+        <CobroParaLlevarModal
+          items={carrito.map((item) => ({
+            nombre: item.nombre,
+            cantidad: item.cantidad,
+            precio: item.precio,
+          }))}
+          total={total}
+          cliente={aliasParaLlevar || "Mostrador"}
+          confirmar={cobrarParaLlevar}
+          onClose={() => {
+            if (procesandoParaLlevar) return;
+            setMostrarCobroParaLlevar(false);
+            setErrorParaLlevar(null);
+          }}
+          procesando={procesandoParaLlevar}
+          error={errorParaLlevar}
         />
       )}
     </div>

@@ -2317,6 +2317,21 @@ select:focus {
   font-size: 0.8rem;
 }
 
+/* Desglose del pago mixto en el comprobante: una línea por método. */
+.ticket-pago-detalle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  text-align: right;
+}
+
+.ticket-pago-detalle span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+}
+
 .tickets-navegacion {
   display: flex;
   align-items: center;
@@ -4224,6 +4239,12 @@ tbody tr:last-child td {
   color: #2563eb;
 }
 
+.aviso-cliente-quitar {
+  margin-left: auto;
+  align-self: center;
+  white-space: nowrap;
+}
+
 .aviso-icono {
   display: inline-flex;
   flex-shrink: 0;
@@ -4989,5 +5010,126 @@ tbody tr:last-child td {
 
   .modal-cobro--total .modal-actions button {
     width: 100%;
+  }
+}
+
+/* -------------------- PARA LLEVAR -------------------- */
+
+.badge-pago-mixto {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.modal-para-llevar {
+  overflow-y: auto;
+}
+
+.para-llevar-resumen {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 1.3fr);
+}
+
+.para-llevar-total {
+  border-top: 3px solid var(--success);
+}
+
+.para-llevar-detalle {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.para-llevar-pago {
+  margin-top: 0.4rem;
+}
+
+.para-llevar-pago h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.pago-mixto {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+.pago-mixto-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 0.9rem;
+  background: #fbfcfd;
+}
+
+.pago-mixto-bloque label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.pago-mixto-bloque select,
+.pago-mixto-bloque input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+  color: var(--text);
+}
+
+.pago-mixto-bloque select:focus,
+.pago-mixto-bloque input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(29, 143, 225, 0.15);
+}
+
+.pago-mixto-resumen {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.2rem;
+  justify-content: space-between;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pago-mixto-resumen strong {
+  color: var(--text);
+}
+
+.pago-mixto-resumen .ok {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.pago-mixto-resumen .pendiente {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.pago-mixto-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.para-llevar-acciones {
+  margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .para-llevar-resumen,
+  .pago-mixto {
+    grid-template-columns: 1fr;
   }
 }

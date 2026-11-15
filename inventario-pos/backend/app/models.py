@@ -106,7 +106,13 @@ class Pedido(Base):
     fecha = Column(DateTime, default=ahora_local)
     total = Column(Float, default=0.0)
     estado = Column(String(20), default="abierto")  # abierto | cerrado | dividido
-    forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia
+    forma_pago = Column(String(20), nullable=True)  # efectivo | tarjeta | transferencia | mixto
+    # Desglose de pagos para ventas con dos métodos (pago mixto). En ventas
+    # normales solo se usa pago_1; las columnas pago_2 quedan en NULL.
+    pago_1_forma = Column(String(20), nullable=True)
+    pago_1_monto = Column(Float, nullable=True)
+    pago_2_forma = Column(String(20), nullable=True)
+    pago_2_monto = Column(Float, nullable=True)
     fecha_cierre = Column(DateTime, nullable=True)
     # Numero de mesa conservado cuando la mesa se elimina (historial)
     mesa_numero_historico = Column(Integer, nullable=True)
@@ -117,6 +123,9 @@ class Pedido(Base):
     fecha_ocupacion = Column(DateTime, nullable=True)
     # Alias de la división al que se asignó el pedido (NULL = cuenta general).
     participante_id = Column(Integer, nullable=True, index=True)
+    # Nombre del cliente de una venta "Para llevar". Se guarda directo en el
+    # pedido porque estas ventas no crean mesa, división ni participante.
+    alias_cliente = Column(String(60), nullable=True)
     # 1 = pedido financiero creado al cobrar la parte de un alias. Se excluye
     # de la generación de tickets para no duplicar el ticket del cliente.
     es_pago_division = Column(Integer, default=0, nullable=False, index=True)

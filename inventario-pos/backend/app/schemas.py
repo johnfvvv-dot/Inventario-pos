@@ -348,6 +348,33 @@ class PedidoCreate(BaseModel):
         return self
 
 
+class PagoPedidoCreate(BaseModel):
+    """Una parte del pago de una venta para llevar."""
+
+    forma_pago: str = Field(..., max_length=20)
+    monto: float = Field(..., gt=0)
+
+
+class PedidoParaLlevarCreate(BaseModel):
+    """Venta de mostrador cobrada en el momento, sin mesa física."""
+
+    usuario_id: int = Field(..., gt=0)
+    items: List[PedidoItemCreate]
+    pagos: List[PagoPedidoCreate]
+    # Cliente frecuente o persona que recoge. Opcional: sin alias la venta
+    # queda a nombre de "Mostrador" en el historial.
+    alias_cliente: Optional[str] = Field(default=None, max_length=60)
+
+    @model_validator(mode="after")
+    def _pagos_validos(self):
+        if not 1 <= len(self.pagos) <= 2:
+            raise ValueError("El pago debe tener uno o dos métodos.")
+        formas = [p.forma_pago for p in self.pagos]
+        if len(set(formas)) != len(formas):
+            raise ValueError("Los métodos de pago deben ser distintos.")
+        return self
+
+
 class PedidoItemAjuste(BaseModel):
     """Ajuste de cantidad de una línea de un pedido abierto."""
     cantidad: int = Field(..., ge=0)
