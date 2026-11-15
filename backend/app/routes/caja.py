@@ -39,6 +39,51 @@ router = APIRouter(tags=["caja"])
 
 FORMAS_PAGO = ["efectivo", "tarjeta", "transferencia"]
 
+NOMBRES_FORMA_PAGO = {
+    "efectivo": "Efectivo",
+    "tarjeta": "Tarjeta",
+    "transferencia": "Transferencia",
+}
+
+
+def _pagos_de_pedido(pedido: Pedido) -> List[tuple[str, float]]:
+    """Desglose de pagos de un pedido (uno o dos métodos).
+
+    Los pedidos nuevos guardan el desglose en pago_1/pago_2. Los pedidos
+    anteriores solo tienen forma_pago y total, por lo que se usa ese único
+    método como respaldo.
+    """
+    pagos: List[tuple[str, float]] = []
+    if (
+        pedido.pago_1_forma in FORMAS_PAGO
+        and pedido.pago_1_monto is not None
+        and float(pedido.pago_1_monto) > 0
+    ):
+        pagos.append((pedido.pago_1_forma, float(pedido.pago_1_monto)))
+    if (
+        pedido.pago_2_forma in FORMAS_PAGO
+        and pedido.pago_2_monto is not None
+        and float(pedido.pago_2_monto) > 0
+    ):
+        pagos.append((pedido.pago_2_forma, float(pedido.pago_2_monto)))
+    if pagos:
+        return pagos
+
+    forma = pedido.forma_pago if pedido.forma_pago in FORMAS_PAGO else "efectivo"
+    return [(forma, float(pedido.total or 0.0))]
+
+
+def _etiqueta_forma_pago(pedido: Pedido) -> str:
+    """Texto visible para el historial y los tickets."""
+    pagos = _pagos_de_pedido(pedido)
+    if len(pagos) > 1:
+        detalle = " + ".join(
+            f"{NOMBRES_FORMA_PAGO.get(forma, forma)} (${monto:.2f})"
+            for forma, monto in pagos
+        )
+        return f"Mixto: {detalle}"
+    return pedido.forma_pago or "efectivo"
+
 
 def _totales_por_forma_pago(
     db: Session, desde: Optional[datetime] = None, hasta: Optional[datetime] = None
@@ -50,20 +95,14 @@ def _totales_por_forma_pago(
     if hasta:
         query = query.filter(Pedido.fecha_cierre <= hasta)
 
-    filas = (
-        query.with_entities(
-            Pedido.forma_pago, func.count(Pedido.id), func.coalesce(func.sum(Pedido.total), 0.0)
-        )
-        .group_by(Pedido.forma_pago)
-        .all()
-    )
+    pedidos = query.all()
 
     totales = {forma: 0.0 for forma in FORMAS_PAGO}
     operaciones = 0
-    for forma, cantidad, total in filas:
-        clave = forma if forma in totales else "efectivo"
-        totales[clave] = round(totales[clave] + float(total or 0), 2)
-        operaciones += cantidad or 0
+    for pedido in pedidos:
+        for forma, monto in _pagos_de_pedido(pedido):
+            totales[forma] = round(totales[forma] + monto, 2)
+        operaciones += 1
 
     return TotalesFormaPago(
         efectivo=totales["efectivo"],
@@ -185,8 +224,8 @@ def _turnos_out(db: Session, turnos: List[TurnoCaja]) -> List[TurnoCajaOut]:
                 continue
             if pedido.fecha_cierre < turno.fecha_apertura or pedido.fecha_cierre > hasta:
                 continue
-            forma = pedido.forma_pago if pedido.forma_pago in FORMAS_PAGO else "efectivo"
-            totales[forma] = round(totales[forma] + (pedido.total or 0.0), 2)
+            for forma, monto in _pagos_de_pedido(pedido):
+                totales[forma] = round(totales[forma] + monto, 2)
             operaciones += 1
             for item in items_por_pedido.get(pedido.id, []):
                 costo = costos.get(item.producto_id, 0.0)
@@ -509,8 +548,8 @@ def ventas_por_dia(
         clave = pedido.fecha_cierre.date()
         if clave not in serie:
             continue
-        forma = pedido.forma_pago if pedido.forma_pago in FORMAS_PAGO else "efectivo"
-        serie[clave][forma] = round(serie[clave][forma] + (pedido.total or 0), 2)
+        for forma, monto in _pagos_de_pedido(pedido):
+            serie[clave][forma] = round(serie[clave][forma] + monto, 2)
         serie[clave]["total"] = round(serie[clave]["total"] + (pedido.total or 0), 2)
 
         for item in items_por_pedido.get(pedido.id, []):
@@ -649,7 +688,8 @@ def tickets_turno(
                 ),
                 fecha_ocupacion=pedido.fecha_ocupacion or pedido.fecha or desde,
                 fecha_pago=pedido.fecha_cierre or hasta,
-                forma_pago=pedido.forma_pago or "efectivo",
+                alias=pedido.alias_cliente,
+                forma_pago=_etiqueta_forma_pago(pedido),
                 items=items,
             )
         )
@@ -769,6 +809,7 @@ def historial_ventas(
     mesa: Optional[int] = None,
     producto: Optional[int] = None,
     forma_pago: Optional[str] = None,
+    origen: Optional[str] = None,
     limite: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -822,7 +863,18 @@ def historial_ventas(
         else:
             query = query.filter(Pedido.mesa_id == mesa)
     if forma_pago:
-        query = query.filter(Pedido.forma_pago == forma_pago)
+        query = query.filter(
+            or_(
+                Pedido.forma_pago == forma_pago,
+                Pedido.pago_1_forma == forma_pago,
+                Pedido.pago_2_forma == forma_pago,
+            )
+        )
+    if origen == "para_llevar":
+        query = query.filter(
+            Pedido.mesa_id.is_(None),
+            Pedido.mesa_etiqueta_historica == "Para llevar",
+        )
 
     if producto:
         subq = (
@@ -884,7 +936,11 @@ def historial_ventas(
                 "id": pedido.id,
                 "fecha": pedido.fecha_cierre.isoformat() if pedido.fecha_cierre else None,
                 "estado": pedido.estado,
-                "forma_pago": pedido.forma_pago or "efectivo",
+                "forma_pago": _etiqueta_forma_pago(pedido),
+                "pagos": [
+                    {"forma_pago": forma, "monto": round(monto, 2)}
+                    for forma, monto in _pagos_de_pedido(pedido)
+                ],
                 "total": pedido.total,
                 "mesa_numero": (
                     mesa_obj.numero
@@ -898,9 +954,11 @@ def historial_ventas(
                     if pedido.usuario_cierre_id in usuarios_cierre
                     else ""
                 ),
-                "alias": pedido.participante.alias
-                if pedido.participante
-                else None,
+                "alias": (
+                    pedido.participante.alias
+                    if pedido.participante
+                    else pedido.alias_cliente
+                ),
                 "productos": productos_txt,
             }
         )
