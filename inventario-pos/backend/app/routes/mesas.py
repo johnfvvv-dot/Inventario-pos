@@ -188,6 +188,12 @@ def listar_mesas(db: Session = Depends(get_db)):
         activa = next((m for m in posiciones if m.estado == "ocupada"), posiciones[0])
         numero_barra = posiciones[0].numero // 100
         bolirana_barra = boliranas["barra"].get(numero_barra)
+        if not bolirana_barra:
+            # La barra también puede participar mediante una de sus plazas.
+            for plaza in posiciones:
+                bolirana_barra = boliranas["mesa"].get(plaza.id)
+                if bolirana_barra:
+                    break
 
         resultado_barras.append(
             MesaListadoOut(

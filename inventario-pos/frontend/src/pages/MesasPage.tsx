@@ -49,6 +49,7 @@ export default function MesasPage() {
   const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "2" });
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ mesaId: number; texto: string } | null>(null);
+  const [avisoBolirana, setAvisoBolirana] = useState<Mesa | null>(null);
   const [porEliminar, setPorEliminar] = useState<Mesa | null>(null);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -138,6 +139,11 @@ export default function MesasPage() {
    */
   const liberarMesa = async (mesa: Mesa) => {
     setAviso(null);
+    if (mesa.en_bolirana) {
+      // La tarjeta no se bloquea: se explica el motivo en un modal claro.
+      setAvisoBolirana(mesa);
+      return;
+    }
     try {
       await api.liberarMesa(mesa.id);
       await cargarMesas();
@@ -347,22 +353,19 @@ export default function MesasPage() {
               {mesa.tipo === "barra" && (
                 <span className="badge barra-tag">Barra</span>
               )}
-              {mesa.en_bolirana && (
-                <span className="badge badge-bolirana">
-                  <Icon nombre="bolirana" size={12} />
-                  Bolirana
-                </span>
-              )}
             </div>
 
             {mesa.en_bolirana && (
-              <div className="mesa-bolirana-aviso">
-                <Icon nombre="candado" size={14} />
-                <span>
-                  En partida en <strong>{mesa.bolirana_nombre}</strong>. No se
-                  puede cobrar ni cerrar hasta liquidarla.
+              <span
+                className="badge badge-bolirana"
+                title={`En partida en ${mesa.bolirana_nombre}. La cuenta se puede consultar, pero no cobrar ni cerrar hasta liquidarla.`}
+              >
+                <Icon nombre="bolirana" size={12} />
+                <span className="badge-bolirana-nombre">
+                  {mesa.bolirana_nombre || "Bolirana"}
                 </span>
-              </div>
+                <Icon nombre="candado" size={12} />
+              </span>
             )}
 
             {mesa.tiene_cuenta_pendiente && (
@@ -387,11 +390,10 @@ export default function MesasPage() {
                 <button
                   className="btn-secondary btn-small"
                   onClick={() => liberarMesa(mesa)}
-                  disabled={Boolean(mesa.en_bolirana)}
                   title={
                     mesa.en_bolirana
-                      ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida antes de liberarla.`
-                      : undefined
+                      ? `La mesa está en una partida de ${mesa.bolirana_nombre}. Pulsa para ver el aviso.`
+                      : "Liberar la mesa"
                   }
                 >
                   <Icon nombre="check" size={14} />
@@ -420,10 +422,9 @@ export default function MesasPage() {
                 }
                 title={
                   mesa.en_bolirana
-                    ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida y define el pago antes de cerrar la cuenta.`
+                    ? `Consultar la cuenta (en partida de ${mesa.bolirana_nombre}). No se puede cobrar hasta liquidarla.`
                     : `Ver la cuenta de ${etiquetaMesa(mesa)}`
                 }
-                disabled={Boolean(mesa.en_bolirana)}
               >
                 <Icon nombre="recibo" size={14} />
                 Cuenta
@@ -510,6 +511,36 @@ export default function MesasPage() {
                 </button>
               </>
             ) : null
+          }
+        />
+      )}
+
+      {/* Aviso al intentar liberar una mesa/barra en partida de Bolirana */}
+      {avisoBolirana && (
+        <ConfirmModal
+          titulo="Partida de Bolirana activa"
+          mensaje={`Esta ${
+            avisoBolirana.tipo === "barra" ? "barra" : "mesa"
+          } tiene una partida activa en ${
+            avisoBolirana.bolirana_nombre || "Bolirana"
+          }. Finaliza la partida y define el pago antes de liberarla.`}
+          aceptar="Entendido"
+          cancelar="Cerrar"
+          onConfirmar={() => setAvisoBolirana(null)}
+          onCancelar={() => setAvisoBolirana(null)}
+          accionesExtra={
+            <button
+              className="btn-secondary btn-small"
+              onClick={() => {
+                const mesa = avisoBolirana;
+                setAvisoBolirana(null);
+                if (mesa.tipo === "barra") setBarraCuenta(mesa.numero);
+                else setMesaCuenta(mesa.id);
+              }}
+            >
+              <Icon nombre="recibo" size={14} />
+              Ver la cuenta
+            </button>
           }
         />
       )}
