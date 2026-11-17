@@ -31,6 +31,8 @@ interface Mesa {
   posicion: number;
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
+  en_bolirana?: boolean;
+  bolirana_nombre?: string | null;
   posiciones?: Posicion[];
 }
 
@@ -345,7 +347,23 @@ export default function MesasPage() {
               {mesa.tipo === "barra" && (
                 <span className="badge barra-tag">Barra</span>
               )}
+              {mesa.en_bolirana && (
+                <span className="badge badge-bolirana">
+                  <Icon nombre="bolirana" size={12} />
+                  Bolirana
+                </span>
+              )}
             </div>
+
+            {mesa.en_bolirana && (
+              <div className="mesa-bolirana-aviso">
+                <Icon nombre="candado" size={14} />
+                <span>
+                  En partida en <strong>{mesa.bolirana_nombre}</strong>. No se
+                  puede cobrar ni cerrar hasta liquidarla.
+                </span>
+              </div>
+            )}
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
@@ -369,6 +387,12 @@ export default function MesasPage() {
                 <button
                   className="btn-secondary btn-small"
                   onClick={() => liberarMesa(mesa)}
+                  disabled={Boolean(mesa.en_bolirana)}
+                  title={
+                    mesa.en_bolirana
+                      ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida antes de liberarla.`
+                      : undefined
+                  }
                 >
                   <Icon nombre="check" size={14} />
                   Liberar
@@ -394,7 +418,12 @@ export default function MesasPage() {
                     ? setBarraCuenta(mesa.numero)
                     : setMesaCuenta(mesa.id)
                 }
-                title={`Ver la cuenta de ${etiquetaMesa(mesa)}`}
+                title={
+                  mesa.en_bolirana
+                    ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida y define el pago antes de cerrar la cuenta.`
+                    : `Ver la cuenta de ${etiquetaMesa(mesa)}`
+                }
+                disabled={Boolean(mesa.en_bolirana)}
               >
                 <Icon nombre="recibo" size={14} />
                 Cuenta
@@ -402,7 +431,9 @@ export default function MesasPage() {
               <button
                 className="btn-icon danger"
                 title={
-                  mesa.tipo === "barra"
+                  mesa.en_bolirana
+                    ? `No se puede eliminar: tiene una partida activa en ${mesa.bolirana_nombre}.`
+                    : mesa.tipo === "barra"
                     ? "Eliminar barra completa"
                     : "Eliminar mesa"
                 }
@@ -410,6 +441,7 @@ export default function MesasPage() {
                   setErrorEliminar(null);
                   setPorEliminar(mesa);
                 }}
+                disabled={Boolean(mesa.en_bolirana)}
               >
                 <Icon nombre="eliminar" size={15} />
               </button>

@@ -34,6 +34,10 @@ interface Props {
   total: number;
   /** Cliente asignado a la venta; "Mostrador" si no tiene alias. */
   cliente?: string | null;
+  /** Título de la ventana; "Para Llevar" por defecto. */
+  titulo?: string;
+  /** Etiqueta del resumen; "Pedido actual" por defecto. */
+  etiquetaResumen?: string;
   confirmar: (pagos: PagoParaLlevar[]) => void;
   onClose: () => void;
   procesando?: boolean;
@@ -56,6 +60,8 @@ export default function CobroParaLlevarModal({
   items,
   total,
   cliente,
+  titulo = "Para Llevar",
+  etiquetaResumen = "Pedido actual",
   confirmar,
   onClose,
   procesando = false,
@@ -155,7 +161,7 @@ export default function CobroParaLlevarModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h3>Para Llevar</h3>
+          <h3>{titulo}</h3>
           <button
             className="btn-icon"
             onClick={onClose}
@@ -172,7 +178,7 @@ export default function CobroParaLlevarModal({
           <div className="cuenta-resumen-item">
             <span>
               <Icon nombre="pedidos" size={14} />
-              Pedido actual
+              {etiquetaResumen}
             </span>
             <strong>
               {cantidadProductos} producto{cantidadProductos === 1 ? "" : "s"}

@@ -5,6 +5,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.boliranas_servicio import (
+    exigir_barra_sin_bolirana,
+    exigir_mesa_sin_bolirana,
+)
 from app.cuentas_servicio import (
     alias_existente_en_cuenta,
     bloquear_cuenta,
@@ -85,7 +89,13 @@ def _pedido_out(pedido: Pedido) -> PedidoOut:
         total=pedido.total,
         estado=pedido.estado,
         participante_id=pedido.participante_id,
-        alias=pedido.participante.alias if pedido.participante else None,
+        alias=(
+            pedido.participante.alias
+            if pedido.participante
+            else pedido.alias_cliente
+        ),
+        concepto=pedido.concepto,
+        bolirana_partida_id=pedido.bolirana_partida_id,
         es_pago_division=bool(pedido.es_pago_division),
         usuario_cierre_id=pedido.usuario_cierre_id,
     )
@@ -436,6 +446,7 @@ def cerrar_cuenta(
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
+    exigir_mesa_sin_bolirana(db, mesa)
     bloquear_cuenta(db, mesa)
 
     if forma_pago not in FORMAS_PAGO:
@@ -526,6 +537,8 @@ def cerrar_cuenta_barra(
     if not mesas:
         raise HTTPException(status_code=404, detail="Barra no encontrada")
 
+    exigir_barra_sin_bolirana(db, numero_barra)
+
     if forma_pago not in FORMAS_PAGO:
         raise HTTPException(
             status_code=400,
@@ -609,6 +622,8 @@ def transferir_cuenta(
             detail="El destino debe ser otra mesa o una plaza de barra distinta",
         )
 
+    exigir_mesa_sin_bolirana(db, origen)
+    exigir_mesa_sin_bolirana(db, destino)
     bloquear_cuenta(db, origen)
     bloquear_cuenta(db, destino)
     db.flush()
@@ -927,6 +942,7 @@ def pagar_participante(
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa de la división no encontrada")
 
+    exigir_mesa_sin_bolirana(db, mesa)
     bloquear_cuenta(db, mesa)
     db.refresh(participante)
     division = db.query(Division).filter(Division.id == division.id).first()
@@ -987,6 +1003,7 @@ def pagar_division(
 
     mesa = division.mesa
     if mesa:
+        exigir_mesa_sin_bolirana(db, mesa)
         bloquear_cuenta(db, mesa)
         db.refresh(division)
 
@@ -1273,6 +1290,8 @@ def cerrar_general_mesa(
     exigir_turno_abierto(db)
 
     mesas, _ = _resolver_mesas_cuenta(db, mesa_id, None, bloquear=True)
+    for mesa in mesas:
+        exigir_mesa_sin_bolirana(db, mesa)
     if forma_pago not in FORMAS_PAGO:
         raise HTTPException(
             status_code=400,
@@ -1302,6 +1321,7 @@ def cerrar_general_barra(
     exigir_turno_abierto(db)
 
     mesas, _ = _resolver_mesas_cuenta(db, None, numero_barra, bloquear=True)
+    exigir_barra_sin_bolirana(db, numero_barra)
     if forma_pago not in FORMAS_PAGO:
         raise HTTPException(
             status_code=400,

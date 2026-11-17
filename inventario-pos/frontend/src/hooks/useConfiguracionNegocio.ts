@@ -12,12 +12,15 @@ import { api } from "../services/api";
 export interface ConfiguracionNegocio {
   nombre_negocio: string;
   logo: string | null;
+  /** Interruptor global del módulo adicional de Bolirana. */
+  modulo_bolirana: boolean;
   actualizado_en?: string | null;
 }
 
 export const CONFIGURACION_POR_DEFECTO: ConfiguracionNegocio = {
   nombre_negocio: "Inventario POS",
   logo: null,
+  modulo_bolirana: false,
 };
 
 const CLAVE_CACHE = "negocio_config";
@@ -27,6 +30,7 @@ function normalizar(datos: any): ConfiguracionNegocio {
   return {
     nombre_negocio: String(datos?.nombre_negocio || "").trim() || "Inventario POS",
     logo: datos?.logo || null,
+    modulo_bolirana: Boolean(datos?.modulo_bolirana),
     actualizado_en: datos?.actualizado_en || null,
   };
 }

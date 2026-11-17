@@ -57,6 +57,11 @@ export default function AdminLayout() {
             <MenuLink to="/admin/pedidos" icono="pedidos">
               Pedidos
             </MenuLink>
+            {negocio.modulo_bolirana && (
+              <MenuLink to="/admin/bolirana" icono="bolirana">
+                Bolirana
+              </MenuLink>
+            )}
             <MenuLink to="/admin/reportes" icono="reportes">
               Reportes
             </MenuLink>

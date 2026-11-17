@@ -64,11 +64,14 @@ function recortarLogo(archivo: File): Promise<string> {
 
 export default function PersonalizacionPage() {
   const actual = useConfiguracionNegocio();
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const [nombre, setNombre] = useState(actual.nombre_negocio);
   const [logo, setLogo] = useState<string | null>(actual.logo);
+  const [moduloBolirana, setModuloBolirana] = useState(actual.modulo_bolirana);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [guardandoModulo, setGuardandoModulo] = useState(false);
   const inputLogo = useRef<HTMLInputElement>(null);
   const editado = useRef(false);
 
@@ -80,6 +83,10 @@ export default function PersonalizacionPage() {
       setLogo(actual.logo);
     }
   }, [actual.nombre_negocio, actual.logo]);
+
+  useEffect(() => {
+    setModuloBolirana(actual.modulo_bolirana);
+  }, [actual.modulo_bolirana]);
 
   const elegirLogo = async (evento: ChangeEvent<HTMLInputElement>) => {
     const archivo = evento.target.files?.[0];
@@ -134,6 +141,9 @@ export default function PersonalizacionPage() {
       const config = {
         nombre_negocio: datos?.nombre_negocio || nombreLimpio,
         logo: datos?.logo || null,
+        modulo_bolirana: Boolean(
+          datos?.modulo_bolirana ?? actual.modulo_bolirana
+        ),
       };
       notificarConfiguracion(config);
       editado.current = false;
@@ -144,6 +154,34 @@ export default function PersonalizacionPage() {
       setError(err?.message || "No se pudo guardar la personalización.");
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const cambiarModuloBolirana = async (habilitado: boolean) => {
+    setError(null);
+    setMensaje(null);
+    setGuardandoModulo(true);
+    try {
+      const datos: any = await api.updateModulos({
+        usuario_id: Number(usuario?.id) || 1,
+        modulo_bolirana: habilitado,
+      });
+      const config = {
+        nombre_negocio: datos?.nombre_negocio || actual.nombre_negocio,
+        logo: datos?.logo ?? actual.logo,
+        modulo_bolirana: Boolean(datos?.modulo_bolirana),
+      };
+      notificarConfiguracion(config);
+      setModuloBolirana(config.modulo_bolirana);
+      setMensaje(
+        config.modulo_bolirana
+          ? "Módulo de Bolirana habilitado. Ya aparece en el menú."
+          : "Módulo de Bolirana deshabilitado. Se ocultó del menú y de Pedidos."
+      );
+    } catch (err: any) {
+      setError(err?.message || "No se pudo cambiar el módulo de Bolirana.");
+    } finally {
+      setGuardandoModulo(false);
     }
   };
 
@@ -263,6 +301,47 @@ export default function PersonalizacionPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="panel panel-acento panel-acento--naranja">
+        <h3>
+          <Icon nombre="bolirana" size={15} />
+          Módulos adicionales
+        </h3>
+        <p className="muted small">
+          Activa funciones opcionales para toda la operación. El cambio se
+          comparte entre Administradores y Bartenders.
+        </p>
+
+        <div className="modulo-switch-fila">
+          <div>
+            <strong>Habilitar módulo de Bolirana</strong>
+            <p className="muted small">
+              Agrega Bolirana al menú y al selector de Pedidos. Permite
+              competencias por ronda, carga de bebidas y transferencia del
+              consumo a los perdedores.
+            </p>
+          </div>
+          <label className="switch-modulo">
+            <input
+              type="checkbox"
+              checked={moduloBolirana}
+              disabled={guardandoModulo}
+              onChange={(evento) =>
+                cambiarModuloBolirana(evento.target.checked)
+              }
+            />
+            <span className="switch-modulo-slider" aria-hidden="true" />
+            <span className="sr-only">
+              {moduloBolirana
+                ? "Módulo de Bolirana habilitado"
+                : "Módulo de Bolirana deshabilitado"}
+            </span>
+          </label>
+        </div>
+        {guardandoModulo && (
+          <p className="muted small">Guardando el estado del módulo...</p>
+        )}
       </section>
 
       <section className="panel panel-aviso panel-aviso--cian">

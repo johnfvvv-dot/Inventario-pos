@@ -6,6 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.boliranas_servicio import (
+    exigir_barra_sin_bolirana,
+    exigir_mesa_sin_bolirana,
+    mapa_boliranas_activas,
+)
 from app.database import get_db
 from app.models import Division, Mesa, Participante, Pedido
 from app.schemas import (
@@ -155,6 +160,7 @@ def listar_mesas(db: Session = Depends(get_db)):
     """
     mesas = db.query(Mesa).order_by(Mesa.tipo, Mesa.grupo, Mesa.numero).all()
     resumen = _resumen_cuenta(db, mesas)
+    boliranas = mapa_boliranas_activas(db)
 
     # --- Barras agrupadas (una tarjeta por barra) ---
     grupos: dict = {}
@@ -181,6 +187,7 @@ def listar_mesas(db: Session = Depends(get_db)):
         # posicion activa: la primera ocupada, si no la primera libre
         activa = next((m for m in posiciones if m.estado == "ocupada"), posiciones[0])
         numero_barra = posiciones[0].numero // 100
+        bolirana_barra = boliranas["barra"].get(numero_barra)
 
         resultado_barras.append(
             MesaListadoOut(
@@ -194,6 +201,8 @@ def listar_mesas(db: Session = Depends(get_db)):
                 total_cuenta=total,
                 tiene_cuenta_pendiente=tiene,
                 detalle_pendiente="",
+                en_bolirana=bolirana_barra is not None,
+                bolirana_nombre=bolirana_barra,
                 posiciones=[
                     PosicionBarra(
                         id=m.id,
@@ -215,6 +224,7 @@ def listar_mesas(db: Session = Depends(get_db)):
             mesa.id,
             {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
         )
+        bolirana_mesa = boliranas["mesa"].get(mesa.id)
         resultado.append(
             MesaListadoOut(
                 id=mesa.id,
@@ -229,6 +239,8 @@ def listar_mesas(db: Session = Depends(get_db)):
                     info["pedidos"] or info["divisiones"] or info["clientes"]
                 ),
                 detalle_pendiente="",
+                en_bolirana=bolirana_mesa is not None,
+                bolirana_nombre=bolirana_mesa,
             )
         )
     return resultado + resultado_barras
@@ -302,6 +314,7 @@ def actualizar_estado_mesa(
 
     # No se puede marcar como disponible una mesa con cuentas pendientes
     if datos.nuevo_estado == "disponible":
+        exigir_mesa_sin_bolirana(db, mesa)
         db.flush()
         pedidos_abiertos = (
             db.query(func.count(Pedido.id))
@@ -343,6 +356,7 @@ def liberar_mesa(mesa_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
     es_barra = (mesa.tipo or "mesa") == "barra" and bool(mesa.grupo)
+    exigir_mesa_sin_bolirana(db, mesa)
     mesas = (
         db.query(Mesa).filter(Mesa.grupo == mesa.grupo).all()
         if es_barra
@@ -404,6 +418,7 @@ def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
 
     es_barra = (mesa.tipo or "mesa") == "barra" and bool(mesa.grupo)
+    exigir_mesa_sin_bolirana(db, mesa)
     mesas = (
         db.query(Mesa).filter(Mesa.grupo == mesa.grupo).all()
         if es_barra

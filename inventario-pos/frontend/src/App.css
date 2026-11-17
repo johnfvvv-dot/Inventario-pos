@@ -5133,3 +5133,390 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
   }
 }
+
+/* -------------------- MÓDULOS ADICIONALES / BOLIRANA -------------------- */
+
+.panel-acento--naranja {
+  border-top-color: #f97316;
+}
+
+.modulo-switch-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fffaf5;
+  margin-top: 0.8rem;
+}
+
+.modulo-switch-fila strong {
+  font-size: 0.95rem;
+}
+
+.modulo-switch-fila p {
+  margin: 0.25rem 0 0;
+  max-width: 640px;
+}
+
+.switch-modulo {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 26px;
+  margin-top: 0.2rem;
+}
+
+.switch-modulo input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.switch-modulo-slider {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background-color 0.2s;
+}
+
+.switch-modulo-slider::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.25);
+  transition: transform 0.2s;
+}
+
+.switch-modulo input:checked + .switch-modulo-slider {
+  background: #f97316;
+}
+
+.switch-modulo input:checked + .switch-modulo-slider::before {
+  transform: translateX(22px);
+}
+
+.switch-modulo input:disabled + .switch-modulo-slider {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Creación y tarjetas de bolirana */
+
+.bolirana-form {
+  border-top: 3px solid #f97316;
+}
+
+.bolirana-form-campos {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.bolirana-form-campos .form-group {
+  flex: 1 1 260px;
+  margin-bottom: 0;
+}
+
+.mesas-form-icono--bolirana {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.bolirana-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.bolirana-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  border-top: 3px solid #f97316;
+}
+
+.bolirana-card--disponible {
+  border-top-color: #10b981;
+}
+
+.bolirana-card--ocupada {
+  border-top-color: #f97316;
+}
+
+.bolirana-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.bolirana-card-head h3 {
+  margin: 0 0 0.35rem;
+}
+
+.bolirana-participantes-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.bolirana-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.bolirana-chip .btn-icon {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: #9a3412;
+}
+
+.bolirana-consumo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: #fbfcfd;
+}
+
+.bolirana-consumo-linea {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.bolirana-card-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.bolirana-card-acciones .btn-primary,
+.bolirana-card-acciones .btn-secondary {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.badge-bolirana {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.mesa-bolirana-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+/* Cargos pendientes de jugadores libres */
+
+.bolirana-cargos-panel {
+  border-top: 3px solid #f97316;
+}
+
+.bolirana-cargos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.bolirana-cargo-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.bolirana-cargo-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+/* Modales de partida y liquidación */
+
+.modal-bolirana {
+  max-width: 920px;
+}
+
+.bolirana-modal-grid,
+.bolirana-liquidacion-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+.bolirana-modal-grid h4,
+.bolirana-liquidacion-grid h4,
+.bolirana-alias-seccion h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.bolirana-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.bolirana-opcion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.bolirana-opcion input {
+  accent-color: #f97316;
+}
+
+.bolirana-opcion--perdedor strong {
+  margin-left: auto;
+  color: #c2410c;
+}
+
+.bolirana-alias-seccion {
+  margin-top: 1rem;
+}
+
+.bolirana-alias-fila {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bolirana-alias-fila input {
+  flex: 1;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bolirana-alias-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.bolirana-resumen-seleccion {
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.85rem;
+}
+
+.bolirana-division-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.9rem;
+}
+
+.bolirana-check-cobro {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.bolirana-check-cobro input {
+  margin-top: 0.15rem;
+  accent-color: #f97316;
+}
+
+@media (max-width: 760px) {
+  .bolirana-modal-grid,
+  .bolirana-liquidacion-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modulo-switch-fila {
+    flex-direction: column;
+  }
+
+  .bolirana-form-campos {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bolirana-form-campos .btn-primary {
+    width: 100%;
+  }
+}

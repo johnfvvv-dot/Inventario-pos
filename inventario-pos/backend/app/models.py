@@ -126,6 +126,13 @@ class Pedido(Base):
     # Nombre del cliente de una venta "Para llevar". Se guarda directo en el
     # pedido porque estas ventas no crean mesa, división ni participante.
     alias_cliente = Column(String(60), nullable=True)
+    # Cargo sin producto (ej. "Consumo Bolirana 1 (Partida)"). Se usa en los
+    # pedidos que transfieren el total de una partida a una cuenta.
+    concepto = Column(String(140), nullable=True)
+    # Partida de bolirana que originó el consumo o el cargo transferido.
+    bolirana_partida_id = Column(
+        Integer, ForeignKey("partidas_bolirana.id"), nullable=True, index=True
+    )
     # 1 = pedido financiero creado al cobrar la parte de un alias. Se excluye
     # de la generación de tickets para no duplicar el ticket del cliente.
     es_pago_division = Column(Integer, default=0, nullable=False, index=True)
@@ -140,6 +147,7 @@ class Pedido(Base):
         primaryjoin="Pedido.participante_id == Participante.id",
         foreign_keys=[participante_id],
     )
+    partida_bolirana = relationship("PartidaBolirana", back_populates="pedidos")
     items = relationship(
         "PedidoItem", back_populates="pedido", cascade="all, delete-orphan"
     )
@@ -253,6 +261,82 @@ class TurnoCaja(Base):
     usuario = relationship("Usuario")
 
 
+class Bolirana(Base):
+    """Máquina de bolirana registrada por el Administrador.
+
+    ``activa=0`` es una eliminación lógica: conserva el historial de partidas
+    sin mostrar la máquina en la operación diaria.
+    """
+
+    __tablename__ = "boliranas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(60), nullable=False)
+    activa = Column(Integer, nullable=False, default=1, index=True)
+    creado_en = Column(DateTime, default=ahora_local)
+
+    partidas = relationship(
+        "PartidaBolirana", back_populates="bolirana", cascade="all, delete-orphan"
+    )
+
+
+class PartidaBolirana(Base):
+    """Partida de bolirana con sus participantes y bebidas de la ronda."""
+
+    __tablename__ = "partidas_bolirana"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bolirana_id = Column(
+        Integer, ForeignKey("boliranas.id"), nullable=False, index=True
+    )
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    estado = Column(String(20), default="en_curso")  # en_curso | finalizada
+    fecha_inicio = Column(DateTime, default=ahora_local)
+    fecha_fin = Column(DateTime, nullable=True)
+    # Total de las bebidas cargadas en la ronda (una sola vez).
+    total_bebidas = Column(Float, nullable=False, default=0.0)
+
+    bolirana = relationship("Bolirana", back_populates="partidas")
+    usuario = relationship("Usuario")
+    participantes = relationship(
+        "ParticipanteBolirana",
+        back_populates="partida",
+        cascade="all, delete-orphan",
+    )
+    pedidos = relationship("Pedido", back_populates="partida_bolirana")
+
+
+class ParticipanteBolirana(Base):
+    """Mesa, barra o jugador libre que compite en una partida."""
+
+    __tablename__ = "participantes_bolirana"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partida_id = Column(
+        Integer, ForeignKey("partidas_bolirana.id"), nullable=False, index=True
+    )
+    tipo = Column(String(20), nullable=False)  # mesa | barra | alias
+    mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=True, index=True)
+    barra_numero = Column(Integer, nullable=True)
+    alias = Column(String(60), nullable=True)
+    es_perdedor = Column(Integer, nullable=False, default=0)
+    monto_asignado = Column(Float, nullable=False, default=0.0)
+    estado_pago = Column(String(20), nullable=False, default="pendiente")
+    # Pedido (cargo) creado al liquidar la partida para este participante.
+    pedido_cobro_id = Column(Integer, nullable=True, index=True)
+
+    partida = relationship("PartidaBolirana", back_populates="participantes")
+    mesa = relationship("Mesa")
+
+    def etiqueta(self) -> str:
+        """Nombre visible del participante."""
+        if self.tipo == "mesa":
+            return f"Mesa {self.mesa.numero}" if self.mesa else "Mesa"
+        if self.tipo == "barra":
+            return f"Barra {self.barra_numero}"
+        return self.alias or "Jugador"
+
+
 class ConfiguracionNegocio(Base):
     """Personalización visual del negocio (nombre y logotipo).
 
@@ -265,6 +349,8 @@ class ConfiguracionNegocio(Base):
     id = Column(Integer, primary_key=True, default=1)
     nombre_negocio = Column(String(80), nullable=False, default="Inventario POS")
     logo = Column(String, nullable=True)  # data URL (PNG/JPEG/WebP)
+    # Interruptor global del módulo adicional de Bolirana.
+    modulo_bolirana = Column(Integer, nullable=False, default=0)
     actualizado_en = Column(DateTime, default=ahora_local, onupdate=ahora_local)
 
 

@@ -119,6 +119,11 @@ export default function BartenderLayout() {
             <MenuLink to="/bartender/mesas" icono="mesas">
               Mesas
             </MenuLink>
+            {negocio.modulo_bolirana && (
+              <MenuLink to="/bartender/bolirana" icono="bolirana">
+                Bolirana
+              </MenuLink>
+            )}
             <MenuLink to="/bartender/inventario" icono="inventario">
               Inventario
             </MenuLink>

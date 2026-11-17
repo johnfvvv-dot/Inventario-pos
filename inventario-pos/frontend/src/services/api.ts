@@ -347,6 +347,83 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
+  /** Activa/desactiva módulos adicionales (solo Administrador). */
+  updateModulos: (datos: {
+    usuario_id: number;
+    modulo_bolirana: boolean;
+  }) =>
+    request("/configuracion/modulos", {
+      method: "PUT",
+      body: JSON.stringify(datos),
+    }),
+
+  // ---------- Bolirana ----------
+  getBoliranas: () => request("/boliranas/"),
+
+  createBolirana: (nombre: string, usuarioId: number) =>
+    request("/boliranas/", {
+      method: "POST",
+      body: JSON.stringify({ nombre, usuario_id: usuarioId }),
+    }),
+
+  deleteBolirana: (boliranaId: number, usuarioId: number) =>
+    request(
+      `/boliranas/${idPositivo(boliranaId, "Bolirana")}?usuario_id=${usuarioId}`,
+      { method: "DELETE" }
+    ),
+
+  iniciarPartidaBolirana: (
+    boliranaId: number,
+    datos: {
+      usuario_id: number;
+      participantes: {
+        tipo: string;
+        mesa_id?: number;
+        barra_numero?: number;
+        alias?: string;
+      }[];
+    }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/iniciar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  cargarBebidasBolirana: (
+    boliranaId: number,
+    datos: {
+      usuario_id: number;
+      items: { producto_id: number; cantidad: number }[];
+    }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/pedidos`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  finalizarPartidaBolirana: (
+    boliranaId: number,
+    datos: { usuario_id: number; perdedores: number[] }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/finalizar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  getCargosBolirana: () => request("/boliranas/cargos-pendientes"),
+
+  pagarCargoBolirana: (
+    pedidoId: number,
+    datos: {
+      usuario_id: number;
+      pagos: { forma_pago: string; monto: number }[];
+    }
+  ) =>
+    request(`/boliranas/cargos/${idPositivo(pedidoId, "Cargo")}/pagar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
   // ---------- Usuarios ----------
   login: (usuario: string, password: string) =>
     request("/usuarios/login", {

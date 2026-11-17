@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.boliranas_servicio import hay_partidas_activas, modulo_habilitado
 from app.database import get_db
 from app.models import (
     ConfiguracionNegocio,
@@ -373,6 +374,32 @@ def cerrar_turno(datos: CerrarTurnoIn, db: Session = Depends(get_db)):
         .scalar()
         or 0
     )
+    if hay_partidas_activas(db):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede cerrar el turno: hay partidas de Bolirana "
+                "activas o bebidas pendientes de transferir. Finaliza las "
+                "partidas antes de continuar."
+            ),
+        )
+    cargos_bolirana_pendientes = (
+        db.query(func.count(Pedido.id))
+        .filter(
+            Pedido.estado == "pendiente",
+            Pedido.bolirana_partida_id.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    if cargos_bolirana_pendientes and modulo_habilitado(db):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No se puede cerrar el turno: hay cargos de Bolirana "
+                "pendientes de cobro. Cóbralos antes de continuar."
+            ),
+        )
     if mesas_ocupadas or pedidos_pendientes or divisiones_pendientes:
         raise HTTPException(
             status_code=409,
@@ -674,6 +701,18 @@ def tickets_turno(
             )
             for item in sorted(pedido.items, key=lambda i: i.id)
         ]
+        if not items and pedido.concepto:
+            # Los cargos de Bolirana no llevan productos: se imprimen como
+            # una sola línea de concepto por el total transferido.
+            total_cargo = round(float(pedido.total or 0.0), 2)
+            items = [
+                TicketItemOut(
+                    nombre=pedido.concepto,
+                    cantidad=1,
+                    precio_unitario=total_cargo,
+                    subtotal=total_cargo,
+                )
+            ]
         if not items:
             continue
         tickets.append(
@@ -919,6 +958,8 @@ def historial_ventas(
             f"{item.producto.nombre if item.producto else 'Producto eliminado'}"
             for item in pedido.items
         ]
+        if not productos_txt and pedido.concepto:
+            productos_txt = [pedido.concepto]
         mesa_obj = pedido.mesa
         usuario = pedido.usuario
         if pedido.mesa_etiqueta_historica:
@@ -959,6 +1000,7 @@ def historial_ventas(
                     if pedido.participante
                     else pedido.alias_cliente
                 ),
+                "concepto": pedido.concepto,
                 "productos": productos_txt,
             }
         )

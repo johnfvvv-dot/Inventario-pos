@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearFechaHora, formatearPrecio } from "../utils/format";
+import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
 import {
   MENSAJE_TURNO_REQUERIDO,
   useTurno,
 } from "../context/TurnoContext";
+import type { Bolirana } from "../types/bolirana";
 import CuentaModal from "../components/CuentaModal";
 import CobroParaLlevarModal, {
   type PagoParaLlevar,
@@ -113,11 +115,14 @@ const leerPermisoCantidades = (): boolean => {
 
 export default function PedidoMesaPage() {
   const [searchParams] = useSearchParams();
+  const negocio = useConfiguracionNegocio();
   const { turno, cargando: cargandoTurno, solicitarApertura } = useTurno();
   const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [boliranas, setBoliranas] = useState<Bolirana[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [mesaId, setMesaId] = useState<number | "para-llevar" | "">("");
+  const [boliranaId, setBoliranaId] = useState<number | "">("");
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +150,7 @@ export default function PedidoMesaPage() {
   const [mostrarAsignacion, setMostrarAsignacion] = useState(false);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [procesandoAsignacion, setProcesandoAsignacion] = useState(false);
+  const [procesandoBolirana, setProcesandoBolirana] = useState(false);
   const [permisoEditar, setPermisoEditar] = useState<boolean>(
     leerPermisoCantidades
   );
@@ -159,6 +165,14 @@ export default function PedidoMesaPage() {
 
   /** Venta de mostrador: no tiene mesa física ni cuenta abierta. */
   const esParaLlevar = mesaId === "para-llevar";
+
+  /** Modo Bolirana: el pedido se carga a la ronda activa, no a una mesa. */
+  const esBolirana = boliranaId !== "";
+  const boliranaSeleccionada = useMemo(
+    () => boliranas.find((b) => b.id === boliranaId) || null,
+    [boliranas, boliranaId]
+  );
+  const partidaBolirana = boliranaSeleccionada?.partida || null;
 
   /**
    * Mesa o barra seleccionada en el desplegable.
@@ -190,7 +204,9 @@ export default function PedidoMesaPage() {
   const etiquetaMesa = (m: Mesa) =>
     m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
-  const etiquetaCuenta = esParaLlevar
+  const etiquetaCuenta = esBolirana
+    ? boliranaSeleccionada?.nombre || "la bolirana"
+    : esParaLlevar
     ? "Para llevar"
     : barraNumero
     ? `Barra ${barraNumero}`
@@ -255,14 +271,17 @@ export default function PedidoMesaPage() {
 
   const cargarCatalogos = async () => {
     try {
-      const [m, inv, cats]: any = await Promise.all([
+      const [m, inv, cats, bols]: any = await Promise.all([
         api.getMesas(),
         api.getProductos({ limite: 500, categoria_id: categoriaFiltro || undefined }),
         api.getCategorias(),
+        // Si el backend aún no tiene el módulo, Pedidos sigue funcionando.
+        api.getBoliranas().catch(() => []),
       ]);
       setMesas(m);
       setProductos(inv.items);
       setCategorias(cats);
+      setBoliranas(bols);
     } catch (err: any) {
       setError(err.message);
     }
@@ -350,7 +369,21 @@ export default function PedidoMesaPage() {
   // Mesa seleccionada automáticamente al venir desde el panel de Mesas
   useEffect(() => {
     const mesaParam = searchParams.get("mesa");
+    const boliranaParam = searchParams.get("bolirana");
+    if (boliranaParam) {
+      setBoliranaId(Number(boliranaParam));
+      setMesaId("");
+      setCarrito([]);
+      setCantidades({});
+      setAliasParaLlevar("");
+      setMensaje(null);
+      setError(null);
+      setMostrarAsignacion(false);
+      setErrorAsignacion(null);
+      return;
+    }
     if (mesaParam) {
+      setBoliranaId("");
       setMesaId(Number(mesaParam));
       setCarrito([]);
       setCantidades({});
@@ -453,16 +486,52 @@ export default function PedidoMesaPage() {
       setError(MENSAJE_TURNO_REQUERIDO);
       return;
     }
-    if (mesaId === "") {
-      setError("Selecciona una mesa, barra o Para llevar");
+    if (mesaId === "" && !esBolirana) {
+      setError("Selecciona una mesa, barra, Bolirana o Para llevar");
       return;
     }
     if (carrito.length === 0) {
       setError("Agrega al menos un producto");
       return;
     }
+    if (procesandoBolirana) return;
 
     setError(null);
+
+    // Modo Bolirana: descuenta stock y carga las bebidas a la ronda activa.
+    if (esBolirana) {
+      if (!partidaBolirana) {
+        setError(
+          `La ${
+            boliranaSeleccionada?.nombre || "bolirana"
+          } no tiene una partida activa. Inicia una partida desde el módulo Bolirana.`
+        );
+        return;
+      }
+      setProcesandoBolirana(true);
+      try {
+        await api.cargarBebidasBolirana(Number(boliranaId), {
+          usuario_id: usuarioId,
+          items: carrito.map((i) => ({
+            producto_id: i.producto_id,
+            cantidad: i.cantidad,
+          })),
+        });
+        setCarrito([]);
+        setCantidades({});
+        setMensaje(
+          `Bebidas cargadas a ${
+            boliranaSeleccionada?.nombre || "la bolirana"
+          }.`
+        );
+        await cargarCatalogos();
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setProcesandoBolirana(false);
+      }
+      return;
+    }
 
     // Venta de mostrador: se cobra de inmediato, sin abrir cuenta ni mesa.
     if (esParaLlevar) {
@@ -649,20 +718,26 @@ export default function PedidoMesaPage() {
         </div>
         <div className="filters pos-cabecera-filtros">
           <div className="form-group">
-            <label htmlFor="pedido-mesa">Mesa / barra</label>
+            <label htmlFor="pedido-mesa">Mesa / barra / bolirana</label>
             <select
               id="pedido-mesa"
               className="select-mesa"
-              value={mesaId}
+              value={esBolirana ? `bolirana:${boliranaId}` : mesaId}
               onChange={(e) => {
                 const valor = e.target.value;
-                setMesaId(
-                  valor === "para-llevar"
-                    ? "para-llevar"
-                    : valor
-                    ? Number(valor)
-                    : ""
-                );
+                if (valor.startsWith("bolirana:")) {
+                  setBoliranaId(Number(valor.split(":")[1]));
+                  setMesaId("");
+                } else {
+                  setBoliranaId("");
+                  setMesaId(
+                    valor === "para-llevar"
+                      ? "para-llevar"
+                      : valor
+                      ? Number(valor)
+                      : ""
+                  );
+                }
                 setCarrito([]);
                 setCantidades({});
                 setAliasParaLlevar("");
@@ -673,13 +748,30 @@ export default function PedidoMesaPage() {
                 setErrorParaLlevar(null);
               }}
             >
-              <option value="">— Seleccionar mesa o barra —</option>
+              <option value="">— Seleccionar mesa, barra o bolirana —</option>
               <option value="para-llevar">Para llevar</option>
               {mesas.map((m) => (
                 <option key={m.id} value={m.id}>
                   {etiquetaMesa(m)} ({m.estado})
                 </option>
               ))}
+              {negocio.modulo_bolirana && boliranas.length > 0 && (
+                <optgroup label="Bolirana">
+                  {boliranas.map((b) => (
+                    <option
+                      key={`bolirana-${b.id}`}
+                      value={`bolirana:${b.id}`}
+                      disabled={b.estado !== "en_partida"}
+                    >
+                      {b.nombre} (
+                      {b.estado === "en_partida"
+                        ? "en partida"
+                        : "disponible"}
+                      )
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div className="form-group">
@@ -743,7 +835,7 @@ export default function PedidoMesaPage() {
         </div>
       )}
 
-      {!esParaLlevar && aliasActivos.length > 0 && (
+      {!esParaLlevar && !esBolirana && aliasActivos.length > 0 && (
         <div className="aviso-clientes">
           <div className="aviso-clientes-icono">
             <Icon nombre="usuarios" size={18} />
@@ -905,41 +997,119 @@ export default function PedidoMesaPage() {
           </div>
 
           <div className="pedido-actual-acciones">
+            {!esBolirana && (
+              <button
+                className="btn-secondary"
+                onClick={() => setMostrarCrearAlias(true)}
+                disabled={
+                  !turno || cargandoTurno || mesaId === "" || carrito.length === 0
+                }
+                title={
+                  !turno
+                    ? MENSAJE_TURNO_REQUERIDO
+                    : mesaId === ""
+                    ? "Seleccioná una mesa, barra o Para llevar"
+                    : carrito.length === 0
+                    ? "Agregá productos para asignar el cliente"
+                    : esParaLlevar
+                    ? "Asignar un cliente a esta venta Para llevar"
+                    : "Crear un alias y asignarle este pedido"
+                }
+              >
+                <Icon nombre="usuario" size={16} />
+                Crear alias
+              </button>
+            )}
             <button
-              className="btn-secondary"
-              onClick={() => setMostrarCrearAlias(true)}
+              className="btn-primary"
+              onClick={confirmarPedido}
               disabled={
-                !turno || cargandoTurno || mesaId === "" || carrito.length === 0
+                !turno ||
+                cargandoTurno ||
+                procesandoBolirana ||
+                (esBolirana && !partidaBolirana)
               }
               title={
                 !turno
                   ? MENSAJE_TURNO_REQUERIDO
-                  : mesaId === ""
-                  ? "Seleccioná una mesa, barra o Para llevar"
-                  : carrito.length === 0
-                  ? "Agregá productos para asignar el cliente"
-                  : esParaLlevar
-                  ? "Asignar un cliente a esta venta Para llevar"
-                  : "Crear un alias y asignarle este pedido"
+                  : esBolirana && !partidaBolirana
+                  ? "La bolirana no tiene una partida activa"
+                  : undefined
               }
             >
-              <Icon nombre="usuario" size={16} />
-              Crear alias
-            </button>
-            <button
-              className="btn-primary"
-              onClick={confirmarPedido}
-              disabled={!turno || cargandoTurno}
-              title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
-            >
-              <Icon nombre="check" size={16} />
-              Confirmar pedido
+              <Icon nombre={esBolirana ? "bolirana" : "check"} size={16} />
+              {esBolirana
+                ? procesandoBolirana
+                  ? "Cargando..."
+                  : "Cargar bebidas"
+                : "Confirmar pedido"}
             </button>
           </div>
         </section>
       </div>
 
-      {!esParaLlevar && (
+      {esBolirana && (
+        <section className="panel pedido-cuenta-panel">
+          <div className="cuenta-panel-head">
+            <div>
+              <h3>
+                <Icon nombre="bolirana" size={15} />
+                Ronda de {boliranaSeleccionada?.nombre || "la bolirana"}
+              </h3>
+              <span className="muted small">
+                Bebidas cargadas a la partida activa.
+              </span>
+            </div>
+            {partidaBolirana && (
+              <strong>{formatearPrecio(partidaBolirana.total_bebidas)}</strong>
+            )}
+          </div>
+
+          {!boliranaSeleccionada ? (
+            <p className="empty-state">
+              Seleccioná una bolirana para ver su ronda.
+            </p>
+          ) : !partidaBolirana ? (
+            <p className="empty-state">
+              Esta bolirana no tiene una partida activa. Inicia una partida
+              desde el módulo Bolirana.
+            </p>
+          ) : (
+            <>
+              <div className="bolirana-participantes-chips">
+                {partidaBolirana.participantes.map((participante) => (
+                  <span key={participante.id} className="bolirana-chip">
+                    {participante.etiqueta}
+                  </span>
+                ))}
+              </div>
+              {partidaBolirana.consumo.length === 0 ? (
+                <p className="muted small">Sin bebidas cargadas todavía.</p>
+              ) : (
+                partidaBolirana.consumo.map((item) => (
+                  <div
+                    key={`${item.producto_id}-${item.precio_unitario}`}
+                    className="linea-pedido"
+                  >
+                    <span>
+                      {item.cantidad} × {item.producto_nombre}{" "}
+                      <span className="muted small">
+                        · {formatearPrecio(item.subtotal)}
+                      </span>
+                    </span>
+                  </div>
+                ))
+              )}
+              <div className="total-row pos-total">
+                <span>Total de la ronda</span>
+                <strong>{formatearPrecio(partidaBolirana.total_bebidas)}</strong>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {!esParaLlevar && !esBolirana && (
         <section className="panel pedido-cuenta-panel">
         <div className="cuenta-panel-head">
           <div>

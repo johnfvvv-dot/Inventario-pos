@@ -47,6 +47,8 @@ interface Pedido {
   estado: string;
   participante_id?: number | null;
   alias?: string | null;
+  /** Concepto de los cargos sin productos (ej. consumo de Bolirana). */
+  concepto?: string | null;
   items: LineaItem[];
 }
 
@@ -184,13 +186,29 @@ export default function CuentaModal({
   };
 
   const lineasGenerales = cuenta
-    ? cuenta.pedidos.flatMap((pedido) =>
-        pedido.items.map((item, indice) => ({
-          ...item,
-          pedidoId: pedido.id,
-          indice,
-        }))
-      )
+    ? cuenta.pedidos.flatMap((pedido) => {
+        if (pedido.items.length > 0) {
+          return pedido.items.map((item, indice) => ({
+            ...item,
+            pedidoId: pedido.id,
+            indice,
+          }));
+        }
+        if (!pedido.concepto) return [];
+        // Cargos de Bolirana: no tienen productos, se muestran como una
+        // sola línea de concepto por el total transferido.
+        return [
+          {
+            producto_id: 0,
+            producto_nombre: pedido.concepto,
+            cantidad: 1,
+            subtotal: pedido.total,
+            pedido_id: pedido.id,
+            pedidoId: pedido.id,
+            indice: 0,
+          },
+        ];
+      })
     : [];
 
   const clientes = cuenta

@@ -11,6 +11,7 @@ export type NombreIcono =
   | "historial"
   | "personalizacion"
   | "usuarios"
+  | "bolirana"
   | "actualizar"
   | "descargar"
   | "etiquetas"
@@ -41,6 +42,14 @@ export type NombreIcono =
   | "chevron";
 
 const ICONOS: Record<NombreIcono, ReactNode> = {
+  bolirana: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" />
+      <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21" />
+    </>
+  ),
   inventario: (
     <>
       <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
