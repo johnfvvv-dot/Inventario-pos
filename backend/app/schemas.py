@@ -584,6 +584,10 @@ class CuentaMesaOut(BaseModel):
     total: float
     total_general: float = 0.0
     total_divisiones: float = 0.0
+    # La cuenta queda en modo consulta mientras la mesa/barra participe en
+    # una partida de Bolirana sin liquidar.
+    en_bolirana: bool = False
+    bolirana_nombre: Optional[str] = None
     pedidos: List[PedidoOut]
     divisiones: List[DivisionResumen]
 

@@ -741,6 +741,7 @@ select:focus {
 .mesas-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 1rem;
 }
 
@@ -4126,6 +4127,7 @@ tbody tr:last-child td {
 .mesa-acciones {
   gap: 0.35rem;
   align-items: center;
+  margin-top: auto;
 }
 
 .mesa-acciones .btn-small {
@@ -5342,21 +5344,58 @@ tbody tr:last-child td {
 }
 
 .badge-bolirana {
-  background: #ffedd5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
+  background: #fff7ed;
   color: #c2410c;
+  border: 1px solid #fed7aa;
+  white-space: nowrap;
+  text-transform: none;
 }
 
-.mesa-bolirana-aviso {
+.badge-bolirana svg {
+  flex-shrink: 0;
+}
+
+.badge-bolirana-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Aviso de solo consulta dentro del modal de Cuenta */
+
+.cuenta-bolirana-aviso {
   display: flex;
   align-items: flex-start;
-  gap: 0.35rem;
-  padding: 0.45rem 0.55rem;
+  gap: 0.6rem;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
   border: 1px solid #fed7aa;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff7ed;
   color: #9a3412;
-  font-size: 0.75rem;
-  line-height: 1.35;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.cuenta-bolirana-aviso p {
+  margin: 0;
+}
+
+.cuenta-bolirana-aviso-icono {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #ffedd5;
+  color: #c2410c;
 }
 
 /* Cargos pendientes de jugadores libres */

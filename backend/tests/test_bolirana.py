@@ -126,6 +126,11 @@ class BoliranaTest(unittest.TestCase):
         fila = next(m for m in listado if m["id"] == mesa["id"])
         self.assertFalse(fila["en_bolirana"])
 
+        # La cuenta tampoco queda marcada en modo solo consulta.
+        cuenta = self.client.get(f"/api/cuentas/mesa/{mesa['id']}").json()
+        self.assertFalse(cuenta["en_bolirana"])
+        self.assertIsNone(cuenta["bolirana_nombre"])
+
         cierre = self.client.post(
             f"/api/cuentas/mesa/{mesa['id']}/cerrar",
             params={"forma_pago": "efectivo", "liberar_mesa": "true"},
@@ -146,6 +151,67 @@ class BoliranaTest(unittest.TestCase):
         )
         self.assertEqual(liquidar.status_code, 200, liquidar.text)
         self.assertEqual(liquidar.json()["estado"], "disponible")
+
+        eliminada = self.client.delete(
+            f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
+        )
+        self.assertEqual(eliminada.status_code, 200, eliminada.text)
+
+    def test_01c_cuenta_barra_en_bolirana(self):
+        """La cuenta de una barra en partida se consulta en modo solo lectura."""
+        self.client.put(
+            "/api/configuracion/modulos",
+            json={"usuario_id": 1, "modulo_bolirana": True},
+        )
+        plazas = self.client.post(
+            "/api/mesas/barra",
+            json={"numero": 95, "capacidad": 2},
+        ).json()
+        self.ocupar_mesa(plazas[0]["id"])
+        bolirana = self.crear_bolirana("Bolirana Barra")
+        partida = self.iniciar_partida(
+            bolirana["id"],
+            [
+                {"tipo": "barra", "barra_numero": 95},
+                {"tipo": "alias", "alias": "Jugador Barra"},
+            ],
+        )
+        participante_barra = next(
+            p for p in partida["partida"]["participantes"] if p["tipo"] == "barra"
+        )
+
+        # La tarjeta agregada de la barra muestra la píldora con candado.
+        listado = self.client.get("/api/mesas/").json()
+        tarjeta = next(
+            m for m in listado if m["tipo"] == "barra" and m["numero"] == 95
+        )
+        self.assertTrue(tarjeta["en_bolirana"])
+        self.assertEqual(tarjeta["bolirana_nombre"], "Bolirana Barra")
+
+        # La cuenta de la barra se puede consultar y llega marcada.
+        cuenta = self.client.get("/api/cuentas/barra/95").json()
+        self.assertTrue(cuenta["en_bolirana"])
+        self.assertEqual(cuenta["bolirana_nombre"], "Bolirana Barra")
+
+        # Liquidar con la barra como perdedora y cerrar su cuenta.
+        liquidar = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/finalizar",
+            json={
+                "usuario_id": 1,
+                "perdedores": [participante_barra["id"]],
+            },
+        )
+        self.assertEqual(liquidar.status_code, 200, liquidar.text)
+
+        cuenta = self.client.get("/api/cuentas/barra/95").json()
+        self.assertFalse(cuenta["en_bolirana"])
+        self.assertIsNone(cuenta["bolirana_nombre"])
+
+        cierre = self.client.post(
+            "/api/cuentas/barra/95/cerrar",
+            params={"forma_pago": "efectivo", "liberar_barra": "true"},
+        )
+        self.assertEqual(cierre.status_code, 200, cierre.text)
 
         eliminada = self.client.delete(
             f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
@@ -179,6 +245,11 @@ class BoliranaTest(unittest.TestCase):
         mesa_listada = next(m for m in listado if m["id"] == mesa["id"])
         self.assertTrue(mesa_listada["en_bolirana"])
         self.assertEqual(mesa_listada["bolirana_nombre"], "Bolirana Test 1")
+
+        # La cuenta se puede consultar y llega marcada en modo solo consulta.
+        cuenta = self.client.get(f"/api/cuentas/mesa/{mesa['id']}").json()
+        self.assertTrue(cuenta["en_bolirana"])
+        self.assertEqual(cuenta["bolirana_nombre"], "Bolirana Test 1")
 
         # Candado: no se puede cerrar la cuenta de la mesa participante.
         cierre = self.client.post(
@@ -245,6 +316,9 @@ class BoliranaTest(unittest.TestCase):
 
         # La mesa recibe el cargo en su cuenta general con el concepto.
         cuenta = self.client.get(f"/api/cuentas/mesa/{mesa['id']}").json()
+        # Ya liquidada, la cuenta deja de estar en modo solo consulta.
+        self.assertFalse(cuenta["en_bolirana"])
+        self.assertIsNone(cuenta["bolirana_nombre"])
         cargos = [
             p
             for p in cuenta["pedidos"]

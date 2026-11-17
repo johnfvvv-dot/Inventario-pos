@@ -59,6 +59,9 @@ interface Cuenta {
   total: number;
   total_general: number;
   total_divisiones: number;
+  /** True si la mesa/barra participa en una partida de Bolirana sin liquidar. */
+  en_bolirana?: boolean;
+  bolirana_nombre?: string | null;
   pedidos: Pedido[];
   divisiones: Division[];
 }
@@ -95,6 +98,8 @@ export default function CuentaModal({
 
   const esBarra = barraNumero != null;
   const etiqueta = esBarra ? "barra" : "mesa";
+  const enBolirana = Boolean(cuenta?.en_bolirana);
+  const nombreBolirana = cuenta?.bolirana_nombre || "Bolirana";
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId: number = usuario?.id || 1;
   const nombreUsuario: string =
@@ -237,6 +242,19 @@ export default function CuentaModal({
         {error && <p className="error-msg">{error}</p>}
         {mensaje && <p className="success-msg">{mensaje}</p>}
 
+        {enBolirana && (
+          <div className="cuenta-bolirana-aviso" role="alert">
+            <span className="cuenta-bolirana-aviso-icono">
+              <Icon nombre="candado" size={17} />
+            </span>
+            <p>
+              <strong>En partida en {nombreBolirana}.</strong> No se puede
+              cobrar ni cerrar esta cuenta hasta finalizar y liquidar la
+              partida.
+            </p>
+          </div>
+        )}
+
         {cuenta && (
           <>
             <div className="cuenta-resumen">
@@ -283,7 +301,12 @@ export default function CuentaModal({
                           total: cuenta.total_general,
                         })
                       }
-                      disabled={procesando}
+                      disabled={procesando || enBolirana}
+                      title={
+                        enBolirana
+                          ? `Finaliza la partida en ${nombreBolirana} para cobrar la cuenta.`
+                          : undefined
+                      }
                     >
                       Cobrar Cuenta General
                     </button>
@@ -332,7 +355,11 @@ export default function CuentaModal({
                     {!cliente.pagado && (
                       <button
                         className="btn-primary btn-small cuenta-cobro-btn"
-                        title={`Cobrar solo la cuenta de ${cliente.alias}`}
+                        title={
+                          enBolirana
+                            ? `Finaliza la partida en ${nombreBolirana} para cobrar esta cuenta.`
+                            : `Cobrar solo la cuenta de ${cliente.alias}`
+                        }
                         onClick={() =>
                           setCobro({
                             tipo: "alias",
@@ -341,7 +368,7 @@ export default function CuentaModal({
                             total: cliente.subtotal,
                           })
                         }
-                        disabled={procesando}
+                        disabled={procesando || enBolirana}
                       >
                         Cobrar cuenta {cliente.alias}
                       </button>
@@ -385,7 +412,12 @@ export default function CuentaModal({
                 <button
                   className="btn-secondary"
                   onClick={onDividir}
-                  disabled={procesando}
+                  disabled={procesando || enBolirana}
+                  title={
+                    enBolirana
+                      ? `Finaliza la partida en ${nombreBolirana} para dividir la cuenta.`
+                      : undefined
+                  }
                 >
                   <Icon nombre="filtrar" size={16} />
                   Dividir cuenta
@@ -395,7 +427,12 @@ export default function CuentaModal({
                 <button
                   className="btn-secondary"
                   onClick={onTransferir}
-                  disabled={procesando}
+                  disabled={procesando || enBolirana}
+                  title={
+                    enBolirana
+                      ? `Finaliza la partida en ${nombreBolirana} para transferir la cuenta.`
+                      : undefined
+                  }
                 >
                   <Icon nombre="transferencia" size={16} />
                   Transferir cuenta
@@ -409,7 +446,12 @@ export default function CuentaModal({
                     total: cuenta.total,
                   })
                 }
-                disabled={procesando || cuenta.total === 0}
+                disabled={procesando || cuenta.total === 0 || enBolirana}
+                title={
+                  enBolirana
+                    ? `Finaliza la partida en ${nombreBolirana} para cobrar la cuenta.`
+                    : undefined
+                }
               >
                 <Icon nombre="caja" size={16} />
                 Cobrar cuenta total

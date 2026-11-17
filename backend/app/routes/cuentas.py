@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.boliranas_servicio import (
     exigir_barra_sin_bolirana,
     exigir_mesa_sin_bolirana,
+    mapa_boliranas_activas,
 )
 from app.cuentas_servicio import (
     alias_existente_en_cuenta,
@@ -285,6 +286,8 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
         2,
     )
     total = round(total_general + total_divisiones, 2)
+    boliranas = mapa_boliranas_activas(db)
+    bolirana_nombre = boliranas["mesa"].get(mesa.id)
 
     return CuentaMesaOut(
         mesa_id=mesa.id,
@@ -293,6 +296,8 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
         total=total,
         total_general=total_general,
         total_divisiones=total_divisiones,
+        en_bolirana=bolirana_nombre is not None,
+        bolirana_nombre=bolirana_nombre,
         pedidos=[_pedido_out(p) for p in pedidos],
         divisiones=[
             DivisionResumen(
@@ -376,6 +381,13 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
         2,
     )
     total = round(total_general + total_divisiones, 2)
+    boliranas = mapa_boliranas_activas(db)
+    bolirana_nombre = boliranas["barra"].get(numero_barra)
+    if not bolirana_nombre:
+        for plaza in mesas:
+            bolirana_nombre = boliranas["mesa"].get(plaza.id)
+            if bolirana_nombre:
+                break
 
     return CuentaMesaOut(
         mesa_id=mesas[0].id,
@@ -384,6 +396,8 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
         total=total,
         total_general=total_general,
         total_divisiones=total_divisiones,
+        en_bolirana=bolirana_nombre is not None,
+        bolirana_nombre=bolirana_nombre,
         pedidos=[_pedido_out(p) for p in pedidos],
         divisiones=[
             DivisionResumen(
