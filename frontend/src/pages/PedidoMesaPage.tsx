@@ -1,14 +1,19 @@
 /** Pantalla de Pedido por Mesa - POS para mesero/administrador. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { formatearFechaHora, formatearPrecio } from "../utils/format";
+import { useConfiguracionNegocio } from "../hooks/useConfiguracionNegocio";
 import {
   MENSAJE_TURNO_REQUERIDO,
   useTurno,
 } from "../context/TurnoContext";
+import type { Bolirana } from "../types/bolirana";
 import CuentaModal from "../components/CuentaModal";
+import CobroParaLlevarModal, {
+  type PagoParaLlevar,
+} from "../components/CobroParaLlevarModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 import CrearAliasModal from "../components/CrearAliasModal";
@@ -16,6 +21,7 @@ import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 import AsignarPedidoModal, {
   type DestinoPedido,
 } from "../components/AsignarPedidoModal";
+import Icon from "../components/Icon";
 
 interface Mesa {
   id: number;
@@ -109,11 +115,14 @@ const leerPermisoCantidades = (): boolean => {
 
 export default function PedidoMesaPage() {
   const [searchParams] = useSearchParams();
+  const negocio = useConfiguracionNegocio();
   const { turno, cargando: cargandoTurno, solicitarApertura } = useTurno();
   const sinTurno = !cargandoTurno && !turno;
   const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [boliranas, setBoliranas] = useState<Bolirana[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
-  const [mesaId, setMesaId] = useState<number | "">("");
+  const [mesaId, setMesaId] = useState<number | "para-llevar" | "">("");
+  const [boliranaId, setBoliranaId] = useState<number | "">("");
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [cantidades, setCantidades] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +133,13 @@ export default function PedidoMesaPage() {
   const [mostrarDivision, setMostrarDivision] = useState(false);
   const [mostrarTransferir, setMostrarTransferir] = useState(false);
   const [mostrarCrearAlias, setMostrarCrearAlias] = useState(false);
+  const [mostrarCobroParaLlevar, setMostrarCobroParaLlevar] = useState(false);
+  const [procesandoParaLlevar, setProcesandoParaLlevar] = useState(false);
+  const [errorParaLlevar, setErrorParaLlevar] = useState<string | null>(null);
+  // Cliente temporal de la venta "Para llevar". Se envía al confirmar el
+  // cobro y se limpia al terminar para no heredarlo al siguiente cliente.
+  const [aliasParaLlevar, setAliasParaLlevar] = useState("");
+  const cobrandoParaLlevarRef = useRef(false);
   const [ajustando, setAjustando] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | "">("");
@@ -134,6 +150,7 @@ export default function PedidoMesaPage() {
   const [mostrarAsignacion, setMostrarAsignacion] = useState(false);
   const [errorAsignacion, setErrorAsignacion] = useState<string | null>(null);
   const [procesandoAsignacion, setProcesandoAsignacion] = useState(false);
+  const [procesandoBolirana, setProcesandoBolirana] = useState(false);
   const [permisoEditar, setPermisoEditar] = useState<boolean>(
     leerPermisoCantidades
   );
@@ -145,6 +162,17 @@ export default function PedidoMesaPage() {
     () => carrito.reduce((sum, item) => sum + item.precio * item.cantidad, 0),
     [carrito]
   );
+
+  /** Venta de mostrador: no tiene mesa física ni cuenta abierta. */
+  const esParaLlevar = mesaId === "para-llevar";
+
+  /** Modo Bolirana: el pedido se carga a la ronda activa, no a una mesa. */
+  const esBolirana = boliranaId !== "";
+  const boliranaSeleccionada = useMemo(
+    () => boliranas.find((b) => b.id === boliranaId) || null,
+    [boliranas, boliranaId]
+  );
+  const partidaBolirana = boliranaSeleccionada?.partida || null;
 
   /**
    * Mesa o barra seleccionada en el desplegable.
@@ -176,7 +204,11 @@ export default function PedidoMesaPage() {
   const etiquetaMesa = (m: Mesa) =>
     m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
 
-  const etiquetaCuenta = barraNumero
+  const etiquetaCuenta = esBolirana
+    ? boliranaSeleccionada?.nombre || "la bolirana"
+    : esParaLlevar
+    ? "Para llevar"
+    : barraNumero
     ? `Barra ${barraNumero}`
     : mesaSeleccionada
     ? `Mesa ${mesaSeleccionada.numero}`
@@ -239,14 +271,17 @@ export default function PedidoMesaPage() {
 
   const cargarCatalogos = async () => {
     try {
-      const [m, inv, cats]: any = await Promise.all([
+      const [m, inv, cats, bols]: any = await Promise.all([
         api.getMesas(),
         api.getProductos({ limite: 500, categoria_id: categoriaFiltro || undefined }),
         api.getCategorias(),
+        // Si el backend aún no tiene el módulo, Pedidos sigue funcionando.
+        api.getBoliranas().catch(() => []),
       ]);
       setMesas(m);
       setProductos(inv.items);
       setCategorias(cats);
+      setBoliranas(bols);
     } catch (err: any) {
       setError(err.message);
     }
@@ -279,7 +314,7 @@ export default function PedidoMesaPage() {
   };
 
   const cargarCuenta = async (): Promise<CuentaData | null> => {
-    if (mesaId === "") return null;
+    if (mesaId === "" || mesaId === "para-llevar") return null;
     try {
       const data: any = barraNumero
         ? await api.getCuentaBarra(barraNumero)
@@ -298,7 +333,7 @@ export default function PedidoMesaPage() {
     etiquetaDestino: string,
     desdeModal = false
   ) => {
-    if (!mesaId) return;
+    if (mesaId === "" || mesaId === "para-llevar") return;
     setProcesandoAsignacion(true);
     if (desdeModal) setErrorAsignacion(null);
     try {
@@ -334,10 +369,25 @@ export default function PedidoMesaPage() {
   // Mesa seleccionada automáticamente al venir desde el panel de Mesas
   useEffect(() => {
     const mesaParam = searchParams.get("mesa");
+    const boliranaParam = searchParams.get("bolirana");
+    if (boliranaParam) {
+      setBoliranaId(Number(boliranaParam));
+      setMesaId("");
+      setCarrito([]);
+      setCantidades({});
+      setAliasParaLlevar("");
+      setMensaje(null);
+      setError(null);
+      setMostrarAsignacion(false);
+      setErrorAsignacion(null);
+      return;
+    }
     if (mesaParam) {
+      setBoliranaId("");
       setMesaId(Number(mesaParam));
       setCarrito([]);
       setCantidades({});
+      setAliasParaLlevar("");
       setMensaje(null);
       setError(null);
       setMostrarAsignacion(false);
@@ -346,7 +396,7 @@ export default function PedidoMesaPage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (mesaId) {
+    if (typeof mesaId === "number") {
       cargarCuenta();
     } else {
       setCuenta(null);
@@ -436,16 +486,60 @@ export default function PedidoMesaPage() {
       setError(MENSAJE_TURNO_REQUERIDO);
       return;
     }
-    if (!mesaId) {
-      setError("Selecciona una mesa");
+    if (mesaId === "" && !esBolirana) {
+      setError("Selecciona una mesa, barra, Bolirana o Para llevar");
       return;
     }
     if (carrito.length === 0) {
       setError("Agrega al menos un producto");
       return;
     }
+    if (procesandoBolirana) return;
 
     setError(null);
+
+    // Modo Bolirana: descuenta stock y carga las bebidas a la ronda activa.
+    if (esBolirana) {
+      if (!partidaBolirana) {
+        setError(
+          `La ${
+            boliranaSeleccionada?.nombre || "bolirana"
+          } no tiene una partida activa. Inicia una partida desde el módulo Bolirana.`
+        );
+        return;
+      }
+      setProcesandoBolirana(true);
+      try {
+        await api.cargarBebidasBolirana(Number(boliranaId), {
+          usuario_id: usuarioId,
+          items: carrito.map((i) => ({
+            producto_id: i.producto_id,
+            cantidad: i.cantidad,
+          })),
+        });
+        setCarrito([]);
+        setCantidades({});
+        setMensaje(
+          `Bebidas cargadas a ${
+            boliranaSeleccionada?.nombre || "la bolirana"
+          }.`
+        );
+        await cargarCatalogos();
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setProcesandoBolirana(false);
+      }
+      return;
+    }
+
+    // Venta de mostrador: se cobra de inmediato, sin abrir cuenta ni mesa.
+    if (esParaLlevar) {
+      setErrorParaLlevar(null);
+      setMostrarCobroParaLlevar(true);
+      return;
+    }
+
     // Se consulta la cuenta justo antes de confirmar para no asignar a un
     // alias que acaba de pagar o a una división ya cerrada.
     const data = await cargarCuenta();
@@ -461,6 +555,37 @@ export default function PedidoMesaPage() {
     setDestinos(opciones);
     setErrorAsignacion(null);
     setMostrarAsignacion(true);
+  };
+
+  /** Registra la venta Para llevar y deja la pantalla lista para el próximo. */
+  const cobrarParaLlevar = async (pagos: PagoParaLlevar[]) => {
+    if (cobrandoParaLlevarRef.current) return;
+    cobrandoParaLlevarRef.current = true;
+    setProcesandoParaLlevar(true);
+    setErrorParaLlevar(null);
+    try {
+      await api.createPedidoParaLlevar({
+        usuario_id: usuarioId,
+        items: carrito.map((i) => ({
+          producto_id: i.producto_id,
+          cantidad: i.cantidad,
+        })),
+        pagos,
+        alias_cliente: aliasParaLlevar.trim() || undefined,
+      });
+      setMostrarCobroParaLlevar(false);
+      setCarrito([]);
+      setCantidades({});
+      setAliasParaLlevar("");
+      setError(null);
+      setMensaje("Venta Para llevar cobrada correctamente.");
+      await cargarCatalogos();
+    } catch (err: any) {
+      setErrorParaLlevar(err.message);
+    } finally {
+      cobrandoParaLlevarRef.current = false;
+      setProcesandoParaLlevar(false);
+    }
   };
 
   const confirmarAsignacion = (participanteId: number | null) => {
@@ -480,7 +605,8 @@ export default function PedidoMesaPage() {
    */
   const crearAliasConPedido = async (alias: string): Promise<void> => {
     if (!turno) throw new Error(MENSAJE_TURNO_REQUERIDO);
-    if (mesaId === "") throw new Error("Seleccioná una mesa o barra.");
+    if (mesaId === "" || mesaId === "para-llevar")
+      throw new Error("Seleccioná una mesa o barra.");
     if (carrito.length === 0) {
       throw new Error("Agregá al menos un producto antes de crear el alias.");
     }
@@ -503,6 +629,24 @@ export default function PedidoMesaPage() {
       `Alias "${alias}" creado. El pedido quedó asignado a esa cuenta de cliente.`
     );
     await Promise.all([cargarCatalogos(), cargarCuenta()]);
+  };
+
+  /**
+   * Asigna un cliente a la venta "Para llevar" actual.
+   *
+   * No crea divisiones ni pedidos: el nombre viaja con el cobro inmediato y
+   * se guarda en el pedido cerrado para el historial y el ticket.
+   */
+  const crearAliasParaLlevar = async (alias: string): Promise<void> => {
+    if (!turno) throw new Error(MENSAJE_TURNO_REQUERIDO);
+    if (carrito.length === 0) {
+      throw new Error("Agregá al menos un producto antes de asignar el cliente.");
+    }
+    const limpio = alias.trim();
+    if (!limpio) throw new Error("Escribe el nombre del cliente.");
+    setAliasParaLlevar(limpio);
+    setError(null);
+    setMensaje(`Cliente "${limpio}" asignado a esta venta Para llevar.`);
   };
 
   /** Ajusta una línea de la Cuenta General (0 = eliminar). */
@@ -565,46 +709,97 @@ export default function PedidoMesaPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Pedido por mesa</h2>
-        <div className="filters">
-          <select
-            className="select-mesa"
-            value={mesaId}
-            onChange={(e) => {
-              setMesaId(e.target.value ? Number(e.target.value) : "");
-              setCarrito([]);
-              setCantidades({});
-              setMensaje(null);
-              setMostrarAsignacion(false);
-              setErrorAsignacion(null);
-            }}
-          >
-            <option value="">— Seleccionar mesa o barra —</option>
-            {mesas.map((m) => (
-              <option key={m.id} value={m.id}>
-                {etiquetaMesa(m)} ({m.estado})
-              </option>
-            ))}
-          </select>
-          <select
-            className="select-categoria"
-            value={categoriaFiltro}
-            onChange={(e) =>
-              setCategoriaFiltro(e.target.value ? Number(e.target.value) : "")
-            }
-          >
-            <option value="">Todas las categorías</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </select>
-          {mesaId !== "" && (
+        <div>
+          <h2>Pedido por mesa</h2>
+          <p className="page-subtitulo">
+            Toma de comandas rápidas y asignación a cuenta general o por
+            cliente
+          </p>
+        </div>
+        <div className="filters pos-cabecera-filtros">
+          <div className="form-group">
+            <label htmlFor="pedido-mesa">Mesa / barra / bolirana</label>
+            <select
+              id="pedido-mesa"
+              className="select-mesa"
+              value={esBolirana ? `bolirana:${boliranaId}` : mesaId}
+              onChange={(e) => {
+                const valor = e.target.value;
+                if (valor.startsWith("bolirana:")) {
+                  setBoliranaId(Number(valor.split(":")[1]));
+                  setMesaId("");
+                } else {
+                  setBoliranaId("");
+                  setMesaId(
+                    valor === "para-llevar"
+                      ? "para-llevar"
+                      : valor
+                      ? Number(valor)
+                      : ""
+                  );
+                }
+                setCarrito([]);
+                setCantidades({});
+                setAliasParaLlevar("");
+                setMensaje(null);
+                setMostrarAsignacion(false);
+                setErrorAsignacion(null);
+                setMostrarCobroParaLlevar(false);
+                setErrorParaLlevar(null);
+              }}
+            >
+              <option value="">— Seleccionar mesa, barra o bolirana —</option>
+              <option value="para-llevar">Para llevar</option>
+              {mesas.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {etiquetaMesa(m)} ({m.estado})
+                </option>
+              ))}
+              {negocio.modulo_bolirana && boliranas.length > 0 && (
+                <optgroup label="Bolirana">
+                  {boliranas.map((b) => (
+                    <option
+                      key={`bolirana-${b.id}`}
+                      value={`bolirana:${b.id}`}
+                      disabled={b.estado !== "en_partida"}
+                    >
+                      {b.nombre} (
+                      {b.estado === "en_partida"
+                        ? "en partida"
+                        : "disponible"}
+                      )
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="pedido-categoria">Categoría</label>
+            <select
+              id="pedido-categoria"
+              className="select-categoria"
+              value={categoriaFiltro}
+              onChange={(e) =>
+                setCategoriaFiltro(
+                  e.target.value ? Number(e.target.value) : ""
+                )
+              }
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          {typeof mesaId === "number" && (
             <button
-              className="btn-secondary"
+              className="btn-secondary pos-ver-cuenta"
               onClick={() => setMostrarCuenta(true)}
             >
+              <Icon nombre="recibo" size={16} />
               Ver cuenta
             </button>
           )}
@@ -616,33 +811,65 @@ export default function PedidoMesaPage() {
 
       {sinTurno && <TurnoRequeridoAviso onAbrir={solicitarApertura} />}
 
-      {aliasActivos.length > 0 && (
-        <div className="aviso-clientes">
-          <div className="aviso-clientes-texto">
-            <strong>
-              {etiquetaCuenta} tiene {aliasActivos.length} cliente
-              {aliasActivos.length > 1 ? "s" : ""} activo
-              {aliasActivos.length > 1 ? "s" : ""}.
-            </strong>{" "}
-            Al confirmar el pedido podrás elegir a quién asignarlo.
+      {esParaLlevar && aliasParaLlevar && (
+        <div className="aviso-clientes aviso-cliente-parallevar">
+          <div className="aviso-clientes-icono">
+            <Icon nombre="usuario" size={18} />
           </div>
-          <div className="aviso-clientes-detalle">
-            {aliasActivos.map((d) => (
-              <span key={d.participanteId}>
-                {d.alias}: <strong>{formatearPrecio(d.subtotal)}</strong>
+          <div className="aviso-clientes-contenido">
+            <div className="aviso-clientes-texto">
+              <strong>Cliente asignado: {aliasParaLlevar}</strong>{" "}
+              El ticket y el historial registrarán esta venta a su nombre.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary btn-small aviso-cliente-quitar"
+            onClick={() => {
+              setAliasParaLlevar("");
+              setMensaje(null);
+            }}
+          >
+            Quitar alias
+          </button>
+        </div>
+      )}
+
+      {!esParaLlevar && !esBolirana && aliasActivos.length > 0 && (
+        <div className="aviso-clientes">
+          <div className="aviso-clientes-icono">
+            <Icon nombre="usuarios" size={18} />
+          </div>
+          <div className="aviso-clientes-contenido">
+            <div className="aviso-clientes-texto">
+              <strong>
+                {etiquetaCuenta} tiene {aliasActivos.length} cliente
+                {aliasActivos.length > 1 ? "s" : ""} activo
+                {aliasActivos.length > 1 ? "s" : ""}.
+              </strong>{" "}
+              Al confirmar el pedido podrás elegir a quién asignarlo.
+            </div>
+            <div className="aviso-clientes-detalle">
+              {aliasActivos.map((d) => (
+                <span key={d.participanteId}>
+                  {d.alias}: <strong>{formatearPrecio(d.subtotal)}</strong>
+                </span>
+              ))}
+              <span>
+                Cuenta general:{" "}
+                <strong>{formatearPrecio(cuenta?.total_general || 0)}</strong>
               </span>
-            ))}
-            <span>
-              Cuenta general:{" "}
-              <strong>{formatearPrecio(cuenta?.total_general || 0)}</strong>
-            </span>
+            </div>
           </div>
         </div>
       )}
 
       <div className="pos-grid">
-        <section className="panel">
-          <h3>Productos disponibles</h3>
+        <section className="panel pos-panel pos-panel--productos">
+          <h3>
+            <Icon nombre="inventario" size={15} />
+            Productos disponibles
+          </h3>
           <div className="table-wrap productos-scroll">
             <table>
               <thead>
@@ -693,7 +920,7 @@ export default function PedidoMesaPage() {
                           disabled={p.stock === 0 || !turno}
                         />
                         <button
-                          className="btn-success btn-small"
+                          className="btn-primary btn-small btn-agregar-pedido"
                           disabled={p.stock === 0 || !turno}
                           onClick={() => agregarDesdeInput(p)}
                           title={
@@ -714,7 +941,7 @@ export default function PedidoMesaPage() {
                               : `Agregar una unidad de ${p.nombre}`
                           }
                         >
-                          +
+                          <Icon nombre="mas" size={14} />
                         </button>
                       </div>
                     </td>
@@ -725,8 +952,11 @@ export default function PedidoMesaPage() {
           </div>
         </section>
 
-        <section className="panel">
-          <h3>Pedido actual</h3>
+        <section className="panel pos-panel pos-panel--actual">
+          <h3>
+            <Icon nombre="pedidos" size={15} />
+            Pedido actual
+          </h3>
           {carrito.length === 0 ? (
             <p className="empty-state">Sin productos seleccionados.</p>
           ) : (
@@ -761,46 +991,132 @@ export default function PedidoMesaPage() {
             </div>
           )}
 
-          <div className="total-row">
+          <div className="total-row pos-total">
             <span>Total</span>
             <strong>{formatearPrecio(total)}</strong>
           </div>
 
           <div className="pedido-actual-acciones">
+            {!esBolirana && (
+              <button
+                className="btn-secondary"
+                onClick={() => setMostrarCrearAlias(true)}
+                disabled={
+                  !turno || cargandoTurno || mesaId === "" || carrito.length === 0
+                }
+                title={
+                  !turno
+                    ? MENSAJE_TURNO_REQUERIDO
+                    : mesaId === ""
+                    ? "Seleccioná una mesa, barra o Para llevar"
+                    : carrito.length === 0
+                    ? "Agregá productos para asignar el cliente"
+                    : esParaLlevar
+                    ? "Asignar un cliente a esta venta Para llevar"
+                    : "Crear un alias y asignarle este pedido"
+                }
+              >
+                <Icon nombre="usuario" size={16} />
+                Crear alias
+              </button>
+            )}
             <button
-              className="btn-secondary"
-              onClick={() => setMostrarCrearAlias(true)}
+              className="btn-primary"
+              onClick={confirmarPedido}
               disabled={
-                !turno || cargandoTurno || mesaId === "" || carrito.length === 0
+                !turno ||
+                cargandoTurno ||
+                procesandoBolirana ||
+                (esBolirana && !partidaBolirana)
               }
               title={
                 !turno
                   ? MENSAJE_TURNO_REQUERIDO
-                  : mesaId === ""
-                  ? "Seleccioná una mesa o barra"
-                  : carrito.length === 0
-                  ? "Agregá productos para crear la cuenta del cliente"
-                  : "Crear un alias y asignarle este pedido"
+                  : esBolirana && !partidaBolirana
+                  ? "La bolirana no tiene una partida activa"
+                  : undefined
               }
             >
-              Crear alias
-            </button>
-            <button
-              className="btn-primary"
-              onClick={confirmarPedido}
-              disabled={!turno || cargandoTurno}
-              title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
-            >
-              Confirmar pedido
+              <Icon nombre={esBolirana ? "bolirana" : "check"} size={16} />
+              {esBolirana
+                ? procesandoBolirana
+                  ? "Cargando..."
+                  : "Cargar bebidas"
+                : "Confirmar pedido"}
             </button>
           </div>
         </section>
       </div>
 
-      <section className="panel">
+      {esBolirana && (
+        <section className="panel pedido-cuenta-panel">
+          <div className="cuenta-panel-head">
+            <div>
+              <h3>
+                <Icon nombre="bolirana" size={15} />
+                Ronda de {boliranaSeleccionada?.nombre || "la bolirana"}
+              </h3>
+              <span className="muted small">
+                Bebidas cargadas a la partida activa.
+              </span>
+            </div>
+            {partidaBolirana && (
+              <strong>{formatearPrecio(partidaBolirana.total_bebidas)}</strong>
+            )}
+          </div>
+
+          {!boliranaSeleccionada ? (
+            <p className="empty-state">
+              Seleccioná una bolirana para ver su ronda.
+            </p>
+          ) : !partidaBolirana ? (
+            <p className="empty-state">
+              Esta bolirana no tiene una partida activa. Inicia una partida
+              desde el módulo Bolirana.
+            </p>
+          ) : (
+            <>
+              <div className="bolirana-participantes-chips">
+                {partidaBolirana.participantes.map((participante) => (
+                  <span key={participante.id} className="bolirana-chip">
+                    {participante.etiqueta}
+                  </span>
+                ))}
+              </div>
+              {partidaBolirana.consumo.length === 0 ? (
+                <p className="muted small">Sin bebidas cargadas todavía.</p>
+              ) : (
+                partidaBolirana.consumo.map((item) => (
+                  <div
+                    key={`${item.producto_id}-${item.precio_unitario}`}
+                    className="linea-pedido"
+                  >
+                    <span>
+                      {item.cantidad} × {item.producto_nombre}{" "}
+                      <span className="muted small">
+                        · {formatearPrecio(item.subtotal)}
+                      </span>
+                    </span>
+                  </div>
+                ))
+              )}
+              <div className="total-row pos-total">
+                <span>Total de la ronda</span>
+                <strong>{formatearPrecio(partidaBolirana.total_bebidas)}</strong>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {!esParaLlevar && !esBolirana && (
+        <section className="panel pedido-cuenta-panel">
         <div className="cuenta-panel-head">
           <div>
-            <h3>Pedidos de {etiquetaCuenta}</h3>
+            <h3>
+              <Icon nombre="recibo" size={15} />
+              Pedidos de {etiquetaCuenta}
+            </h3>
             <span className="muted small">
               Cuenta General y cuentas de clientes activas.
             </span>
@@ -815,7 +1131,7 @@ export default function PedidoMesaPage() {
           </p>
         ) : (
           <>
-            <div className="cuenta-grupo">
+            <div className="cuenta-grupo cuenta-grupo--general">
               <div className="cuenta-grupo-head">
                 <div>
                   <h4>Cuenta General</h4>
@@ -880,7 +1196,10 @@ export default function PedidoMesaPage() {
             </div>
 
             {clientes.map((cliente) => (
-              <div key={`cliente-${cliente.id}`} className="cuenta-grupo">
+              <div
+                key={`cliente-${cliente.id}`}
+                className="cuenta-grupo cuenta-grupo--cliente"
+              >
                 <div className="cuenta-grupo-head">
                   <div>
                     <h4>
@@ -966,6 +1285,7 @@ export default function PedidoMesaPage() {
           </>
         )}
       </section>
+      )}
 
       {/* Ventana de asignación del pedido a un alias o a la cuenta general */}
       {mostrarAsignacion && (
@@ -986,17 +1306,31 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana para crear un alias y asignarle el pedido actual */}
-      {mostrarCrearAlias && mesaId !== "" && (
-        <CrearAliasModal
-          titulo="Crear alias para este pedido"
-          descripcion={`Se creará una cuenta de cliente en ${etiquetaCuenta} y el pedido actual se asignará a ese alias.`}
-          onCrear={crearAliasConPedido}
-          onClose={() => setMostrarCrearAlias(false)}
-        />
-      )}
+      {mostrarCrearAlias &&
+        (typeof mesaId === "number" || esParaLlevar) && (
+          <CrearAliasModal
+            titulo={
+              esParaLlevar
+                ? "Cliente para esta venta Para llevar"
+                : "Crear alias para este pedido"
+            }
+            descripcion={
+              esParaLlevar
+                ? "El nombre se guardará en el pedido Para llevar y aparecerá en el ticket y el historial. No se cobra nada hasta confirmar."
+                : `Se creará una cuenta de cliente en ${etiquetaCuenta} y el pedido actual se asignará a ese alias.`
+            }
+            nota={
+              esParaLlevar
+                ? "Sin cliente asignado, la venta queda a nombre de Mostrador."
+                : undefined
+            }
+            onCrear={esParaLlevar ? crearAliasParaLlevar : crearAliasConPedido}
+            onClose={() => setMostrarCrearAlias(false)}
+          />
+        )}
 
       {/* Ventana de cuenta de la mesa */}
-      {mostrarCuenta && mesaId !== "" && (
+      {mostrarCuenta && typeof mesaId === "number" && (
         <CuentaModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero}
@@ -1017,7 +1351,7 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana de división de cuenta */}
-      {mostrarDivision && mesaId !== "" && (
+      {mostrarDivision && typeof mesaId === "number" && (
         <DivisionModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero}
@@ -1030,7 +1364,7 @@ export default function PedidoMesaPage() {
       )}
 
       {/* Ventana de transferencia de cuenta */}
-      {mostrarTransferir && mesaId !== "" && (
+      {mostrarTransferir && typeof mesaId === "number" && (
         <TransferirModal
           mesaId={Number(mesaId)}
           barraNumero={barraNumero ?? undefined}
@@ -1040,6 +1374,26 @@ export default function PedidoMesaPage() {
             cargarCatalogos();
             cargarCuenta();
           }}
+        />
+      )}
+      {/* Ventana de cobro inmediato de una venta Para llevar */}
+      {mostrarCobroParaLlevar && (
+        <CobroParaLlevarModal
+          items={carrito.map((item) => ({
+            nombre: item.nombre,
+            cantidad: item.cantidad,
+            precio: item.precio,
+          }))}
+          total={total}
+          cliente={aliasParaLlevar || "Mostrador"}
+          confirmar={cobrarParaLlevar}
+          onClose={() => {
+            if (procesandoParaLlevar) return;
+            setMostrarCobroParaLlevar(false);
+            setErrorParaLlevar(null);
+          }}
+          procesando={procesandoParaLlevar}
+          error={errorParaLlevar}
         />
       )}
     </div>

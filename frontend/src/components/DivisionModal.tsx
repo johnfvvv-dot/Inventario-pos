@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
+import Icon from "./Icon";
 
 interface Linea {
   producto_id: number;
@@ -305,9 +306,12 @@ export default function DivisionModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box modal-xl" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Dividir cuenta por {barraNumero ? "barra" : "mesa"}</h3>
+          <h3>
+            <Icon nombre="filtrar" size={17} />
+            Dividir cuenta por {barraNumero ? "barra" : "mesa"}
+          </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
@@ -473,7 +477,7 @@ export default function DivisionModal({
                           title="Quitar cliente"
                           onClick={() => eliminarAlias(index)}
                         >
-                          ×
+                          <Icon nombre="eliminar" size={14} />
                         </button>
                       </span>
                     </div>

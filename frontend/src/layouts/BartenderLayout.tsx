@@ -109,12 +109,27 @@ export default function BartenderLayout() {
 
         <div className="admin-body">
           <nav className="admin-nav">
-            <MenuLink to="/bartender/pedidos" rutas={["/bartender"]}>
+            <MenuLink
+              to="/bartender/pedidos"
+              rutas={["/bartender"]}
+              icono="pedidos"
+            >
               Pedidos
             </MenuLink>
-            <MenuLink to="/bartender/mesas">Mesas</MenuLink>
-            <MenuLink to="/bartender/inventario">Inventario</MenuLink>
-            <MenuLink to="/bartender/corte-caja">Corte de caja</MenuLink>
+            <MenuLink to="/bartender/mesas" icono="mesas">
+              Mesas
+            </MenuLink>
+            {negocio.modulo_bolirana && (
+              <MenuLink to="/bartender/bolirana" icono="bolirana">
+                Bolirana
+              </MenuLink>
+            )}
+            <MenuLink to="/bartender/inventario" icono="inventario">
+              Inventario
+            </MenuLink>
+            <MenuLink to="/bartender/corte-caja" icono="corte">
+              Corte de caja
+            </MenuLink>
           </nav>
 
           <main className="admin-content">

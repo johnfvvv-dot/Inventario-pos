@@ -15,6 +15,8 @@ import {
   formatearPrecio,
 } from "../utils/format";
 import { descargarTicketPng } from "../utils/ticketImagen";
+import { parsearPagoMixto } from "../utils/pagoMixto";
+import Icon from "./Icon";
 
 interface TicketItem {
   nombre: string;
@@ -91,6 +93,8 @@ function TicketCard({
   activo,
   onDescargar,
 }: TicketCardProps) {
+  const pagosMixtos = parsearPagoMixto(ticket.forma_pago);
+
   return (
     <article
       className={`ticket-card${activo ? "" : " ticket-card-oculto"}`}
@@ -151,7 +155,18 @@ function TicketCard({
 
       <div className="ticket-pago">
         <span>Forma de pago</span>
-        <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+        {pagosMixtos.length > 1 ? (
+          <div className="ticket-pago-detalle">
+            <strong>Mixto</strong>
+            {pagosMixtos.map((pago) => (
+              <span key={pago.forma}>
+                {pago.etiqueta}: {formatearPrecio(pago.monto)}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <strong>{etiquetaPago(ticket.forma_pago)}</strong>
+        )}
       </div>
 
       <p className="ticket-pie">
@@ -166,6 +181,7 @@ function TicketCard({
         onClick={() => onDescargar(ticket)}
         aria-label={`Descargar imagen del ticket ${ticket.folio}`}
       >
+        <Icon nombre="descargar" size={14} />
         Descargar imagen
       </button>
     </article>
@@ -281,6 +297,7 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
               onClick={cargar}
               disabled={cargando}
             >
+              <Icon nombre="actualizar" size={14} />
               {cargando ? "Generando..." : "Actualizar"}
             </button>
             <button
@@ -289,6 +306,7 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
               disabled={cargando || totalTickets === 0}
               title="Imprime todos los tickets del turno; permite guardar como PDF"
             >
+              <Icon nombre="ticket" size={14} />
               Imprimir / PDF
             </button>
             <button
@@ -297,7 +315,7 @@ export default function TicketsModal({ turnoId, onCerrar }: Props) {
               title="Cerrar"
               aria-label="Cerrar"
             >
-              ×
+              <Icon nombre="cerrar" size={15} />
             </button>
           </div>
         </div>

@@ -13,6 +13,7 @@ import CuentaModal from "../components/CuentaModal";
 import DivisionModal from "../components/DivisionModal";
 import TransferirModal from "../components/TransferirModal";
 import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
+import Icon from "../components/Icon";
 
 interface Posicion {
   id: number;
@@ -30,6 +31,8 @@ interface Mesa {
   posicion: number;
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
+  en_bolirana?: boolean;
+  bolirana_nombre?: string | null;
   posiciones?: Posicion[];
 }
 
@@ -185,8 +188,15 @@ export default function MesasPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Gestión de mesas</h2>
+        <div>
+          <h2>Gestión de mesas</h2>
+          <p className="page-subtitulo">
+            Control de ocupación, pedidos activos y cobro de cuentas en salón y
+            barra
+          </p>
+        </div>
         <button className="btn-secondary" onClick={cargarMesas}>
+          <Icon nombre="actualizar" size={16} />
           Actualizar
         </button>
       </div>
@@ -199,6 +209,9 @@ export default function MesasPage() {
       {/* Aviso de mesa con cuenta pendiente */}
       {aviso && (
         <div className="aviso-panel">
+          <span className="aviso-icono">
+            <Icon nombre="alerta" size={18} />
+          </span>
           <div className="aviso-texto">
             <strong>Aviso:</strong> {aviso.texto}
           </div>
@@ -211,6 +224,7 @@ export default function MesasPage() {
                 if (mesa) abrirPedido(mesa);
               }}
             >
+              <Icon nombre="pedidos" size={14} />
               Ver el pedido abierto
             </button>
             <button
@@ -220,71 +234,105 @@ export default function MesasPage() {
                 setMesaCuenta(aviso.mesaId);
               }}
             >
+              <Icon nombre="recibo" size={14} />
               Ver la cuenta
             </button>
             <button className="btn-icon" onClick={() => setAviso(null)} title="Cerrar aviso">
-              ×
+              <Icon nombre="cerrar" size={15} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Crear mesa */}
-      <form className="inline-form" onSubmit={crearMesa}>
-        <div className="form-group">
-          <label>Número de mesa</label>
-          <input
-            type="number"
-            min="1"
-            value={nuevaMesa.numero}
-            onChange={(e) => setNuevaMesa((m) => ({ ...m, numero: e.target.value }))}
-            placeholder="Ej: 1"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Capacidad</label>
-          <input
-            type="number"
-            min="1"
-            value={nuevaMesa.capacidad}
-            onChange={(e) => setNuevaMesa((m) => ({ ...m, capacidad: e.target.value }))}
-            required
-          />
-        </div>
-        <button type="submit" className="btn-primary">
-          Crear mesa
-        </button>
-      </form>
+      {/* Crear mesa y barra */}
+      <div className="mesas-creacion-grid">
+        <form className="panel mesas-form" onSubmit={crearMesa}>
+          <div className="mesas-form-head">
+            <span className="mesas-form-icono">
+              <Icon nombre="mesa" size={18} />
+            </span>
+            <div>
+              <h3>Crear mesa</h3>
+              <p>Mesas para el salón</p>
+            </div>
+          </div>
+          <div className="mesas-form-campos">
+            <div className="form-group">
+              <label>Número de mesa</label>
+              <input
+                type="number"
+                min="1"
+                value={nuevaMesa.numero}
+                onChange={(e) =>
+                  setNuevaMesa((m) => ({ ...m, numero: e.target.value }))
+                }
+                placeholder="Ej: 1"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Capacidad</label>
+              <input
+                type="number"
+                min="1"
+                value={nuevaMesa.capacidad}
+                onChange={(e) =>
+                  setNuevaMesa((m) => ({ ...m, capacidad: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <button type="submit" className="btn-primary">
+              <Icon nombre="mas" size={15} />
+              Crear mesa
+            </button>
+          </div>
+        </form>
 
-      {/* Crear barra */}
-      <form className="inline-form" onSubmit={crearBarra}>
-        <div className="form-group">
-          <label>Número de barra</label>
-          <input
-            type="number"
-            min="1"
-            value={nuevaBarra.numero}
-            onChange={(e) => setNuevaBarra((b) => ({ ...b, numero: e.target.value }))}
-            placeholder="Ej: 2"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label>Capacidad</label>
-          <input
-            type="number"
-            min="1"
-            max="20"
-            value={nuevaBarra.capacidad}
-            onChange={(e) => setNuevaBarra((b) => ({ ...b, capacidad: e.target.value }))}
-            required
-          />
-        </div>
-        <button type="submit" className="btn-primary">
-          Crear barra
-        </button>
-      </form>
+        <form className="panel mesas-form" onSubmit={crearBarra}>
+          <div className="mesas-form-head">
+            <span className="mesas-form-icono mesas-form-icono--barra">
+              <Icon nombre="barra" size={18} />
+            </span>
+            <div>
+              <h3>Crear barra</h3>
+              <p>Barras para servicio rápido</p>
+            </div>
+          </div>
+          <div className="mesas-form-campos">
+            <div className="form-group">
+              <label>Número de barra</label>
+              <input
+                type="number"
+                min="1"
+                value={nuevaBarra.numero}
+                onChange={(e) =>
+                  setNuevaBarra((b) => ({ ...b, numero: e.target.value }))
+                }
+                placeholder="Ej: 2"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Capacidad</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={nuevaBarra.capacidad}
+                onChange={(e) =>
+                  setNuevaBarra((b) => ({ ...b, capacidad: e.target.value }))
+                }
+                required
+              />
+            </div>
+            <button type="submit" className="btn-primary">
+              <Icon nombre="mas" size={15} />
+              Crear barra
+            </button>
+          </div>
+        </form>
+      </div>
 
       <div className="mesas-grid">
         {mesas.map((mesa) => (
@@ -299,7 +347,23 @@ export default function MesasPage() {
               {mesa.tipo === "barra" && (
                 <span className="badge barra-tag">Barra</span>
               )}
+              {mesa.en_bolirana && (
+                <span className="badge badge-bolirana">
+                  <Icon nombre="bolirana" size={12} />
+                  Bolirana
+                </span>
+              )}
             </div>
+
+            {mesa.en_bolirana && (
+              <div className="mesa-bolirana-aviso">
+                <Icon nombre="candado" size={14} />
+                <span>
+                  En partida en <strong>{mesa.bolirana_nombre}</strong>. No se
+                  puede cobrar ni cerrar hasta liquidarla.
+                </span>
+              </div>
+            )}
 
             {mesa.tiene_cuenta_pendiente && (
               <div className="mesa-pendiente-valor">
@@ -315,6 +379,7 @@ export default function MesasPage() {
                   disabled={!turno || cargandoTurno}
                   title={!turno ? MENSAJE_TURNO_REQUERIDO : "Ocupar la mesa"}
                 >
+                  <Icon nombre="check" size={14} />
                   Ocupar
                 </button>
               )}
@@ -322,7 +387,14 @@ export default function MesasPage() {
                 <button
                   className="btn-secondary btn-small"
                   onClick={() => liberarMesa(mesa)}
+                  disabled={Boolean(mesa.en_bolirana)}
+                  title={
+                    mesa.en_bolirana
+                      ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida antes de liberarla.`
+                      : undefined
+                  }
                 >
+                  <Icon nombre="check" size={14} />
                   Liberar
                 </button>
               )}
@@ -336,6 +408,7 @@ export default function MesasPage() {
                 }
                 disabled={!turno || cargandoTurno}
               >
+                <Icon nombre="pedidos" size={14} />
                 Pedido
               </button>
               <button
@@ -345,14 +418,22 @@ export default function MesasPage() {
                     ? setBarraCuenta(mesa.numero)
                     : setMesaCuenta(mesa.id)
                 }
-                title={`Ver la cuenta de ${etiquetaMesa(mesa)}`}
+                title={
+                  mesa.en_bolirana
+                    ? `Esta mesa tiene una partida activa en ${mesa.bolirana_nombre}. Finaliza la partida y define el pago antes de cerrar la cuenta.`
+                    : `Ver la cuenta de ${etiquetaMesa(mesa)}`
+                }
+                disabled={Boolean(mesa.en_bolirana)}
               >
+                <Icon nombre="recibo" size={14} />
                 Cuenta
               </button>
               <button
                 className="btn-icon danger"
                 title={
-                  mesa.tipo === "barra"
+                  mesa.en_bolirana
+                    ? `No se puede eliminar: tiene una partida activa en ${mesa.bolirana_nombre}.`
+                    : mesa.tipo === "barra"
                     ? "Eliminar barra completa"
                     : "Eliminar mesa"
                 }
@@ -360,8 +441,9 @@ export default function MesasPage() {
                   setErrorEliminar(null);
                   setPorEliminar(mesa);
                 }}
+                disabled={Boolean(mesa.en_bolirana)}
               >
-                ×
+                <Icon nombre="eliminar" size={15} />
               </button>
             </div>
           </div>

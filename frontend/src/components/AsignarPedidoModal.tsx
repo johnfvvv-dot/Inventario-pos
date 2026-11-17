@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { formatearPrecio } from "../utils/format";
+import Icon from "./Icon";
 
 export interface DestinoPedido {
   participanteId: number | null;
@@ -128,7 +129,7 @@ export default function AsignarPedidoModal({
             title="Volver al pedido"
             disabled={procesando}
           >
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 

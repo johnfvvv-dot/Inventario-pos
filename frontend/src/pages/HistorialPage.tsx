@@ -7,12 +7,21 @@ import {
   formatearFechaHora,
   formatearPrecio,
 } from "../utils/format";
+import {
+  esPagoMixto,
+  etiquetaFormaPago,
+  formatearDetallePago,
+  parsearPagoMixto,
+} from "../utils/pagoMixto";
+import Icon from "../components/Icon";
 
 interface PedidoHistorial {
   id: number;
   fecha: string | null;
   estado: string;
   forma_pago: string;
+  /** Desglose exacto de los métodos usados (uno o dos). */
+  pagos?: PagoHistorial[];
   total: number;
   mesa_numero: number | null;
   mesa_etiqueta: string | null;
@@ -20,6 +29,11 @@ interface PedidoHistorial {
   usuario_cierre_nombre?: string;
   alias?: string | null;
   productos: string[];
+}
+
+interface PagoHistorial {
+  forma_pago: string;
+  monto: number;
 }
 
 interface Producto {
@@ -38,7 +52,7 @@ const POR_PAGINA = 25;
 const FILTROS_VACIOS = {
   desde: "",
   hasta: "",
-  mesa: "" as number | "",
+  mesa: "" as number | "para-llevar" | "",
   producto: "" as number | "",
   forma_pago: "" as string | "",
 };
@@ -46,6 +60,16 @@ type Filtros = typeof FILTROS_VACIOS;
 
 const etiquetaMesa = (m: Mesa) =>
   m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
+
+/** Color semántico de la píldora según la forma de pago. */
+const claseFormaPago = (forma: string): string => {
+  const texto = (forma || "").toLowerCase();
+  if (texto.startsWith("mixto")) return "badge badge-pago-mixto";
+  if (texto.includes("efectivo")) return "badge badge-pago-efectivo";
+  if (texto.includes("transfer")) return "badge badge-pago-transferencia";
+  if (texto.includes("tarjeta")) return "badge badge-pago-tarjeta";
+  return "badge badge-neutral";
+};
 
 /**
  * Devuelve siempre el origen del pedido ("Mesa N" / "Barra N").
@@ -64,6 +88,31 @@ const etiquetaOrigen = (p: PedidoHistorial): string => {
   return "—";
 };
 
+/**
+ * Detalle completo del pago combinado para el tooltip del badge y el CSV.
+ * Prefiere el desglose estructurado que envía el backend y recurre al texto
+ * "Mixto: ..." solo si la respuesta es antigua.
+ */
+const detallePagoMixto = (p: PedidoHistorial): string => {
+  const desdeApi = (p.pagos || [])
+    .filter((pago) => pago && Number.isFinite(Number(pago.monto)))
+    .map((pago) => ({
+      forma: pago.forma_pago,
+      etiqueta: etiquetaFormaPago(pago.forma_pago),
+      monto: Number(pago.monto),
+    }));
+  if (desdeApi.length > 1) return formatearDetallePago(desdeApi);
+
+  const parseados = parsearPagoMixto(p.forma_pago);
+  if (parseados.length > 1) return formatearDetallePago(parseados);
+
+  return p.forma_pago;
+};
+
+/** Un pedido es mixto si el backend lo marca o si trae dos pagos. */
+const pedidoEsMixto = (p: PedidoHistorial): boolean =>
+  esPagoMixto(p.forma_pago) || (p.pagos?.length ?? 0) > 1;
+
 export default function HistorialPage() {
   const [items, setItems] = useState<PedidoHistorial[]>([]);
   const [total, setTotal] = useState(0);
@@ -78,12 +127,16 @@ export default function HistorialPage() {
 
   const cargar = async () => {
     try {
+      const paraLlevar = aplicados.mesa === "para-llevar";
+      const mesaFiltro =
+        typeof aplicados.mesa === "number" ? aplicados.mesa : undefined;
       const data: any = await api.getHistorial({
         desde: aplicados.desde || undefined,
         hasta: aplicados.hasta || undefined,
-        mesa: aplicados.mesa || undefined,
+        mesa: mesaFiltro,
         producto: aplicados.producto || undefined,
         forma_pago: aplicados.forma_pago || undefined,
+        origen: paraLlevar ? "para_llevar" : undefined,
         limite: POR_PAGINA,
         offset: pagina * POR_PAGINA,
       });
@@ -137,14 +190,18 @@ export default function HistorialPage() {
       const todos: PedidoHistorial[] = [];
       const limite = 500;
       let offset = 0;
+      const paraLlevar = aplicados.mesa === "para-llevar";
+      const mesaFiltro =
+        typeof aplicados.mesa === "number" ? aplicados.mesa : undefined;
 
       while (true) {
         const data: any = await api.getHistorial({
           desde: aplicados.desde || undefined,
           hasta: aplicados.hasta || undefined,
-          mesa: aplicados.mesa || undefined,
+          mesa: mesaFiltro,
           producto: aplicados.producto || undefined,
           forma_pago: aplicados.forma_pago || undefined,
+          origen: paraLlevar ? "para_llevar" : undefined,
           limite,
           offset,
         });
@@ -177,11 +234,16 @@ export default function HistorialPage() {
           String(p.id),
           formatearFechaHora(p.fecha),
           etiquetaOrigen(p),
-          p.alias || "Cuenta general",
+          p.alias ||
+            (p.mesa_etiqueta === "Para llevar" ? "Mostrador" : "Cuenta general"),
           p.usuario_nombre,
           p.usuario_cierre_nombre || "",
-          p.forma_pago,
-          String(p.total),
+          // Una sola fila por venta; el CSV conserva el desglose completo
+          // para que el cuadre por método siga siendo verificable.
+          pedidoEsMixto(p)
+            ? `Mixto: ${detallePagoMixto(p)}`
+            : p.forma_pago,
+          formatearPrecio(p.total),
           p.productos.join(" | "),
         ]),
       ];
@@ -207,12 +269,20 @@ export default function HistorialPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Historial de ventas</h2>
-        <div className="filters">
+        <div>
+          <h2>Historial de ventas</h2>
+          <p className="page-subtitulo">
+            Registro detallado de transacciones cobradas, responsables y
+            desglose de productos
+          </p>
+        </div>
+        <div className="filters page-head-acciones">
           <button className="btn-secondary" onClick={aplicar}>
+            <Icon nombre="filtrar" size={16} />
             Aplicar filtros
           </button>
           <button className="btn-secondary" onClick={limpiar}>
+            <Icon nombre="cerrar" size={16} />
             Limpiar
           </button>
           <button
@@ -220,7 +290,8 @@ export default function HistorialPage() {
             onClick={exportarCSV}
             disabled={exportando}
           >
-            {exportando ? "Exportando..." : "⬇ Exportar CSV"}
+            <Icon nombre="descargar" size={16} />
+            {exportando ? "Exportando..." : "Exportar CSV"}
           </button>
         </div>
       </div>
@@ -228,7 +299,7 @@ export default function HistorialPage() {
       {error && <p className="error-msg">{error}</p>}
 
       {/* Filtros */}
-      <div className="filtros-barra">
+      <div className="filtros-barra historial-filtros">
         <div className="form-group">
           <label>Desde</label>
           <input
@@ -250,10 +321,19 @@ export default function HistorialPage() {
           <select
             value={filtros.mesa}
             onChange={(e) =>
-              setFiltros((f) => ({ ...f, mesa: e.target.value ? Number(e.target.value) : "" }))
+              setFiltros((f) => ({
+                ...f,
+                mesa:
+                  e.target.value === "para-llevar"
+                    ? "para-llevar"
+                    : e.target.value
+                    ? Number(e.target.value)
+                    : "",
+              }))
             }
           >
             <option value="">Todas</option>
+            <option value="para-llevar">Para llevar</option>
             {mesas.map((m) => (
               <option key={m.id} value={m.id}>
                 {etiquetaMesa(m)}
@@ -290,58 +370,73 @@ export default function HistorialPage() {
             <option value="efectivo">Efectivo</option>
             <option value="tarjeta">Tarjeta</option>
             <option value="transferencia">Transferencia</option>
+            <option value="mixto">Mixto</option>
           </select>
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Fecha</th>
-              <th>Mesa / Barra</th>
-              <th>Cliente</th>
-              <th>Usuario creador</th>
-              <th>Cobrado por</th>
-              <th>Forma de pago</th>
-              <th>Productos</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{formatearFechaHora(p.fecha)}</td>
-                <td>{etiquetaOrigen(p)}</td>
-                <td>
-                  {p.alias ? (
-                    <span className="badge badge-warning">{p.alias}</span>
-                  ) : (
-                    <span className="muted small">Cuenta general</span>
-                  )}
-                </td>
-                <td>{p.usuario_nombre}</td>
-                <td>{p.usuario_cierre_nombre || "—"}</td>
-                <td>
-                  <span className="badge badge-success">{p.forma_pago}</span>
-                </td>
-                <td className="muted small">{p.productos.join(", ")}</td>
-                <td>
-                  <strong>{formatearPrecio(p.total)}</strong>
-                </td>
-              </tr>
-            ))}
-            {items.length === 0 && (
+      <div className="panel tabla-card">
+        <div className="table-wrap">
+          <table className="historial-tabla">
+            <thead>
               <tr>
-                <td colSpan={9} className="empty-state">
-                  No hay ventas que coincidan con los filtros.
-                </td>
+                <th>#</th>
+                <th>Fecha</th>
+                <th>Mesa / Barra</th>
+                <th>Cliente</th>
+                <th>Usuario creador</th>
+                <th>Cobrado por</th>
+                <th>Forma de pago</th>
+                <th>Productos</th>
+                <th>Total</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((p) => {
+                const mixto = pedidoEsMixto(p);
+                return (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>{formatearFechaHora(p.fecha)}</td>
+                    <td>{etiquetaOrigen(p)}</td>
+                    <td>
+                      {p.alias ? (
+                        <span className="badge badge-warning">{p.alias}</span>
+                      ) : p.mesa_etiqueta === "Para llevar" ? (
+                        <span className="muted small">Mostrador</span>
+                      ) : (
+                        <span className="muted small">Cuenta general</span>
+                      )}
+                    </td>
+                    <td>{p.usuario_nombre}</td>
+                    <td>{p.usuario_cierre_nombre || "—"}</td>
+                    <td>
+                      <span
+                        className={claseFormaPago(mixto ? "mixto" : p.forma_pago)}
+                        title={mixto ? detallePagoMixto(p) : undefined}
+                      >
+                        {mixto ? "mixto" : p.forma_pago}
+                      </span>
+                    </td>
+                    <td className="muted small historial-productos">
+                      {p.productos.join(", ")}
+                    </td>
+                    <td className="historial-total">
+                      <strong>{formatearPrecio(p.total)}</strong>
+                    </td>
+                  </tr>
+                );
+              })}
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="empty-state">
+                    No hay ventas que coincidan con los filtros.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="paginacion">

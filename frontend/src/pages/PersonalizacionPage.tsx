@@ -12,6 +12,7 @@ import {
   useConfiguracionNegocio,
 } from "../hooks/useConfiguracionNegocio";
 import { api } from "../services/api";
+import Icon from "../components/Icon";
 
 const TAMANO_MAXIMO = 8 * 1024 * 1024;
 const LADO_LOGO = 256;
@@ -63,11 +64,14 @@ function recortarLogo(archivo: File): Promise<string> {
 
 export default function PersonalizacionPage() {
   const actual = useConfiguracionNegocio();
+  const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const [nombre, setNombre] = useState(actual.nombre_negocio);
   const [logo, setLogo] = useState<string | null>(actual.logo);
+  const [moduloBolirana, setModuloBolirana] = useState(actual.modulo_bolirana);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [guardandoModulo, setGuardandoModulo] = useState(false);
   const inputLogo = useRef<HTMLInputElement>(null);
   const editado = useRef(false);
 
@@ -79,6 +83,10 @@ export default function PersonalizacionPage() {
       setLogo(actual.logo);
     }
   }, [actual.nombre_negocio, actual.logo]);
+
+  useEffect(() => {
+    setModuloBolirana(actual.modulo_bolirana);
+  }, [actual.modulo_bolirana]);
 
   const elegirLogo = async (evento: ChangeEvent<HTMLInputElement>) => {
     const archivo = evento.target.files?.[0];
@@ -133,6 +141,9 @@ export default function PersonalizacionPage() {
       const config = {
         nombre_negocio: datos?.nombre_negocio || nombreLimpio,
         logo: datos?.logo || null,
+        modulo_bolirana: Boolean(
+          datos?.modulo_bolirana ?? actual.modulo_bolirana
+        ),
       };
       notificarConfiguracion(config);
       editado.current = false;
@@ -146,23 +157,55 @@ export default function PersonalizacionPage() {
     }
   };
 
+  const cambiarModuloBolirana = async (habilitado: boolean) => {
+    setError(null);
+    setMensaje(null);
+    setGuardandoModulo(true);
+    try {
+      const datos: any = await api.updateModulos({
+        usuario_id: Number(usuario?.id) || 1,
+        modulo_bolirana: habilitado,
+      });
+      const config = {
+        nombre_negocio: datos?.nombre_negocio || actual.nombre_negocio,
+        logo: datos?.logo ?? actual.logo,
+        modulo_bolirana: Boolean(datos?.modulo_bolirana),
+      };
+      notificarConfiguracion(config);
+      setModuloBolirana(config.modulo_bolirana);
+      setMensaje(
+        config.modulo_bolirana
+          ? "Módulo de Bolirana habilitado. Ya aparece en el menú."
+          : "Módulo de Bolirana deshabilitado. Se ocultó del menú y de Pedidos."
+      );
+    } catch (err: any) {
+      setError(err?.message || "No se pudo cambiar el módulo de Bolirana.");
+    } finally {
+      setGuardandoModulo(false);
+    }
+  };
+
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Personalización</h2>
+        <div>
+          <h2>Personalización</h2>
+          <p className="page-subtitulo">
+            Cambia el nombre y el logotipo que identifican al negocio en la
+            cabecera y en los tickets internos. El nombre oficial del sistema
+            continúa siendo <strong>Inventario POS</strong>.
+          </p>
+        </div>
       </div>
-
-      <p className="muted small">
-        Cambia el nombre y el logotipo que identifican al negocio en la
-        cabecera y en los tickets internos. El nombre oficial del sistema
-        continúa siendo <strong>Inventario POS</strong>.
-      </p>
 
       {error && <p className="error-msg">{error}</p>}
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
-      <section className="panel">
-        <h3>Identidad del negocio</h3>
+      <section className="panel panel-acento panel-acento--rosa">
+        <h3>
+          <Icon nombre="paleta" size={15} />
+          Identidad del negocio
+        </h3>
 
         <div className="personalizacion-grid">
           <form onSubmit={guardar}>
@@ -196,6 +239,7 @@ export default function PersonalizacionPage() {
                   onClick={() => inputLogo.current?.click()}
                   disabled={guardando}
                 >
+                  <Icon nombre="imagen" size={16} />
                   Elegir imagen
                 </button>
                 {logo && (
@@ -205,6 +249,7 @@ export default function PersonalizacionPage() {
                     onClick={quitarLogo}
                     disabled={guardando}
                   >
+                    <Icon nombre="eliminar" size={16} />
                     Quitar logo
                   </button>
                 )}
@@ -231,6 +276,7 @@ export default function PersonalizacionPage() {
             )}
 
             <button className="btn-primary" type="submit" disabled={guardando}>
+              <Icon nombre="check" size={16} />
               {guardando ? "Guardando..." : "Guardar cambios"}
             </button>
           </form>
@@ -257,8 +303,52 @@ export default function PersonalizacionPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <h3>Alcance de la personalización</h3>
+      <section className="panel panel-acento panel-acento--naranja">
+        <h3>
+          <Icon nombre="bolirana" size={15} />
+          Módulos adicionales
+        </h3>
+        <p className="muted small">
+          Activa funciones opcionales para toda la operación. El cambio se
+          comparte entre Administradores y Bartenders.
+        </p>
+
+        <div className="modulo-switch-fila">
+          <div>
+            <strong>Habilitar módulo de Bolirana</strong>
+            <p className="muted small">
+              Agrega Bolirana al menú y al selector de Pedidos. Permite
+              competencias por ronda, carga de bebidas y transferencia del
+              consumo a los perdedores.
+            </p>
+          </div>
+          <label className="switch-modulo">
+            <input
+              type="checkbox"
+              checked={moduloBolirana}
+              disabled={guardandoModulo}
+              onChange={(evento) =>
+                cambiarModuloBolirana(evento.target.checked)
+              }
+            />
+            <span className="switch-modulo-slider" aria-hidden="true" />
+            <span className="sr-only">
+              {moduloBolirana
+                ? "Módulo de Bolirana habilitado"
+                : "Módulo de Bolirana deshabilitado"}
+            </span>
+          </label>
+        </div>
+        {guardandoModulo && (
+          <p className="muted small">Guardando el estado del módulo...</p>
+        )}
+      </section>
+
+      <section className="panel panel-aviso panel-aviso--cian">
+        <h3>
+          <Icon nombre="info" size={15} />
+          Alcance de la personalización
+        </h3>
         <p className="muted small">
           El nombre y el logo se guardan en la base de datos del sistema y se
           comparten entre el equipo local y la nube. Los tickets internos se

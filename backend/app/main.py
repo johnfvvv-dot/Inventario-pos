@@ -27,6 +27,7 @@ from app.models import (
     Usuario,
     etiqueta_desde_numero_historico,
 )
+from app.routes.boliranas import router as boliranas_router
 from app.routes.caja import router as caja_router
 from app.routes.categorias import router as categorias_router
 from app.routes.configuracion import router as configuracion_router
@@ -39,7 +40,7 @@ from app.schemas import CLAVE_INICIAL
 from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
@@ -97,6 +98,9 @@ app.include_router(caja_router, prefix="/api/caja", tags=["caja"])
 app.include_router(categorias_router, prefix="/api/categorias", tags=["categorias"])
 app.include_router(
     configuracion_router, prefix="/api/configuracion", tags=["configuracion"]
+)
+app.include_router(
+    boliranas_router, prefix="/api/boliranas", tags=["boliranas"]
 )
 
 
@@ -191,6 +195,11 @@ def _migrar_indices_cuentas() -> None:
         ("participante_items", "ix_participante_items_pedido_id", "pedido_id"),
         ("participante_items", "ix_participante_items_pedido_item_id", "pedido_item_id"),
         ("participantes", "ix_participantes_pedido_pago_id", "pedido_pago_id"),
+        ("pedidos", "ix_pedidos_bolirana_partida_id", "bolirana_partida_id"),
+        ("partidas_bolirana", "ix_partidas_bolirana_bolirana_id", "bolirana_id"),
+        ("participantes_bolirana", "ix_participantes_bolirana_partida_id", "partida_id"),
+        ("participantes_bolirana", "ix_participantes_bolirana_mesa_id", "mesa_id"),
+        ("participantes_bolirana", "ix_participantes_bolirana_pedido_cobro_id", "pedido_cobro_id"),
     ]
     for tabla, nombre, columna in indices:
         if tabla not in tablas:

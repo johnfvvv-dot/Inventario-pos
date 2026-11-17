@@ -179,6 +179,8 @@ class MesaListadoOut(MesaBase):
     total_cuenta: float = 0.0
     tiene_cuenta_pendiente: bool = False
     detalle_pendiente: str = ""
+    en_bolirana: bool = False
+    bolirana_nombre: Optional[str] = None
     posiciones: List[PosicionBarra] = []
     model_config = ConfigDict(from_attributes=True)
 
@@ -276,8 +278,16 @@ class ConfiguracionNegocioIn(BaseModel):
 class ConfiguracionNegocioOut(BaseModel):
     nombre_negocio: str = "Inventario POS"
     logo: Optional[str] = None
+    modulo_bolirana: bool = False
     actualizado_en: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConfiguracionModulosIn(BaseModel):
+    """Interruptores de módulos adicionales. Solo los cambia un Administrador."""
+
+    usuario_id: int = Field(..., gt=0)
+    modulo_bolirana: bool
 
 
 # ---------- Tickets internos ----------
@@ -402,9 +412,134 @@ class PedidoOut(BaseModel):
     estado: str
     participante_id: Optional[int] = None
     alias: Optional[str] = None
+    concepto: Optional[str] = None
+    bolirana_partida_id: Optional[int] = None
     es_pago_division: bool = False
     usuario_cierre_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- Bolirana ----------
+
+class BoliranaCreate(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=60)
+    usuario_id: int = Field(..., gt=0)
+
+
+class ParticipanteBoliranaIn(BaseModel):
+    tipo: str = Field(..., max_length=20)  # mesa | barra | alias
+    mesa_id: Optional[int] = Field(default=None, gt=0)
+    barra_numero: Optional[int] = Field(default=None, gt=0)
+    alias: Optional[str] = Field(default=None, max_length=60)
+
+    @model_validator(mode="after")
+    def _referencia_valida(self):
+        if self.tipo == "mesa" and self.mesa_id is None:
+            raise ValueError("Selecciona la mesa del participante.")
+        if self.tipo == "barra" and self.barra_numero is None:
+            raise ValueError("Selecciona la barra del participante.")
+        if self.tipo == "alias" and not (self.alias or "").strip():
+            raise ValueError("Escribe el nombre del jugador.")
+        if self.tipo not in {"mesa", "barra", "alias"}:
+            raise ValueError("Tipo de participante inválido.")
+        return self
+
+
+class IniciarPartidaBoliranaIn(BaseModel):
+    usuario_id: int = Field(..., gt=0)
+    participantes: List[ParticipanteBoliranaIn]
+
+    @model_validator(mode="after")
+    def _minimo_dos(self):
+        if len(self.participantes) < 2:
+            raise ValueError("Selecciona al menos dos participantes.")
+        return self
+
+
+class ParticipanteBoliranaOut(BaseModel):
+    id: int
+    tipo: str
+    mesa_id: Optional[int] = None
+    barra_numero: Optional[int] = None
+    alias: Optional[str] = None
+    etiqueta: str
+    es_perdedor: bool = False
+    monto_asignado: float = 0.0
+    estado_pago: str = "pendiente"
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConsumoBoliranaOut(BaseModel):
+    producto_id: int
+    producto_nombre: str
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+
+
+class PartidaBoliranaOut(BaseModel):
+    id: int
+    bolirana_id: int
+    estado: str
+    fecha_inicio: datetime
+    fecha_fin: Optional[datetime] = None
+    total_bebidas: float = 0.0
+    participantes: List[ParticipanteBoliranaOut] = []
+    consumo: List[ConsumoBoliranaOut] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BoliranaOut(BaseModel):
+    id: int
+    nombre: str
+    activa: bool = True
+    creado_en: Optional[datetime] = None
+    estado: str = "disponible"  # disponible | en_partida
+    partida: Optional[PartidaBoliranaOut] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PedidoBoliranaCreate(BaseModel):
+    usuario_id: int = Field(..., gt=0)
+    items: List[PedidoItemCreate]
+
+
+class LiquidarPartidaBoliranaIn(BaseModel):
+    usuario_id: int = Field(..., gt=0)
+    perdedores: List[int]
+
+    @model_validator(mode="after")
+    def _al_menos_un_perdedor(self):
+        if not self.perdedores:
+            raise ValueError("Selecciona al menos un perdedor.")
+        if len(set(self.perdedores)) != len(self.perdedores):
+            raise ValueError("No repitas el mismo perdedor.")
+        return self
+
+
+class CargoBoliranaOut(BaseModel):
+    pedido_id: int
+    partida_id: int
+    bolirana_id: int
+    bolirana_nombre: str
+    alias: Optional[str] = None
+    concepto: str
+    total: float
+    fecha: datetime
+
+
+class PagarCargoBoliranaIn(BaseModel):
+    usuario_id: int = Field(..., gt=0)
+    pagos: List[PagoPedidoCreate]
+
+    @model_validator(mode="after")
+    def _pagos_validos(self):
+        if not 1 <= len(self.pagos) <= 2:
+            raise ValueError("El pago debe tener uno o dos métodos.")
+        formas = [p.forma_pago for p in self.pagos]
+        if len(set(formas)) != len(formas):
+            raise ValueError("Los métodos de pago deben ser distintos.")
+        return self
 
 
 # ---------- Cuenta de la mesa ----------

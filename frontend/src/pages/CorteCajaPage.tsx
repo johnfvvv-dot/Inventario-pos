@@ -11,6 +11,7 @@ import {
   formatearFechaHora,
   formatearPrecio,
 } from "../utils/format";
+import Icon from "../components/Icon";
 
 interface Resumen {
   desde: string;
@@ -20,6 +21,18 @@ interface Resumen {
   pedidos_cerrados: number;
   mesas_atendidas: number;
   por_forma_pago: Record<string, number>;
+}
+
+/** Fecha y hora en dos líneas compactas para la tabla de turnos. */
+function FechaDosLineas({ valor }: { valor: string | null }) {
+  const texto = formatearFechaHora(valor);
+  const [fecha, hora] = texto.split(", ");
+  return (
+    <span className="corte-fecha">
+      <span>{fecha}</span>
+      {hora && <span className="corte-fecha-hora">{hora}</span>}
+    </span>
+  );
 }
 
 export default function CorteCajaPage() {
@@ -103,26 +116,37 @@ export default function CorteCajaPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Corte de caja</h2>
-        <div className="filters">
-          <select
-            value={offsetDias === 1 ? "ayer" : String(periodo)}
-            onChange={(e) => {
-              if (e.target.value === "ayer") {
-                setOffsetDias(1);
-                setPeriodo(1);
-              } else {
-                setOffsetDias(0);
-                setPeriodo(Number(e.target.value));
-              }
-            }}
-          >
-            <option value="1">Hoy</option>
-            <option value="ayer">Ayer</option>
-            <option value="7">Últimos 7 días</option>
-            <option value="30">Últimos 30 días</option>
-          </select>
+        <div>
+          <h2>Corte de caja</h2>
+          <p className="page-subtitulo">
+            Control de apertura y cierre de turnos, arqueo por medio de pago y
+            comprobantes
+          </p>
+        </div>
+        <div className="filters corte-cabecera-acciones">
+          <div className="form-group">
+            <label htmlFor="corte-periodo">Periodo</label>
+            <select
+              id="corte-periodo"
+              value={offsetDias === 1 ? "ayer" : String(periodo)}
+              onChange={(e) => {
+                if (e.target.value === "ayer") {
+                  setOffsetDias(1);
+                  setPeriodo(1);
+                } else {
+                  setOffsetDias(0);
+                  setPeriodo(Number(e.target.value));
+                }
+              }}
+            >
+              <option value="1">Hoy</option>
+              <option value="ayer">Ayer</option>
+              <option value="7">Últimos 7 días</option>
+              <option value="30">Últimos 30 días</option>
+            </select>
+          </div>
           <button className="btn-secondary" onClick={actualizar}>
+            <Icon nombre="actualizar" size={16} />
             Actualizar
           </button>
         </div>
@@ -134,9 +158,12 @@ export default function CorteCajaPage() {
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {/* Turno abierto */}
-      <section className="panel">
+      <section className="panel corte-panel">
         <div className="page-head">
-          <h3>Turno actual</h3>
+          <h3>
+            <Icon nombre="reloj" size={15} />
+            Turno actual
+          </h3>
           {turno ? (
             <div className="acciones-turno">
               <button
@@ -144,6 +171,7 @@ export default function CorteCajaPage() {
                 onClick={() => setTicketsTurnoId(turno.id)}
                 disabled={cargandoTurno}
               >
+                <Icon nombre="ticket" size={16} />
                 Tickets
               </button>
               <button
@@ -151,6 +179,7 @@ export default function CorteCajaPage() {
                 onClick={abrirModalCierre}
                 disabled={procesando}
               >
+                <Icon nombre="candado" size={16} />
                 {procesando ? "Cerrando..." : "Cerrar turno"}
               </button>
             </div>
@@ -164,6 +193,7 @@ export default function CorteCajaPage() {
               onClick={solicitarApertura}
               disabled={procesando}
             >
+              <Icon nombre="caja" size={16} />
               Abrir turno
             </button>
           )}
@@ -177,23 +207,38 @@ export default function CorteCajaPage() {
               <strong>{formatearPrecio(turno.fondo_inicial || 0)}</strong>
             </p>
             <div className="kpis">
-              <div className="kpi-card">
+              <div className="kpi-card kpi-efectivo">
+                <span className="kpi-card-icono">
+                  <Icon nombre="efectivo" size={18} />
+                </span>
                 <h3>Efectivo</h3>
                 <h2>{formatearPrecio(turno.totales.efectivo)}</h2>
               </div>
-              <div className="kpi-card">
+              <div className="kpi-card kpi-tarjeta">
+                <span className="kpi-card-icono">
+                  <Icon nombre="tarjeta" size={18} />
+                </span>
                 <h3>Tarjeta</h3>
                 <h2>{formatearPrecio(turno.totales.tarjeta)}</h2>
               </div>
-              <div className="kpi-card">
+              <div className="kpi-card kpi-transferencia">
+                <span className="kpi-card-icono">
+                  <Icon nombre="transferencia" size={18} />
+                </span>
                 <h3>Transferencia</h3>
                 <h2>{formatearPrecio(turno.totales.transferencia)}</h2>
               </div>
               <div className="kpi-card kpi-total">
+                <span className="kpi-card-icono">
+                  <Icon nombre="caja" size={18} />
+                </span>
                 <h3>Total del turno</h3>
                 <h2>{formatearPrecio(turno.totales.total)}</h2>
               </div>
               <div className="kpi-card kpi-ganancia">
+                <span className="kpi-card-icono">
+                  <Icon nombre="grafico" size={18} />
+                </span>
                 <h3>Ganancia del turno</h3>
                 <h2>{formatearPrecio(turno.ganancia || 0)}</h2>
               </div>
@@ -210,46 +255,74 @@ export default function CorteCajaPage() {
 
       {/* Resumen del periodo */}
       {resumen && (
-        <section className="panel">
-          <h3>Resumen de ventas ({etiquetaResumen})</h3>
-          <p className="muted small">
-            Rango: {formatearFechaHora(resumen.desde)} —{" "}
-            {formatearFechaHora(resumen.hasta)}
-          </p>
+        <section className="panel corte-panel">
+          <div className="corte-panel-head">
+            <div>
+              <h3>
+                <Icon nombre="reportes" size={15} />
+                Resumen de ventas ({etiquetaResumen})
+              </h3>
+              <p className="muted small">
+                Rango: {formatearFechaHora(resumen.desde)} —{" "}
+                {formatearFechaHora(resumen.hasta)}
+              </p>
+            </div>
+          </div>
           <div className="kpis">
-            <div className="kpi-card">
+            <div className="kpi-card kpi-efectivo">
+              <span className="kpi-card-icono">
+                <Icon nombre="efectivo" size={18} />
+              </span>
               <h3>Efectivo</h3>
               <h2>{formatearPrecio(resumen.totales.efectivo)}</h2>
             </div>
-            <div className="kpi-card">
+            <div className="kpi-card kpi-tarjeta">
+              <span className="kpi-card-icono">
+                <Icon nombre="tarjeta" size={18} />
+              </span>
               <h3>Tarjeta</h3>
               <h2>{formatearPrecio(resumen.totales.tarjeta)}</h2>
             </div>
-            <div className="kpi-card">
+            <div className="kpi-card kpi-transferencia">
+              <span className="kpi-card-icono">
+                <Icon nombre="transferencia" size={18} />
+              </span>
               <h3>Transferencia</h3>
               <h2>{formatearPrecio(resumen.totales.transferencia)}</h2>
             </div>
             <div className="kpi-card kpi-total">
+              <span className="kpi-card-icono">
+                <Icon nombre="caja" size={18} />
+              </span>
               <h3>Total</h3>
               <h2>{formatearPrecio(resumen.totales.total)}</h2>
             </div>
             <div className="kpi-card kpi-ganancia">
+              <span className="kpi-card-icono">
+                <Icon nombre="grafico" size={18} />
+              </span>
               <h3>Ganancia</h3>
               <h2>{formatearPrecio(resumen.ganancia || 0)}</h2>
             </div>
           </div>
-          <p className="muted small">
-            {resumen.pedidos_cerrados} pedidos cerrados · {resumen.mesas_atendidas} mesas atendidas ·{" "}
+          <p className="muted small corte-resumen-pie">
+            {resumen.pedidos_cerrados} pedidos cerrados ·{" "}
+            {resumen.mesas_atendidas} mesas atendidas ·{" "}
             {resumen.totales.operaciones} operaciones cobradas
           </p>
         </section>
       )}
 
       {/* Historial */}
-      <section className="panel">
-        <h3>Historial de turnos</h3>
+      <section className="panel corte-panel corte-historial">
+        <div className="corte-panel-head">
+          <h3>
+            <Icon nombre="historial" size={15} />
+            Historial de turnos
+          </h3>
+        </div>
         <div className="table-wrap">
-          <table>
+          <table className="corte-historial-tabla">
             <thead>
               <tr>
                 <th>#</th>
@@ -272,23 +345,38 @@ export default function CorteCajaPage() {
                 <tr key={t.id}>
                   <td>{t.id}</td>
                   <td>{formatearDiaSemana(t.fecha_apertura)}</td>
-                  <td>{formatearFechaHora(t.fecha_apertura)}</td>
-                  <td>{formatearFechaHora(t.fecha_cierre)}</td>
-                  <td>{t.usuario_nombre}</td>
-                  <td>{formatearPrecio(t.fondo_inicial || 0)}</td>
-                  <td>{formatearPrecio(t.totales.efectivo)}</td>
-                  <td>{formatearPrecio(t.totales.tarjeta)}</td>
-                  <td>{formatearPrecio(t.totales.transferencia)}</td>
                   <td>
+                    <FechaDosLineas valor={t.fecha_apertura} />
+                  </td>
+                  <td>
+                    <FechaDosLineas valor={t.fecha_cierre} />
+                  </td>
+                  <td>{t.usuario_nombre}</td>
+                  <td className="corte-num">
+                    {formatearPrecio(t.fondo_inicial || 0)}
+                  </td>
+                  <td className="corte-num">
+                    {formatearPrecio(t.totales.efectivo)}
+                  </td>
+                  <td className="corte-num">
+                    {formatearPrecio(t.totales.tarjeta)}
+                  </td>
+                  <td className="corte-num">
+                    {formatearPrecio(t.totales.transferencia)}
+                  </td>
+                  <td className="corte-num">
                     <strong>{formatearPrecio(t.totales.total)}</strong>
                   </td>
-                  <td>{formatearPrecio(t.ganancia || 0)}</td>
+                  <td className="corte-num">
+                    {formatearPrecio(t.ganancia || 0)}
+                  </td>
                   <td className="obs-cell">{t.observaciones || "—"}</td>
                   <td>
                     <button
-                      className="btn-secondary btn-small"
+                      className="btn-secondary btn-small corte-ver-tickets"
                       onClick={() => setTicketsTurnoId(t.id)}
                     >
+                      <Icon nombre="ticket" size={14} />
                       Ver tickets
                     </button>
                   </td>

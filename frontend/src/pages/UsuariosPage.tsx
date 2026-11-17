@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../services/api";
 import CambiarClaveModal from "../components/CambiarClaveModal";
 import ConfirmModal from "../components/ConfirmModal";
+import Icon from "../components/Icon";
 import { formatearFechaHora } from "../utils/format";
 
 interface Usuario {
@@ -152,8 +153,15 @@ export default function UsuariosPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <h2>Usuarios del sistema</h2>
+        <div>
+          <h2>Usuarios del sistema</h2>
+          <p className="page-subtitulo">
+            Administración de cuentas de acceso, roles y permisos operativos en
+            tiempo real
+          </p>
+        </div>
         <button className="btn-secondary" onClick={cargar}>
+          <Icon nombre="actualizar" size={16} />
           Actualizar
         </button>
       </div>
@@ -162,9 +170,19 @@ export default function UsuariosPage() {
       {mensaje && <p className="success-msg">{mensaje}</p>}
 
       {/* Crear usuario */}
-      <section className="panel">
-        <h3>Crear usuario</h3>
-        <form className="filtros-barra" onSubmit={crearUsuario}>
+      <section className="panel panel-acento panel-acento--azul usuarios-crear">
+        <div className="usuarios-crear-head">
+          <span className="usuarios-crear-icono">
+            <Icon nombre="usuario" size={18} />
+          </span>
+          <div>
+            <h3>Crear usuario</h3>
+            <p className="muted small">
+              Alta de cuentas con rol y clave de acceso
+            </p>
+          </div>
+        </div>
+        <form className="usuarios-form" onSubmit={crearUsuario}>
           <div className="form-group">
             <label>Alias *</label>
             <input
@@ -202,31 +220,42 @@ export default function UsuariosPage() {
               placeholder="1234 (por defecto)"
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={cargando}>
-            {cargando ? "Creando..." : "+ Crear usuario"}
+          <button type="submit" className="btn-primary usuarios-crear-btn" disabled={cargando}>
+            <Icon nombre="mas" size={16} />
+            {cargando ? "Creando..." : "Crear usuario"}
           </button>
         </form>
-        <p className="muted small">
-          Si no se indica clave, el usuario se crea con la clave inicial <strong>1234</strong>,
-          que podrás cambiar luego desde la lista.
+        <p className="muted small usuarios-nota">
+          <Icon nombre="info" size={14} />
+          Si no se indica clave, el usuario se crea con la clave inicial{" "}
+          <strong>1234</strong>, que podrás cambiar luego desde la lista.
         </p>
       </section>
 
       {/* Lista de usuarios */}
-      <section className="panel">
-        <h3>Usuarios registrados</h3>
-        <p className="muted small">
-          El ingreso de stock y la edición de pedidos están desactivados por
-          defecto para los Bartenders. Habilitalos por usuario cuando los
-          necesiten; el cambio se refleja en su sesión sin recargar la página.
-          El Administrador siempre puede editar pedidos.
-        </p>
+      <section className="panel tabla-card usuarios-lista">
+        <div className="usuarios-lista-head">
+          <div>
+            <h3>
+              <Icon nombre="usuarios" size={15} />
+              Usuarios registrados
+            </h3>
+            <p className="muted small">
+              El ingreso de stock y la edición de pedidos están desactivados por
+              defecto para los Bartenders. Habilitalos por usuario cuando los
+              necesiten; el cambio se refleja en su sesión sin recargar la
+              página. El Administrador siempre puede editar pedidos.
+            </p>
+          </div>
+          <span className="badge badge-neutral">
+            {usuarios.length} usuario{usuarios.length !== 1 ? "s" : ""}
+          </span>
+        </div>
         <div className="table-wrap">
-          <table>
+          <table className="usuarios-tabla">
             <thead>
               <tr>
-                <th>Alias</th>
-                <th>Nombre</th>
+                <th>Alias / Nombre</th>
                 <th>Rol</th>
                 <th>Ingreso de Stock</th>
                 <th>Edición de pedidos</th>
@@ -239,9 +268,18 @@ export default function UsuariosPage() {
               {usuarios.map((u) => (
                 <tr key={u.id}>
                   <td>
-                    <strong>{u.alias}</strong>
+                    <div className="usuario-identidad">
+                      <span className="usuario-avatar">
+                        {(u.alias || "?").charAt(0).toUpperCase()}
+                      </span>
+                      <span>
+                        <strong>{u.alias}</strong>
+                        <span className="muted small usuario-nombre">
+                          {u.nombre || "Sin nombre visible"}
+                        </span>
+                      </span>
+                    </div>
                   </td>
-                  <td className="muted">{u.nombre || "-"}</td>
                   <td>
                     <select
                       value={u.rol}
@@ -329,20 +367,25 @@ export default function UsuariosPage() {
                       {u.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
-                  <td className="muted small">
+                  <td className="muted small usuarios-creado">
                     {formatearFechaHora(u.creado_en)}
                   </td>
-                  <td className="actions">
+                  <td className="actions usuarios-acciones">
                     <button
                       className="btn-secondary btn-small"
                       onClick={() => setCambiarClaveDe(u)}
                     >
+                      <Icon nombre="candado" size={14} />
                       Cambiar clave
                     </button>
                     <button
                       className="btn-secondary btn-small"
                       onClick={() => alternarActivo(u)}
                     >
+                      <Icon
+                        nombre={u.activo ? "cerrar" : "check"}
+                        size={14}
+                      />
                       {u.activo ? "Desactivar" : "Activar"}
                     </button>
                     <button
@@ -350,14 +393,14 @@ export default function UsuariosPage() {
                       title="Eliminar"
                       onClick={() => setPorEliminar(u)}
                     >
-                      ×
+                      <Icon nombre="eliminar" size={15} />
                     </button>
                   </td>
                 </tr>
               ))}
               {usuarios.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="empty-state">
+                  <td colSpan={7} className="empty-state">
                     No hay usuarios registrados.
                   </td>
                 </tr>
@@ -392,35 +435,93 @@ export default function UsuariosPage() {
       )}
 
       {/* Permisos por rol */}
-      <section className="panel">
-        <h3>Permisos por rol</h3>
-        <div className="report-grid">
-          <div className="permisos-bloque">
-            <h4>Administrador</h4>
+      <section className="panel usuarios-permisos">
+        <div className="usuarios-lista-head">
+          <div>
+            <h3>
+              <Icon nombre="escudo" size={15} />
+              Permisos por rol
+            </h3>
+            <p className="muted small">
+              Alcance operativo de cada tipo de cuenta dentro del sistema
+            </p>
+          </div>
+        </div>
+        <div className="permisos-grid">
+          <div className="permisos-bloque permisos-bloque--admin">
+            <div className="permisos-bloque-head">
+              <span className="permisos-bloque-icono">
+                <Icon nombre="escudo" size={18} />
+              </span>
+              <div>
+                <h4>Administrador</h4>
+                <span className="badge badge-success">Acceso total</span>
+              </div>
+            </div>
             <ul>
-              <li>Acceso completo a todos los módulos</li>
-              <li>Inventario: crear, editar y eliminar</li>
-              <li>Mesas, Pedidos y Cuentas</li>
-              <li>Edición de pedidos y alias siempre habilitada</li>
-              <li>Reportes e Historial de ventas</li>
-              <li>Corte de caja</li>
-              <li>Creación y gestión de usuarios</li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Acceso completo a todos los módulos
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Inventario: crear, editar y eliminar
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Mesas, Pedidos y Cuentas
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Edición de pedidos y alias siempre habilitada
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Reportes e Historial de ventas
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Corte de caja
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Creación y gestión de usuarios
+              </li>
             </ul>
           </div>
-          <div className="permisos-bloque">
-            <h4>Bartender</h4>
+          <div className="permisos-bloque permisos-bloque--bartender">
+            <div className="permisos-bloque-head">
+              <span className="permisos-bloque-icono">
+                <Icon nombre="usuario" size={18} />
+              </span>
+              <div>
+                <h4>Bartender</h4>
+                <span className="badge badge-neutral">Acceso operativo</span>
+              </div>
+            </div>
             <ul>
-              <li>Mesas, Pedidos y Cuentas</li>
               <li>
+                <Icon nombre="check" size={14} />
+                Mesas, Pedidos y Cuentas
+              </li>
+              <li>
+                <Icon nombre="check" size={14} />
                 Inventario en modo lectura; el Administrador puede habilitarle
                 el ingreso de stock desde esta pantalla
               </li>
               <li>
+                <Icon nombre="check" size={14} />
                 Edición de pedidos en modo lectura; el Administrador puede
                 habilitarlo por usuario
               </li>
-              <li>Corte de caja</li>
-              <li>Sin acceso a Reportes, Historial ni Usuarios</li>
+              <li>
+                <Icon nombre="check" size={14} />
+                Corte de caja
+              </li>
+              <li className="permisos-item--no">
+                <Icon nombre="cerrar" size={14} />
+                Sin acceso a Reportes, Historial ni Usuarios
+              </li>
             </ul>
           </div>
         </div>

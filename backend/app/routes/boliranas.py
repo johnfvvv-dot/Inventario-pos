@@ -1,0 +1,822 @@
+"""Módulo de Bolirana: partidas, bebidas y transferencia a perdedores.
+
+Flujo:
+  1. El Administrador crea las boliranas (Bartender solo opera).
+  2. Se inicia una partida con dos o más mesas, barras o alias libres.
+  3. Las bebidas se cargan a la ronda y descuentan stock, pero no son una
+     venta todavía.
+  4. Al finalizar, el total se reparte en partes iguales entre los perdedores.
+     Las mesas/barras reciben un cargo abierto en su cuenta; los alias libres
+     quedan como cobros pendientes que se pagan simple o mixto.
+"""
+
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
+
+from app.boliranas_servicio import partida_activa
+from app.database import get_db
+from app.models import (
+    Bolirana,
+    Mesa,
+    ParticipanteBolirana,
+    PartidaBolirana,
+    Pedido,
+    PedidoItem,
+    Producto,
+    Usuario,
+)
+from app.schemas import (
+    FORMAS_PAGO,
+    BoliranaCreate,
+    BoliranaOut,
+    CargoBoliranaOut,
+    ConsumoBoliranaOut,
+    IniciarPartidaBoliranaIn,
+    LiquidarPartidaBoliranaIn,
+    PagarCargoBoliranaIn,
+    ParticipanteBoliranaOut,
+    PartidaBoliranaOut,
+    PedidoBoliranaCreate,
+)
+from app.tiempo import ahora_local
+from app.turnos import exigir_turno_abierto
+
+router = APIRouter(tags=["boliranas"])
+
+
+# ------------------------------------------------------------------
+# Utilidades
+# ------------------------------------------------------------------
+
+def _usuario(db: Session, usuario_id: int) -> Usuario:
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return usuario
+
+
+def _etiqueta_bolirana(nombre: str) -> str:
+    """Nombre visible sin repetir el prefijo "Bolirana".
+
+    Si la máquina ya se llama "Bolirana 1" el concepto queda
+    "Consumo Bolirana 1 (Partida)" en lugar de duplicar la palabra.
+    """
+    limpio = (nombre or "").strip()
+    if limpio.lower().startswith("bolirana"):
+        limpio = limpio[len("bolirana") :].lstrip(" -:")
+    return limpio or "Bolirana"
+
+
+def _concepto_partida(partida: PartidaBolirana) -> str:
+    """Concepto único con el que se registra el consumo de una partida."""
+    return f"Consumo Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)} (Partida)"
+
+
+def _exigir_admin(db: Session, usuario_id: int) -> Usuario:
+    usuario = _usuario(db, usuario_id)
+    if usuario.rol != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el Administrador puede administrar las boliranas.",
+        )
+    return usuario
+
+
+def _bolirana(db: Session, bolirana_id: int) -> Bolirana:
+    bolirana = (
+        db.query(Bolirana)
+        .filter(Bolirana.id == bolirana_id, Bolirana.activa == 1)
+        .first()
+    )
+    if not bolirana:
+        raise HTTPException(status_code=404, detail="Bolirana no encontrada")
+    return bolirana
+
+
+def _partida_de_bolirana(
+    db: Session, bolirana_id: int
+) -> Optional[PartidaBolirana]:
+    return (
+        db.query(PartidaBolirana)
+        .options(
+            joinedload(PartidaBolirana.participantes).joinedload(
+                ParticipanteBolirana.mesa
+            )
+        )
+        .filter(
+            PartidaBolirana.bolirana_id == bolirana_id,
+            PartidaBolirana.estado == "en_curso",
+        )
+        .order_by(PartidaBolirana.id.desc())
+        .first()
+    )
+
+
+def _consumo_partida(db: Session, partida_id: int) -> List[ConsumoBoliranaOut]:
+    """Agrupa las líneas de todas las comandas de la ronda por producto."""
+    pedidos = (
+        db.query(Pedido)
+        .options(
+            joinedload(Pedido.items).joinedload(PedidoItem.producto),
+        )
+        .filter(
+            Pedido.bolirana_partida_id == partida_id,
+            Pedido.estado == "bolirana",
+        )
+        .order_by(Pedido.id)
+        .all()
+    )
+    agrupado: dict = {}
+    for pedido in pedidos:
+        for item in pedido.items:
+            clave = (item.producto_id, round(float(item.precio_unitario), 2))
+            fila = agrupado.setdefault(
+                clave,
+                {
+                    "producto_id": item.producto_id,
+                    "producto_nombre": (
+                        item.producto.nombre if item.producto else "Producto eliminado"
+                    ),
+                    "cantidad": 0,
+                    "precio_unitario": round(float(item.precio_unitario), 2),
+                    "subtotal": 0.0,
+                },
+            )
+            fila["cantidad"] += item.cantidad
+            fila["subtotal"] = round(fila["subtotal"] + float(item.subtotal), 2)
+
+    return [
+        ConsumoBoliranaOut(**fila)
+        for fila in sorted(
+            agrupado.values(), key=lambda f: (f["producto_nombre"], f["precio_unitario"])
+        )
+    ]
+
+
+def _participantes_out(
+    participantes: List[ParticipanteBolirana],
+) -> List[ParticipanteBoliranaOut]:
+    return [
+        ParticipanteBoliranaOut(
+            id=p.id,
+            tipo=p.tipo,
+            mesa_id=p.mesa_id,
+            barra_numero=p.barra_numero,
+            alias=p.alias,
+            etiqueta=p.etiqueta(),
+            es_perdedor=bool(p.es_perdedor),
+            monto_asignado=round(float(p.monto_asignado or 0.0), 2),
+            estado_pago=p.estado_pago,
+        )
+        for p in sorted(participantes, key=lambda p: p.id)
+    ]
+
+
+def _partida_out(db: Session, partida: PartidaBolirana) -> PartidaBoliranaOut:
+    return PartidaBoliranaOut(
+        id=partida.id,
+        bolirana_id=partida.bolirana_id,
+        estado=partida.estado,
+        fecha_inicio=partida.fecha_inicio,
+        fecha_fin=partida.fecha_fin,
+        total_bebidas=round(float(partida.total_bebidas or 0.0), 2),
+        participantes=_participantes_out(partida.participantes),
+        consumo=_consumo_partida(db, partida.id),
+    )
+
+
+def _bolirana_out(db: Session, bolirana: Bolirana) -> BoliranaOut:
+    partida = _partida_de_bolirana(db, bolirana.id)
+    return BoliranaOut(
+        id=bolirana.id,
+        nombre=bolirana.nombre,
+        activa=bool(bolirana.activa),
+        creado_en=bolirana.creado_en,
+        estado="en_partida" if partida else "disponible",
+        partida=_partida_out(db, partida) if partida else None,
+    )
+
+
+def _mesa_por_id(db: Session, mesa_id: int) -> Mesa:
+    mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
+    if not mesa:
+        raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    return mesa
+
+
+def _mesas_de_barra(db: Session, numero_barra: int) -> List[Mesa]:
+    mesas = (
+        db.query(Mesa)
+        .filter(Mesa.grupo == f"Barra {numero_barra}")
+        .order_by(Mesa.posicion, Mesa.id)
+        .all()
+    )
+    if not mesas:
+        raise HTTPException(status_code=404, detail="Barra no encontrada")
+    return mesas
+
+
+def _validar_pagos(total: float, pagos) -> None:
+    """Valida uno o dos métodos y que la suma cubra exactamente el cargo."""
+    formas = [p.forma_pago for p in pagos]
+    if any(forma not in FORMAS_PAGO for forma in formas):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Forma de pago invalida. Use: {', '.join(FORMAS_PAGO)}",
+        )
+    if len(set(formas)) != len(formas):
+        raise HTTPException(
+            status_code=400,
+            detail="Los métodos de pago deben ser distintos.",
+        )
+    montos = [round(float(p.monto), 2) for p in pagos]
+    if any(monto <= 0 for monto in montos):
+        raise HTTPException(
+            status_code=400,
+            detail="Cada monto de pago debe ser mayor a cero.",
+        )
+    if abs(round(sum(montos), 2) - round(float(total), 2)) > 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Los pagos suman {sum(montos):.2f} y el cargo es "
+                f"{float(total):.2f}."
+            ),
+        )
+
+
+def _crear_cargo_mesa(
+    db: Session,
+    partida: PartidaBolirana,
+    participante: ParticipanteBolirana,
+    monto: float,
+    usuario_id: int,
+    ahora,
+) -> Pedido:
+    """Crea un cargo abierto en la cuenta de la mesa o barra perdedora."""
+    if participante.tipo == "mesa":
+        mesa = _mesa_por_id(db, participante.mesa_id or 0)
+    else:
+        mesas = _mesas_de_barra(db, participante.barra_numero or 0)
+        con_pedidos = {
+            fila[0]
+            for fila in db.query(Pedido.mesa_id)
+            .filter(
+                Pedido.mesa_id.in_([m.id for m in mesas]),
+                Pedido.estado == "abierto",
+            )
+            .distinct()
+            .all()
+        }
+        mesa = next((m for m in mesas if m.id in con_pedidos), None)
+        if mesa is None:
+            # Sin pedidos abiertos: se usa una plaza ocupada para no bloquear
+            # un puesto libre de la barra.
+            mesa = next((m for m in mesas if m.estado == "ocupada"), mesas[0])
+
+    concepto = _concepto_partida(partida)
+    cargo = Pedido(
+        mesa_id=mesa.id,
+        usuario_id=usuario_id,
+        fecha=ahora,
+        total=round(float(monto), 2),
+        estado="abierto",
+        concepto=concepto,
+        bolirana_partida_id=partida.id,
+        fecha_ocupacion=mesa.fecha_ocupacion or ahora,
+        es_pago_division=0,
+    )
+    cargo.guardar_origen(mesa)
+    if not mesa.fecha_ocupacion:
+        mesa.fecha_ocupacion = ahora
+    mesa.estado = "ocupada"
+    db.add(cargo)
+    db.flush()
+    return cargo
+
+
+def _crear_cargo_alias(
+    db: Session,
+    partida: PartidaBolirana,
+    participante: ParticipanteBolirana,
+    monto: float,
+    usuario_id: int,
+    ahora,
+) -> Pedido:
+    """Crea un cobro pendiente para un jugador libre."""
+    cargo = Pedido(
+        mesa_id=None,
+        usuario_id=usuario_id,
+        fecha=ahora,
+        total=round(float(monto), 2),
+        estado="pendiente",
+        concepto=_concepto_partida(partida),
+        bolirana_partida_id=partida.id,
+        fecha_ocupacion=ahora,
+        alias_cliente=participante.alias,
+        mesa_etiqueta_historica=(
+            f"Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)}"
+        ),
+        es_pago_division=0,
+    )
+    db.add(cargo)
+    db.flush()
+    return cargo
+
+
+# ------------------------------------------------------------------
+# Consultas
+# ------------------------------------------------------------------
+
+@router.get("/", response_model=List[BoliranaOut])
+def listar_boliranas(db: Session = Depends(get_db)):
+    """Lista las boliranas activas con su partida en curso, si existe."""
+    boliranas = (
+        db.query(Bolirana)
+        .filter(Bolirana.activa == 1)
+        .order_by(Bolirana.nombre, Bolirana.id)
+        .all()
+    )
+    return [_bolirana_out(db, b) for b in boliranas]
+
+
+@router.get("/cargos-pendientes", response_model=List[CargoBoliranaOut])
+def cargos_pendientes(db: Session = Depends(get_db)):
+    """Cobros de jugadores libres que aún no se han pagado."""
+    filas = (
+        db.query(Pedido, PartidaBolirana, Bolirana)
+        .join(PartidaBolirana, PartidaBolirana.id == Pedido.bolirana_partida_id)
+        .join(Bolirana, Bolirana.id == PartidaBolirana.bolirana_id)
+        .filter(
+            Pedido.estado == "pendiente",
+            Pedido.mesa_id.is_(None),
+            Pedido.bolirana_partida_id.isnot(None),
+        )
+        .order_by(Pedido.fecha, Pedido.id)
+        .all()
+    )
+    return [
+        CargoBoliranaOut(
+            pedido_id=pedido.id,
+            partida_id=partida.id,
+            bolirana_id=bolirana.id,
+            bolirana_nombre=bolirana.nombre,
+            alias=pedido.alias_cliente,
+            concepto=pedido.concepto or "Consumo Bolirana (Partida)",
+            total=round(float(pedido.total or 0.0), 2),
+            fecha=pedido.fecha,
+        )
+        for pedido, partida, bolirana in filas
+    ]
+
+
+@router.get("/{bolirana_id}", response_model=BoliranaOut)
+def obtener_bolirana(bolirana_id: int, db: Session = Depends(get_db)):
+    """Detalle de una bolirana y de su ronda actual."""
+    return _bolirana_out(db, _bolirana(db, bolirana_id))
+
+
+# ------------------------------------------------------------------
+# Administración (solo Administrador)
+# ------------------------------------------------------------------
+
+@router.post("/", response_model=BoliranaOut, status_code=201)
+def crear_bolirana(datos: BoliranaCreate, db: Session = Depends(get_db)):
+    """Da de alta una bolirana."""
+    _exigir_admin(db, datos.usuario_id)
+    nombre = datos.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="Escribe el nombre de la bolirana")
+
+    existente = (
+        db.query(Bolirana)
+        .filter(
+            Bolirana.activa == 1,
+            func.lower(Bolirana.nombre) == nombre.lower(),
+        )
+        .first()
+    )
+    if existente:
+        raise HTTPException(
+            status_code=400, detail=f"Ya existe una bolirana llamada {nombre}."
+        )
+
+    bolirana = Bolirana(nombre=nombre, activa=1)
+    db.add(bolirana)
+    db.commit()
+    db.refresh(bolirana)
+    return _bolirana_out(db, bolirana)
+
+
+@router.delete("/{bolirana_id}")
+def eliminar_bolirana(
+    bolirana_id: int,
+    usuario_id: int,
+    db: Session = Depends(get_db),
+):
+    """Elimina una bolirana si no tiene una partida activa.
+
+    Si ya tiene historial se marca inactiva para conservar los tickets y el
+    historial de ventas. Las boliranas sin historial se borran físicamente.
+    """
+    _exigir_admin(db, usuario_id)
+    bolirana = _bolirana(db, bolirana_id)
+    if partida_activa(db, bolirana.id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"La bolirana {bolirana.nombre} tiene una partida activa. "
+                "Finaliza la partida antes de eliminarla."
+            ),
+        )
+
+    tiene_historial = (
+        db.query(PartidaBolirana.id)
+        .filter(PartidaBolirana.bolirana_id == bolirana.id)
+        .first()
+        is not None
+    )
+    if tiene_historial:
+        bolirana.activa = 0
+        db.commit()
+        return {"mensaje": f"Bolirana {bolirana.nombre} eliminada"}
+
+    db.delete(bolirana)
+    db.commit()
+    return {"mensaje": f"Bolirana {bolirana.nombre} eliminada"}
+
+
+# ------------------------------------------------------------------
+# Operación de partidas
+# ------------------------------------------------------------------
+
+@router.post("/{bolirana_id}/iniciar", response_model=BoliranaOut)
+def iniciar_partida(
+    bolirana_id: int,
+    datos: IniciarPartidaBoliranaIn,
+    db: Session = Depends(get_db),
+):
+    """Inicia una partida con dos o más mesas, barras o jugadores libres."""
+    exigir_turno_abierto(db)
+    _usuario(db, datos.usuario_id)
+    bolirana = _bolirana(db, bolirana_id)
+    if partida_activa(db, bolirana.id):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"La bolirana {bolirana.nombre} ya tiene una partida activa. "
+                "Finalízala antes de iniciar otra."
+            ),
+        )
+
+    # Validar referencias y candados antes de crear la partida.
+    mesas_vistas = set()
+    barras_vistas = set()
+    alias_vistos = set()
+    for participante in datos.participantes:
+        if participante.tipo == "mesa":
+            mesa = _mesa_por_id(db, participante.mesa_id or 0)
+            if mesa.id in mesas_vistas:
+                raise HTTPException(
+                    status_code=400, detail="No repitas la misma mesa."
+                )
+            if mesa.estado != "ocupada":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Mesa {mesa.numero} debe estar ocupada para jugar.",
+                )
+            from app.boliranas_servicio import exigir_mesa_sin_bolirana
+
+            exigir_mesa_sin_bolirana(db, mesa)
+            mesas_vistas.add(mesa.id)
+        elif participante.tipo == "barra":
+            mesas = _mesas_de_barra(db, participante.barra_numero or 0)
+            if participante.barra_numero in barras_vistas:
+                raise HTTPException(
+                    status_code=400, detail="No repitas la misma barra."
+                )
+            if not any(m.estado == "ocupada" for m in mesas):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Barra {participante.barra_numero} debe tener al menos "
+                        "una plaza ocupada para jugar."
+                    ),
+                )
+            from app.boliranas_servicio import exigir_barra_sin_bolirana
+
+            exigir_barra_sin_bolirana(db, participante.barra_numero or 0)
+            barras_vistas.add(participante.barra_numero)
+        else:
+            alias = (participante.alias or "").strip()
+            if alias.lower() in alias_vistos:
+                raise HTTPException(
+                    status_code=400, detail=f"No repitas el jugador {alias}."
+                )
+            ya_juega = (
+                db.query(ParticipanteBolirana.id)
+                .join(
+                    PartidaBolirana,
+                    PartidaBolirana.id == ParticipanteBolirana.partida_id,
+                )
+                .filter(
+                    PartidaBolirana.estado == "en_curso",
+                    ParticipanteBolirana.tipo == "alias",
+                    func.lower(ParticipanteBolirana.alias) == alias.lower(),
+                )
+                .first()
+            )
+            if ya_juega:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"El jugador {alias} ya está en otra partida activa.",
+                )
+            alias_vistos.add(alias.lower())
+
+    partida = PartidaBolirana(
+        bolirana_id=bolirana.id,
+        usuario_id=datos.usuario_id,
+        estado="en_curso",
+        fecha_inicio=ahora_local(),
+        total_bebidas=0.0,
+    )
+    db.add(partida)
+    db.flush()
+
+    for participante in datos.participantes:
+        db.add(
+            ParticipanteBolirana(
+                partida_id=partida.id,
+                tipo=participante.tipo,
+                mesa_id=participante.mesa_id,
+                barra_numero=participante.barra_numero,
+                alias=(
+                    (participante.alias or "").strip()
+                    if participante.tipo == "alias"
+                    else None
+                ),
+                estado_pago="pendiente",
+            )
+        )
+
+    db.commit()
+    return _bolirana_out(db, bolirana)
+
+
+@router.post("/{bolirana_id}/pedidos", response_model=BoliranaOut)
+def cargar_bebidas(
+    bolirana_id: int,
+    datos: PedidoBoliranaCreate,
+    db: Session = Depends(get_db),
+):
+    """Carga bebidas a la ronda actual y descuenta stock una sola vez."""
+    exigir_turno_abierto(db)
+    _usuario(db, datos.usuario_id)
+    bolirana = _bolirana(db, bolirana_id)
+    partida = partida_activa(db, bolirana.id)
+    if not partida:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"La bolirana {bolirana.nombre} no tiene una partida activa. "
+                "Inicia una partida para cargar bebidas."
+            ),
+        )
+    if not datos.items:
+        raise HTTPException(status_code=400, detail="El pedido no tiene productos")
+
+    ids_productos = sorted({item.producto_id for item in datos.items})
+    productos = {
+        p.id: p
+        for p in (
+            db.query(Producto)
+            .filter(Producto.id.in_(ids_productos))
+            .order_by(Producto.id)
+            .with_for_update()
+            .all()
+        )
+    }
+    for item in datos.items:
+        if item.producto_id not in productos:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Producto con ID {item.producto_id} no encontrado",
+            )
+
+    usado: dict = {}
+    total = 0.0
+    for item in datos.items:
+        producto = productos[item.producto_id]
+        solicitado = usado.get(producto.id, 0) + item.cantidad
+        if producto.stock < solicitado:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Stock insuficiente para {producto.nombre}. "
+                    f"Disponible: {producto.stock}, solicitado: {solicitado}"
+                ),
+            )
+        usado[producto.id] = solicitado
+        total += producto.precio * item.cantidad
+
+    ahora = ahora_local()
+    pedido = Pedido(
+        mesa_id=None,
+        usuario_id=datos.usuario_id,
+        fecha=ahora,
+        total=round(total, 2),
+        estado="bolirana",
+        bolirana_partida_id=partida.id,
+        fecha_ocupacion=ahora,
+        es_pago_division=0,
+    )
+    db.add(pedido)
+    db.flush()
+
+    for item in datos.items:
+        producto = productos[item.producto_id]
+        subtotal = round(producto.precio * item.cantidad, 2)
+        producto.stock -= item.cantidad
+        db.add(
+            PedidoItem(
+                pedido_id=pedido.id,
+                producto_id=producto.id,
+                cantidad=item.cantidad,
+                precio_unitario=producto.precio,
+                subtotal=subtotal,
+            )
+        )
+
+    partida.total_bebidas = round(
+        float(partida.total_bebidas or 0.0) + total, 2
+    )
+    db.commit()
+    return _bolirana_out(db, bolirana)
+
+
+@router.post("/{bolirana_id}/finalizar", response_model=BoliranaOut)
+def finalizar_partida(
+    bolirana_id: int,
+    datos: LiquidarPartidaBoliranaIn,
+    db: Session = Depends(get_db),
+):
+    """Liquida la ronda y reparte el total entre los perdedores elegidos."""
+    exigir_turno_abierto(db)
+    _usuario(db, datos.usuario_id)
+    bolirana = _bolirana(db, bolirana_id)
+    partida = (
+        db.query(PartidaBolirana)
+        .options(
+            joinedload(PartidaBolirana.participantes).joinedload(
+                ParticipanteBolirana.mesa
+            ),
+            joinedload(PartidaBolirana.bolirana),
+        )
+        .filter(
+            PartidaBolirana.id == (
+                db.query(PartidaBolirana.id)
+                .filter(
+                    PartidaBolirana.bolirana_id == bolirana.id,
+                    PartidaBolirana.estado == "en_curso",
+                )
+                .order_by(PartidaBolirana.id.desc())
+                .limit(1)
+                .scalar_subquery()
+            )
+        )
+        .first()
+    )
+    if not partida:
+        raise HTTPException(
+            status_code=409,
+            detail=f"La bolirana {bolirana.nombre} no tiene una partida activa.",
+        )
+
+    participantes = {p.id: p for p in partida.participantes}
+    for participante_id in datos.perdedores:
+        if participante_id not in participantes:
+            raise HTTPException(
+                status_code=400,
+                detail="Uno de los perdedores no pertenece a esta partida.",
+            )
+
+    # El total se recalcula desde las comandas para no confiar en un valor
+    # que pudo quedar desactualizado.
+    total = round(
+        float(
+            db.query(func.coalesce(func.sum(Pedido.total), 0.0))
+            .filter(
+                Pedido.bolirana_partida_id == partida.id,
+                Pedido.estado == "bolirana",
+            )
+            .scalar()
+            or 0.0
+        ),
+        2,
+    )
+    partida.total_bebidas = total
+
+    ahora = ahora_local()
+    cantidad = len(datos.perdedores)
+    base = round(total / cantidad, 2) if cantidad else 0.0
+    montos = [base] * cantidad
+    if cantidad:
+        # Ajuste de centavos para que la suma sea exactamente el total.
+        montos[-1] = round(total - base * (cantidad - 1), 2)
+
+    for indice, participante_id in enumerate(datos.perdedores):
+        participante = participantes[participante_id]
+        monto = montos[indice]
+        participante.es_perdedor = 1
+        participante.monto_asignado = monto
+
+        if total <= 0:
+            participante.estado_pago = "sin_consumo"
+            continue
+
+        if participante.tipo in {"mesa", "barra"}:
+            cargo = _crear_cargo_mesa(
+                db,
+                partida,
+                participante,
+                monto,
+                datos.usuario_id,
+                ahora,
+            )
+            participante.estado_pago = "transferido"
+        else:
+            cargo = _crear_cargo_alias(
+                db,
+                partida,
+                participante,
+                monto,
+                datos.usuario_id,
+                ahora,
+            )
+            participante.estado_pago = "pendiente"
+        participante.pedido_cobro_id = cargo.id
+
+    partida.estado = "finalizada"
+    partida.fecha_fin = ahora
+    db.commit()
+    return _bolirana_out(db, bolirana)
+
+
+@router.post("/cargos/{pedido_id}/pagar")
+def pagar_cargo(
+    pedido_id: int,
+    datos: PagarCargoBoliranaIn,
+    db: Session = Depends(get_db),
+):
+    """Cobra un cargo pendiente de un jugador libre (simple o mixto)."""
+    exigir_turno_abierto(db)
+    _usuario(db, datos.usuario_id)
+
+    pedido = (
+        db.query(Pedido)
+        .filter(
+            Pedido.id == pedido_id,
+            Pedido.estado == "pendiente",
+            Pedido.bolirana_partida_id.isnot(None),
+            Pedido.mesa_id.is_(None),
+        )
+        .first()
+    )
+    if not pedido:
+        raise HTTPException(
+            status_code=404,
+            detail="El cargo de bolirana no existe o ya fue cobrado.",
+        )
+
+    _validar_pagos(float(pedido.total or 0.0), datos.pagos)
+
+    formas = [p.forma_pago for p in datos.pagos]
+    montos = [round(float(p.monto), 2) for p in datos.pagos]
+    ahora = ahora_local()
+    pedido.estado = "cerrado"
+    pedido.forma_pago = "mixto" if len(montos) > 1 else formas[0]
+    pedido.pago_1_forma = formas[0]
+    pedido.pago_1_monto = montos[0]
+    pedido.pago_2_forma = formas[1] if len(montos) > 1 else None
+    pedido.pago_2_monto = montos[1] if len(montos) > 1 else None
+    pedido.fecha_cierre = ahora
+    pedido.fecha_ocupacion = pedido.fecha_ocupacion or ahora
+    pedido.usuario_cierre_id = datos.usuario_id
+
+    participante = (
+        db.query(ParticipanteBolirana)
+        .filter(ParticipanteBolirana.pedido_cobro_id == pedido.id)
+        .first()
+    )
+    if participante:
+        participante.estado_pago = "pagado"
+
+    db.commit()
+    return {
+        "mensaje": "Cargo de bolirana cobrado correctamente",
+        "pedido_id": pedido.id,
+        "total": round(float(pedido.total or 0.0), 2),
+    }

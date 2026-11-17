@@ -5,21 +5,14 @@ Se ejecutan con la base SQLite temporal configurada antes de importar la app:
     backend/venv/Scripts/python.exe -m unittest discover -s backend/tests -v
 """
 
-import os
-import shutil
-import tempfile
 import unittest
-from pathlib import Path
 
 # La configuración de la base debe existir antes de importar app.database.
-_TEMP_DIR = tempfile.mkdtemp(prefix="inventario_pos_test_")
-_DB_PATH = Path(_TEMP_DIR) / "cuentas.db"
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB_PATH.as_posix()}"
-os.environ.setdefault("APP_TIMEZONE", "America/Bogota")
+from tests import _entorno  # noqa: F401,E402
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.database import SessionLocal, engine  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import (  # noqa: E402
     Division,
@@ -50,8 +43,6 @@ class CuentasAsignacionTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.client_ctx.__exit__(None, None, None)
-        engine.dispose()
-        shutil.rmtree(_TEMP_DIR, ignore_errors=True)
 
     # ------------------------------------------------------------------
     # Utilidades

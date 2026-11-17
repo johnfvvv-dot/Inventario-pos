@@ -8,8 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ConfiguracionNegocio
-from app.schemas import ConfiguracionNegocioIn, ConfiguracionNegocioOut
+from app.models import ConfiguracionNegocio, Usuario
+from app.schemas import (
+    ConfiguracionModulosIn,
+    ConfiguracionNegocioIn,
+    ConfiguracionNegocioOut,
+)
 from app.tiempo import ahora_local
 
 router = APIRouter(tags=["configuracion"])
@@ -28,10 +32,15 @@ def _configuracion(db: Session) -> ConfiguracionNegocio | None:
 
 def _salida(config: ConfiguracionNegocio | None) -> ConfiguracionNegocioOut:
     if not config:
-        return ConfiguracionNegocioOut(nombre_negocio=NOMBRE_POR_DEFECTO, logo=None)
+        return ConfiguracionNegocioOut(
+            nombre_negocio=NOMBRE_POR_DEFECTO,
+            logo=None,
+            modulo_bolirana=False,
+        )
     return ConfiguracionNegocioOut(
         nombre_negocio=config.nombre_negocio or NOMBRE_POR_DEFECTO,
         logo=config.logo or None,
+        modulo_bolirana=bool(config.modulo_bolirana),
         actualizado_en=config.actualizado_en,
     )
 
@@ -65,6 +74,42 @@ def actualizar_configuracion(
     else:
         config.nombre_negocio = nombre
         config.logo = logo
+        config.actualizado_en = ahora_local()
+
+    db.commit()
+    db.refresh(config)
+    return _salida(config)
+
+
+@router.put("/modulos", response_model=ConfiguracionNegocioOut)
+def actualizar_modulos(
+    datos: ConfiguracionModulosIn, db: Session = Depends(get_db)
+):
+    """Activa o desactiva módulos adicionales (solo Administrador).
+
+    El cambio es global: se guarda en la misma fila de configuración que
+    comparten las sesiones de Administrador y Bartender.
+    """
+    usuario = db.query(Usuario).filter(Usuario.id == datos.usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if usuario.rol != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el Administrador puede cambiar los módulos adicionales.",
+        )
+
+    config = _configuracion(db)
+    if not config:
+        config = ConfiguracionNegocio(
+            id=1,
+            nombre_negocio=NOMBRE_POR_DEFECTO,
+            logo=None,
+            modulo_bolirana=1 if datos.modulo_bolirana else 0,
+        )
+        db.add(config)
+    else:
+        config.modulo_bolirana = 1 if datos.modulo_bolirana else 0
         config.actualizado_en = ahora_local()
 
     db.commit()

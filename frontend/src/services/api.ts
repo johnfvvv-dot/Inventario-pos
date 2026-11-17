@@ -347,6 +347,83 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
+  /** Activa/desactiva módulos adicionales (solo Administrador). */
+  updateModulos: (datos: {
+    usuario_id: number;
+    modulo_bolirana: boolean;
+  }) =>
+    request("/configuracion/modulos", {
+      method: "PUT",
+      body: JSON.stringify(datos),
+    }),
+
+  // ---------- Bolirana ----------
+  getBoliranas: () => request("/boliranas/"),
+
+  createBolirana: (nombre: string, usuarioId: number) =>
+    request("/boliranas/", {
+      method: "POST",
+      body: JSON.stringify({ nombre, usuario_id: usuarioId }),
+    }),
+
+  deleteBolirana: (boliranaId: number, usuarioId: number) =>
+    request(
+      `/boliranas/${idPositivo(boliranaId, "Bolirana")}?usuario_id=${usuarioId}`,
+      { method: "DELETE" }
+    ),
+
+  iniciarPartidaBolirana: (
+    boliranaId: number,
+    datos: {
+      usuario_id: number;
+      participantes: {
+        tipo: string;
+        mesa_id?: number;
+        barra_numero?: number;
+        alias?: string;
+      }[];
+    }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/iniciar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  cargarBebidasBolirana: (
+    boliranaId: number,
+    datos: {
+      usuario_id: number;
+      items: { producto_id: number; cantidad: number }[];
+    }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/pedidos`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  finalizarPartidaBolirana: (
+    boliranaId: number,
+    datos: { usuario_id: number; perdedores: number[] }
+  ) =>
+    request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/finalizar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
+  getCargosBolirana: () => request("/boliranas/cargos-pendientes"),
+
+  pagarCargoBolirana: (
+    pedidoId: number,
+    datos: {
+      usuario_id: number;
+      pagos: { forma_pago: string; monto: number }[];
+    }
+  ) =>
+    request(`/boliranas/cargos/${idPositivo(pedidoId, "Cargo")}/pagar`, {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
   // ---------- Usuarios ----------
   login: (usuario: string, password: string) =>
     request("/usuarios/login", {
@@ -652,6 +729,19 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
+  /** Venta de mostrador cobrada al momento, sin crear ni ocupar una mesa. */
+  createPedidoParaLlevar: (datos: {
+    usuario_id: number;
+    items: { producto_id: number; cantidad: number }[];
+    pagos: { forma_pago: string; monto: number }[];
+    /** Cliente frecuente o persona que recoge (opcional). */
+    alias_cliente?: string;
+  }) =>
+    request("/pedidos/para-llevar", {
+      method: "POST",
+      body: JSON.stringify(datos),
+    }),
+
   /** Ajusta la cantidad de una línea de un pedido abierto (0 = eliminar) */
   ajustarItemPedido: (
     pedidoId: number,
@@ -795,6 +885,8 @@ export const api = {
     mesa?: number | null;
     producto?: number | null;
     forma_pago?: string | null;
+    /** "para_llevar" limita el historial a ventas de mostrador. */
+    origen?: string | null;
     limite?: number;
     offset?: number;
   } = {}) => {
@@ -804,6 +896,7 @@ export const api = {
     if (filtros.mesa) params.append("mesa", String(filtros.mesa));
     if (filtros.producto) params.append("producto", String(filtros.producto));
     if (filtros.forma_pago) params.append("forma_pago", filtros.forma_pago);
+    if (filtros.origen) params.append("origen", filtros.origen);
     params.append("limite", String(filtros.limite ?? 50));
     params.append("offset", String(filtros.offset ?? 0));
     return request(`/caja/historial?${params.toString()}`);

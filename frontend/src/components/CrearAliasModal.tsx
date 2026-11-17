@@ -8,10 +8,13 @@
  */
 
 import { FormEvent, useState } from "react";
+import Icon from "./Icon";
 
 interface Props {
   titulo?: string;
   descripcion?: string;
+  /** Nota inferior; por defecto explica el flujo de mesas y barras. */
+  nota?: string;
   onCrear: (alias: string) => Promise<unknown> | unknown;
   onClose: () => void;
 }
@@ -19,6 +22,7 @@ interface Props {
 export default function CrearAliasModal({
   titulo = "Crear alias / cliente",
   descripcion = "El alias se agrega a la cuenta abierta y podrá recibir pedidos.",
+  nota = "El alias aparece en la cuenta y en el modal de asignación de pedidos. No se cobra nada hasta cerrar su división.",
   onCrear,
   onClose,
 }: Props) {
@@ -59,7 +63,10 @@ export default function CrearAliasModal({
         onSubmit={enviar}
       >
         <div className="modal-head">
-          <h3>{titulo}</h3>
+          <h3>
+            <Icon nombre="usuario" size={17} />
+            {titulo}
+          </h3>
           <button
             type="button"
             className="btn-icon"
@@ -67,11 +74,14 @@ export default function CrearAliasModal({
             title="Cerrar"
             disabled={procesando}
           >
-            ×
+            <Icon nombre="cerrar" size={15} />
           </button>
         </div>
 
-        <p className="muted small">{descripcion}</p>
+        <p className="muted small modal-nota">
+          <Icon nombre="info" size={14} />
+          {descripcion}
+        </p>
 
         <div className="form-group">
           <label>Alias / nombre del cliente *</label>
@@ -101,13 +111,13 @@ export default function CrearAliasModal({
             className="btn-primary"
             disabled={procesando}
           >
+            <Icon nombre="check" size={15} />
             {procesando ? "Creando..." : "Crear alias"}
           </button>
         </div>
 
         <p className="muted small">
-          El alias aparece en la cuenta y en el modal de asignación de pedidos.
-          No se cobra nada hasta cerrar su división.
+          {nota}
         </p>
       </form>
     </div>
