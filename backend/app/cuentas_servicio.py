@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.clientes_individuales import archivar_cliente_individual
 from app.models import (
     Division,
     Mesa,
@@ -290,7 +291,11 @@ def cerrar_division_si_corresponde(
 
 
 def liberar_mesa_si_corresponde(db: Session, mesa_id: int) -> None:
-    """Libera una mesa/plaza cuando ya no tiene nada pendiente de cobro."""
+    """Libera una mesa/plaza cuando ya no tiene nada pendiente de cobro.
+
+    Un cliente individual no vuelve a estar disponible: se archiva para que
+    su tarjeta desaparezca de la vista activa conservando el historial.
+    """
     mesa = db.query(Mesa).filter(Mesa.id == mesa_id).first()
     if not mesa:
         return
@@ -306,7 +311,8 @@ def liberar_mesa_si_corresponde(db: Session, mesa_id: int) -> None:
         .count()
     )
     if pedidos_abiertos == 0 and divisiones_pendientes == 0:
-        mesa.estado = "disponible"
+        if not archivar_cliente_individual(db, mesa):
+            mesa.estado = "disponible"
         mesa.fecha_ocupacion = None
 
 

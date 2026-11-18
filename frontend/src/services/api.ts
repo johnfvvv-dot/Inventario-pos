@@ -240,6 +240,17 @@ function idPositivo(valor: number, nombre: string): number {
   return numero;
 }
 
+/** Los clientes individuales usan IDs negativos; solo se excluye el cero. */
+function idMesa(valor: number): number {
+  const numero = Number(valor);
+  if (!Number.isInteger(numero) || numero === 0) {
+    throw new Error(
+      "Mesa no válida. Cierra la ventana y vuelve a abrir la cuenta."
+    );
+  }
+  return numero;
+}
+
 async function ejecutarFetch<T>(
   info: ApiInfo,
   url: string,
@@ -482,18 +493,18 @@ export const api = {
     }),
 
   updateMesaEstado: (mesaId: number, nuevo_estado: string) =>
-    request(`/mesas/${idPositivo(mesaId, "Mesa")}/estado`, {
+    request(`/mesas/${idMesa(mesaId)}/estado`, {
       method: "PUT",
       body: JSON.stringify({ nuevo_estado }),
     }),
 
   /** Libera la mesa solo si no tiene cuentas pendientes */
   liberarMesa: (mesaId: number) =>
-    request(`/mesas/${idPositivo(mesaId, "Mesa")}/liberar`, { method: "POST" }),
+    request(`/mesas/${idMesa(mesaId)}/liberar`, { method: "POST" }),
 
   /** Elimina una mesa o una barra completa (incluidas todas sus plazas) */
   deleteMesa: (mesaId: number) =>
-    request(`/mesas/${idPositivo(mesaId, "Mesa")}`, { method: "DELETE" }),
+    request(`/mesas/${idMesa(mesaId)}`, { method: "DELETE" }),
 
   /** Crea una barra: una cuenta por cada plaza (cliente) */
   createBarra: (numero: number, capacidad: number) =>
@@ -502,13 +513,20 @@ export const api = {
       body: JSON.stringify({ numero, capacidad }),
     }),
 
+  /** Crea un cliente individual: cuenta personal sin mesa ni barra. */
+  crearClienteIndividual: (nombre: string) =>
+    request("/mesas/individual", {
+      method: "POST",
+      body: JSON.stringify({ nombre }),
+    }),
+
   /** Asigna un cliente a una mesa o a un puesto libre de la barra */
   ocuparMesa: (mesaId: number) =>
-    request(`/mesas/${idPositivo(mesaId, "Mesa")}/ocupar`, { method: "POST" }),
+    request(`/mesas/${idMesa(mesaId)}/ocupar`, { method: "POST" }),
 
   // ---------- Cuentas de mesa ----------
   getCuentaMesa: (mesaId: number) =>
-    request(`/cuentas/mesa/${idPositivo(mesaId, "Mesa")}`),
+    request(`/cuentas/mesa/${idMesa(mesaId)}`),
 
   /** Cuenta agregada de una barra (todos sus puestos) */
   getCuentaBarra: (numeroBarra: number) =>
@@ -527,7 +545,7 @@ export const api = {
     });
     if (usuarioId) params.append("usuario_id", String(usuarioId));
     return request(
-      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar?${params.toString()}`,
+      `/cuentas/mesa/${idMesa(mesaId)}/cerrar?${params.toString()}`,
       { method: "POST" }
     );
   },
@@ -563,7 +581,7 @@ export const api = {
     });
     if (usuarioId) params.append("usuario_id", String(usuarioId));
     return request(
-      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/cerrar-general?${params.toString()}`,
+      `/cuentas/mesa/${idMesa(mesaId)}/cerrar-general?${params.toString()}`,
       { method: "POST" }
     );
   },
@@ -622,7 +640,7 @@ export const api = {
   /** Transfiere la cuenta abierta a otra mesa */
   transferirCuenta: (mesaId: number, destinoId: number) =>
     request(
-      `/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/transferir?destino_id=${idPositivo(
+      `/cuentas/mesa/${idMesa(mesaId)}/transferir?destino_id=${idPositivo(
         destinoId,
         "Destino"
       )}`,
@@ -709,7 +727,7 @@ export const api = {
   getPedidos: () => request("/pedidos/"),
 
   getPedidosMesa: (mesaId: number) =>
-    request(`/pedidos/mesa/${idPositivo(mesaId, "Mesa")}`),
+    request(`/pedidos/mesa/${idMesa(mesaId)}`),
 
   /** Pedidos de todas las plazas de una barra. */
   getPedidosBarra: (numeroBarra: number) =>
@@ -786,7 +804,7 @@ export const api = {
     }),
 
   getDivisionesMesa: (mesaId: number) =>
-    request(`/cuentas/mesa/${idPositivo(mesaId, "Mesa")}/divisiones`),
+    request(`/cuentas/mesa/${idMesa(mesaId)}/divisiones`),
 
   pagarDivision: (
     divisionId: number,

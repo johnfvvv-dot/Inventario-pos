@@ -16,6 +16,7 @@ interface MesaDisponible {
   tipo: string;
   estado: string;
   grupo?: string | null;
+  nombre?: string | null;
   en_bolirana?: boolean;
   posiciones?: { id: number; estado: string }[];
 }
@@ -157,9 +158,11 @@ export default function IniciarPartidaBoliranaModal({
 
         <div className="bolirana-modal-grid">
           <section>
-            <h4>Mesas ocupadas</h4>
+            <h4>Mesas y clientes ocupados</h4>
             {mesasLibres.length === 0 ? (
-              <p className="muted small">No hay mesas ocupadas disponibles.</p>
+              <p className="muted small">
+                No hay mesas ni clientes individuales disponibles.
+              </p>
             ) : (
               <div className="bolirana-opciones">
                 {mesasLibres.map((mesa) => (
@@ -170,7 +173,11 @@ export default function IniciarPartidaBoliranaModal({
                       onChange={() => alternarMesa(mesa.id)}
                       disabled={procesando}
                     />
-                    <span>Mesa {mesa.numero}</span>
+                    <span>
+                      {mesa.tipo === "individual"
+                        ? `Individual — ${mesa.nombre || "Cliente"}`
+                        : `Mesa ${mesa.numero}`}
+                    </span>
                   </label>
                 ))}
               </div>

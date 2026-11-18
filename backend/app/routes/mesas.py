@@ -11,10 +11,12 @@ from app.boliranas_servicio import (
     exigir_mesa_sin_bolirana,
     mapa_boliranas_activas,
 )
+from app.clientes_individuales import archivar_cliente_individual
 from app.database import get_db
 from app.models import Division, Mesa, Participante, Pedido
 from app.schemas import (
     BarraCreate,
+    ClienteIndividualCreate,
     EstadoUpdate,
     MesaCreate,
     MesaListadoOut,
@@ -106,6 +108,56 @@ def crear_mesa(datos: MesaCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(nueva_mesa)
     return nueva_mesa
+
+
+@router.post("/individual", response_model=MesaOut, status_code=201)
+def crear_cliente_individual(
+    datos: ClienteIndividualCreate, db: Session = Depends(get_db)
+):
+    """Crea un cliente individual: cuenta personal sin mesa ni barra física.
+
+    Se reutiliza la tabla ``mesas`` con ``tipo="individual"`` y un número
+    negativo único para no chocar con mesas ni barras. La tarjeta se elimina
+    automáticamente al quedar saldada su cuenta.
+    """
+    exigir_turno_abierto(db)
+
+    nombre = datos.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+
+    duplicado = (
+        db.query(Mesa)
+        .filter(
+            Mesa.tipo == "individual",
+            Mesa.estado != "cerrada",
+            func.lower(Mesa.nombre) == nombre.lower(),
+        )
+        .first()
+    )
+    if duplicado:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe un cliente individual activo llamado '{nombre}'.",
+        )
+
+    # Números negativos: las mesas y barras usan números positivos.
+    minimo = db.query(func.min(Mesa.numero)).scalar()
+    numero = min(0, int(minimo or 0)) - 1
+
+    cliente = Mesa(
+        numero=numero,
+        capacidad=1,
+        estado="ocupada",
+        tipo="individual",
+        nombre=nombre,
+        posicion=1,
+        fecha_ocupacion=ahora_local(),
+    )
+    db.add(cliente)
+    db.commit()
+    db.refresh(cliente)
+    return cliente
 
 
 @router.post("/barra", response_model=List[MesaOut], status_code=201)
@@ -226,6 +278,9 @@ def listar_mesas(db: Session = Depends(get_db)):
     for mesa in mesas:
         if (mesa.tipo or "mesa") == "barra":
             continue
+        # Los clientes individuales cobrados/archivados ya no se muestran.
+        if (mesa.tipo or "mesa") == "individual" and mesa.estado == "cerrada":
+            continue
         info = resumen.get(
             mesa.id,
             {"pedidos": 0, "divisiones": 0, "clientes": 0, "total": 0.0},
@@ -240,6 +295,7 @@ def listar_mesas(db: Session = Depends(get_db)):
                 tipo=mesa.tipo or "mesa",
                 grupo=mesa.grupo,
                 posicion=mesa.posicion or 1,
+                nombre=mesa.nombre,
                 total_cuenta=info["total"],
                 tiene_cuenta_pendiente=bool(
                     info["pedidos"] or info["divisiones"] or info["clientes"]
@@ -455,6 +511,18 @@ def eliminar_mesa(mesa_id: int, db: Session = Depends(get_db)):
             status_code=400,
             detail=f"No se puede eliminar: {detalle}.",
         )
+
+    # Un cliente individual saldado se archiva en lugar de borrarse: sus
+    # pedidos y divisiones históricas conservan la referencia para que
+    # Historial, Corte y Reportes sigan mostrando "Individual" y el nombre.
+    if (mesa.tipo or "mesa") == "individual":
+        nombre = mesa.nombre
+        archivar_cliente_individual(db, mesa)
+        db.commit()
+        return {
+            "message": f"Cliente individual '{nombre}' eliminado",
+            "mesa": mesa.numero,
+        }
 
     # Historial: cada pedido conserva el numero y la etiqueta del puesto
     numeros = {m.id: m.numero for m in mesas}

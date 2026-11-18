@@ -154,11 +154,20 @@ class MesaCreate(MesaBase):
     pass
 
 
+class ClienteIndividualCreate(BaseModel):
+    """Crea un cliente individual (cuenta personal sin mesa ni barra)."""
+
+    nombre: str = Field(..., min_length=1, max_length=60)
+
+
 class MesaOut(MesaBase):
     id: int
+    # Los clientes individuales usan números negativos.
+    numero: int
     tipo: str = "mesa"
     grupo: Optional[str] = None
     posicion: int = 1
+    nombre: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -173,9 +182,12 @@ class PosicionBarra(BaseModel):
 class MesaListadoOut(MesaBase):
     """Mesa (o barra agrupada) con el resumen de su cuenta pendiente."""
     id: int
+    # Los clientes individuales usan números negativos.
+    numero: int
     tipo: str = "mesa"
     grupo: Optional[str] = None
     posicion: int = 1
+    nombre: Optional[str] = None
     total_cuenta: float = 0.0
     tiene_cuenta_pendiente: bool = False
     detalle_pendiente: str = ""
@@ -341,7 +353,8 @@ class PedidoItemOut(BaseModel):
 
 
 class PedidoCreate(BaseModel):
-    mesa_id: int = Field(..., gt=0)
+    # Los clientes individuales usan IDs de mesa negativos.
+    mesa_id: int
     usuario_id: int = Field(..., gt=0)
     # NULL o ausente = cuenta general de la mesa/barra.
     participante_id: Optional[int] = Field(default=None, gt=0)
@@ -428,7 +441,7 @@ class BoliranaCreate(BaseModel):
 
 class ParticipanteBoliranaIn(BaseModel):
     tipo: str = Field(..., max_length=20)  # mesa | barra | alias
-    mesa_id: Optional[int] = Field(default=None, gt=0)
+    mesa_id: Optional[int] = None
     barra_numero: Optional[int] = Field(default=None, gt=0)
     alias: Optional[str] = Field(default=None, max_length=60)
 
@@ -581,6 +594,9 @@ class CuentaMesaOut(BaseModel):
     mesa_id: int
     mesa_numero: int
     estado_mesa: str
+    # Tipo y nombre permiten titular la cuenta de un cliente individual.
+    mesa_tipo: str = "mesa"
+    mesa_nombre: Optional[str] = None
     total: float
     total_general: float = 0.0
     total_divisiones: float = 0.0
@@ -611,7 +627,7 @@ class DivisionCreate(BaseModel):
     (cuenta agregada de la barra, con todas sus plazas).
     """
 
-    mesa_id: Optional[int] = Field(default=None, gt=0)
+    mesa_id: Optional[int] = None
     barra_numero: Optional[int] = Field(default=None, gt=0)
     usuario_id: int = Field(..., gt=0)
     participantes: List[ParticipanteCreate]
@@ -620,7 +636,7 @@ class DivisionCreate(BaseModel):
 class AliasCreate(BaseModel):
     """Crea un cliente/alias vacío para una mesa o barra."""
 
-    mesa_id: Optional[int] = Field(default=None, gt=0)
+    mesa_id: Optional[int] = None
     barra_numero: Optional[int] = Field(default=None, gt=0)
     usuario_id: int = Field(..., gt=0)
     alias: str = Field(..., min_length=1, max_length=60)

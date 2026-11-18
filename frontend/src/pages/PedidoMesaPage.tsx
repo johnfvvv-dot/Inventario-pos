@@ -30,6 +30,7 @@ interface Mesa {
   estado: string;
   tipo?: string;
   grupo?: string | null;
+  nombre?: string | null;
   posiciones?: { id: number; posicion: number; estado: string }[];
 }
 
@@ -202,7 +203,11 @@ export default function PedidoMesaPage() {
     mesaSeleccionada?.tipo === "barra" ? mesaSeleccionada.numero : null;
 
   const etiquetaMesa = (m: Mesa) =>
-    m.tipo === "barra" ? `Barra ${m.numero}` : `Mesa ${m.numero}`;
+    m.tipo === "barra"
+      ? `Barra ${m.numero}`
+      : m.tipo === "individual"
+      ? `Individual — ${m.nombre || "Cliente"}`
+      : `Mesa ${m.numero}`;
 
   const etiquetaCuenta = esBolirana
     ? boliranaSeleccionada?.nombre || "la bolirana"
@@ -211,10 +216,12 @@ export default function PedidoMesaPage() {
     : barraNumero
     ? `Barra ${barraNumero}`
     : mesaSeleccionada
-    ? `Mesa ${mesaSeleccionada.numero}`
+    ? etiquetaMesa(mesaSeleccionada)
     : "la cuenta";
 
   const aliasActivos = destinos.filter((d) => !d.esGeneral && !d.pagado);
+  const mesasFisicas = mesas.filter((m) => m.tipo !== "individual");
+  const individuales = mesas.filter((m) => m.tipo === "individual");
 
   // Cada cliente es un bloque independiente, sin agrupar por división.
   const clientes = cuenta
@@ -304,6 +311,8 @@ export default function PedidoMesaPage() {
         participanteId: null,
         alias: barraNumero
           ? "Cuenta General de la Barra"
+          : mesaSeleccionada?.tipo === "individual"
+          ? "Cuenta General del Cliente"
           : "Cuenta General de la Mesa",
         subtotal: data.total_general || 0,
         pagado: false,
@@ -319,6 +328,17 @@ export default function PedidoMesaPage() {
       const data: any = barraNumero
         ? await api.getCuentaBarra(barraNumero)
         : await api.getCuentaMesa(Number(mesaId));
+      if (
+        data.mesa_tipo === "individual" &&
+        data.estado_mesa === "cerrada" &&
+        Number(data.total || 0) === 0
+      ) {
+        setMesaId("");
+        setCuenta(null);
+        setDestinos([]);
+        setError("La cuenta del cliente individual ya fue cobrada y cerrada.");
+        return null;
+      }
       setCuenta(data);
       setDestinos(destinosDesdeCuenta(data));
       return data;
@@ -750,11 +770,22 @@ export default function PedidoMesaPage() {
             >
               <option value="">— Seleccionar mesa, barra o bolirana —</option>
               <option value="para-llevar">Para llevar</option>
-              {mesas.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {etiquetaMesa(m)} ({m.estado})
-                </option>
-              ))}
+              <optgroup label="Mesas y barras">
+                {mesasFisicas.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {etiquetaMesa(m)} ({m.estado})
+                  </option>
+                ))}
+              </optgroup>
+              {individuales.length > 0 && (
+                <optgroup label="Clientes individuales">
+                  {individuales.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {etiquetaMesa(m)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {negocio.modulo_bolirana && boliranas.length > 0 && (
                 <optgroup label="Bolirana">
                   {boliranas.map((b) => (

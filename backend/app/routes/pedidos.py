@@ -139,6 +139,11 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
     mesa = db.query(Mesa).filter(Mesa.id == datos.mesa_id).first()
     if not mesa:
         raise HTTPException(status_code=404, detail="Mesa no encontrada")
+    if (mesa.tipo or "mesa") == "individual" and mesa.estado == "cerrada":
+        raise HTTPException(
+            status_code=409,
+            detail="La cuenta del cliente individual ya fue cobrada y cerrada.",
+        )
 
     usuario = db.query(Usuario).filter(Usuario.id == datos.usuario_id).first()
     if not usuario:
@@ -284,6 +289,11 @@ def crear_pedido(datos: PedidoCreate, db: Session = Depends(get_db)):
             total=0.0,
             fecha_ocupacion=mesa_destino.fecha_ocupacion,
             participante_id=participante.id if participante else None,
+            alias_cliente=(
+                mesa_destino.nombre
+                if (mesa_destino.tipo or "mesa") == "individual"
+                else None
+            ),
             es_pago_division=0,
         )
         nuevo_pedido.guardar_origen(mesa_destino)

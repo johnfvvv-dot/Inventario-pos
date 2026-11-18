@@ -69,11 +69,13 @@ class Producto(Base):
 
 
 class Mesa(Base):
-    """Mesa o puesto de barra.
+    """Mesa, puesto de barra o cliente individual.
 
-    tipo:  "mesa"  -> mesa normal
-           "barra" -> puesto de barra (varias cuentas para la misma barra)
+    tipo:  "mesa"       -> mesa normal
+           "barra"      -> puesto de barra (varias cuentas para la misma barra)
+           "individual" -> cliente de pie, sin mesa ni barra física
     grupo: nombre compartido de la barra (ej: "Barra 1")
+    nombre: alias visible del cliente individual
     """
 
     __tablename__ = "mesas"
@@ -82,18 +84,22 @@ class Mesa(Base):
     numero = Column(Integer, unique=True, nullable=False)
     capacidad = Column(Integer, nullable=False, default=4)
     estado = Column(String(20), default="disponible")  # disponible | ocupada | cerrada
-    tipo = Column(String(20), default="mesa")  # mesa | barra
+    tipo = Column(String(20), default="mesa")  # mesa | barra | individual
     grupo = Column(String(60), nullable=True)  # ej: "Barra 1"
     posicion = Column(Integer, default=1)
+    # Alias del cliente cuando tipo="individual"; NULL para mesas y barras.
+    nombre = Column(String(60), nullable=True)
     # Momento en que el cliente ocupó la mesa/plaza (para los tickets internos).
     fecha_ocupacion = Column(DateTime, nullable=True)
 
     pedidos = relationship("Pedido", back_populates="mesa")
 
     def etiqueta_historial(self) -> str:
-        """Nombre visible para el historial: "Mesa N" o "Barra N"."""
+        """Nombre visible para el historial: "Mesa N", "Barra N" o "Individual"."""
         if (self.tipo or "mesa") == "barra":
             return self.grupo or f"Barra {self.numero // 100}"
+        if (self.tipo or "mesa") == "individual":
+            return "Individual"
         return f"Mesa {self.numero}"
 
 
@@ -331,6 +337,8 @@ class ParticipanteBolirana(Base):
     def etiqueta(self) -> str:
         """Nombre visible del participante."""
         if self.tipo == "mesa":
+            if self.mesa and (self.mesa.tipo or "mesa") == "individual":
+                return f"Individual — {self.mesa.nombre or 'Cliente'}"
             return f"Mesa {self.mesa.numero}" if self.mesa else "Mesa"
         if self.tipo == "barra":
             return f"Barra {self.barra_numero}"
