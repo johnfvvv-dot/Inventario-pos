@@ -10,6 +10,7 @@ from app.boliranas_servicio import (
     exigir_mesa_sin_bolirana,
     mapa_boliranas_activas,
 )
+from app.clientes_individuales import archivar_cliente_individual
 from app.cuentas_servicio import (
     alias_existente_en_cuenta,
     bloquear_cuenta,
@@ -58,9 +59,11 @@ router = APIRouter(tags=["cuentas"])
 
 
 def _etiqueta_puesto(mesa: Mesa) -> str:
-    """Nombre visible de una mesa o de una plaza de barra."""
+    """Nombre visible de una mesa, una plaza de barra o un cliente individual."""
     if (mesa.tipo or "mesa") == "barra":
         return f"{mesa.grupo or 'Barra'} · Plaza {mesa.posicion or 1}"
+    if (mesa.tipo or "mesa") == "individual":
+        return f"Individual — {mesa.nombre or 'Cliente'}"
     return f"Mesa {mesa.numero}"
 
 
@@ -293,6 +296,8 @@ def consultar_cuenta(mesa_id: int, db: Session = Depends(get_db)):
         mesa_id=mesa.id,
         mesa_numero=mesa.numero,
         estado_mesa=mesa.estado,
+        mesa_tipo=mesa.tipo or "mesa",
+        mesa_nombre=mesa.nombre,
         total=total,
         total_general=total_general,
         total_divisiones=total_divisiones,
@@ -393,6 +398,8 @@ def cuenta_barra(numero_barra: int, db: Session = Depends(get_db)):
         mesa_id=mesas[0].id,
         mesa_numero=numero_barra,
         estado_mesa=("ocupada" if any(m.estado == "ocupada" for m in mesas) else "disponible"),
+        mesa_tipo="barra",
+        mesa_nombre=None,
         total=total,
         total_general=total_general,
         total_divisiones=total_divisiones,
@@ -515,10 +522,12 @@ def cerrar_cuenta(
         recalcular_division(db, division)
         cerrar_division_si_corresponde(db, division, forma_pago)
 
-    # La mesa permanece OCUPADA: se puede abrir una nueva cuenta
-    mesa.estado = "disponible" if liberar_mesa else "ocupada"
-    if liberar_mesa:
-        mesa.fecha_ocupacion = None
+    # La mesa permanece OCUPADA: se puede abrir una nueva cuenta.
+    # Un cliente individual se archiva siempre al cobrar su cuenta.
+    if not archivar_cliente_individual(db, mesa):
+        mesa.estado = "disponible" if liberar_mesa else "ocupada"
+        if liberar_mesa:
+            mesa.fecha_ocupacion = None
 
     db.commit()
 
@@ -636,6 +645,12 @@ def transferir_cuenta(
             detail="El destino debe ser otra mesa o una plaza de barra distinta",
         )
 
+    if (destino.tipo or "mesa") == "individual":
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede transferir una cuenta a un cliente individual.",
+        )
+
     exigir_mesa_sin_bolirana(db, origen)
     exigir_mesa_sin_bolirana(db, destino)
     bloquear_cuenta(db, origen)
@@ -715,7 +730,8 @@ def transferir_cuenta(
             pedido.guardar_origen(destino)
 
     # Estados de las mesas
-    origen.estado = "disponible"
+    if not archivar_cliente_individual(db, origen):
+        origen.estado = "disponible"
     origen.fecha_ocupacion = None
     destino.estado = "ocupada"
 
@@ -1315,7 +1331,9 @@ def cerrar_general_mesa(
     ahora = ahora_local()
     _cerrar_pedidos_generales(db, mesas, forma_pago, usuario_id, ahora)
 
-    if liberar_mesa:
+    if liberar_mesa or any(
+        (m.tipo or "mesa") == "individual" for m in mesas
+    ):
         for mesa in mesas:
             liberar_mesa_si_corresponde(db, mesa.id)
 

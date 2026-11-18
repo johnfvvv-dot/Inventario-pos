@@ -4028,7 +4028,7 @@ tbody tr:last-child td {
 
 .mesas-creacion-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -4040,6 +4040,20 @@ tbody tr:last-child td {
 .mesas-creacion-grid > .mesas-form:nth-child(2) {
   border-top-style: dashed;
   border-top-color: #06b6d4;
+}
+
+.mesas-form--individual {
+  border-top-style: dotted;
+  border-top-color: #06b6d4;
+}
+
+.mesas-form-icono--individual {
+  background: #ecfeff;
+  color: #0891b2;
+}
+
+.mesas-form-campos--individual {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .mesas-form-head {
@@ -4146,6 +4160,48 @@ tbody tr:last-child td {
   font-variant-numeric: tabular-nums;
   color: #b45309;
   font-weight: 700;
+}
+
+/* -------------------- CLIENTES INDIVIDUALES -------------------- */
+
+.mesas-individuales {
+  margin-top: 1.25rem;
+}
+
+.mesas-individuales-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.mesas-individuales-head h3 {
+  margin: 0;
+  color: #b45309;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.badge-individual {
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}
+
+.mesa-card.mesa-individual {
+  border-top: 3px solid #f59e0b;
+}
+
+.mesa-individual-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mesa-individual .mesa-pendiente-valor {
+  color: #92400e;
 }
 
 /* -------------------- PEDIDOS POR MESA -------------------- */

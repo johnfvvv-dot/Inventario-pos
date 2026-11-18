@@ -29,6 +29,7 @@ interface Mesa {
   tipo: string;
   grupo: string | null;
   posicion: number;
+  nombre?: string | null;
   total_cuenta?: number;
   tiene_cuenta_pendiente?: boolean;
   en_bolirana?: boolean;
@@ -47,6 +48,7 @@ export default function MesasPage() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [nuevaMesa, setNuevaMesa] = useState({ numero: "", capacidad: "4" });
   const [nuevaBarra, setNuevaBarra] = useState({ numero: "", capacidad: "2" });
+  const [nuevoCliente, setNuevoCliente] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ mesaId: number; texto: string } | null>(null);
   const [avisoBolirana, setAvisoBolirana] = useState<Mesa | null>(null);
@@ -105,6 +107,24 @@ export default function MesasPage() {
       setMensaje(
         `${res[0]?.grupo || "Barra"} creada con ${res.length} cuenta(s) para clientes`
       );
+      await cargarMesas();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const crearCliente = async (e: FormEvent) => {
+    e.preventDefault();
+    const nombre = nuevoCliente.trim();
+    if (!nombre) return;
+    if (!turno) {
+      setError(MENSAJE_TURNO_REQUERIDO);
+      return;
+    }
+    try {
+      await api.crearClienteIndividual(nombre);
+      setNuevoCliente("");
+      setMensaje(`Cliente individual "${nombre}" creado`);
       await cargarMesas();
     } catch (err: any) {
       setError(err.message);
@@ -178,7 +198,14 @@ export default function MesasPage() {
       : "badge badge-danger";
 
   const etiquetaMesa = (mesa: Mesa) =>
-    mesa.tipo === "barra" ? `Barra ${mesa.numero}` : `Mesa ${mesa.numero}`;
+    mesa.tipo === "barra"
+      ? `Barra ${mesa.numero}`
+      : mesa.tipo === "individual"
+      ? mesa.nombre || "Cliente individual"
+      : `Mesa ${mesa.numero}`;
+
+  const individuales = mesas.filter((m) => m.tipo === "individual");
+  const mesasFisicas = mesas.filter((m) => m.tipo !== "individual");
 
   const cuentasBarra = (grupo: string) =>
     mesas.filter((m) => m.grupo === grupo).length;
@@ -338,10 +365,134 @@ export default function MesasPage() {
             </button>
           </div>
         </form>
+
+        <form
+          className="panel mesas-form mesas-form--individual"
+          onSubmit={crearCliente}
+        >
+          <div className="mesas-form-head">
+            <span className="mesas-form-icono mesas-form-icono--individual">
+              <Icon nombre="usuario" size={18} />
+            </span>
+            <div>
+              <h3>Crear cliente individual</h3>
+              <p>Cuentas personales sin mesa asignada</p>
+            </div>
+          </div>
+          <div className="mesas-form-campos mesas-form-campos--individual">
+            <div className="form-group">
+              <label>Nombre / alias del cliente</label>
+              <input
+                type="text"
+                value={nuevoCliente}
+                onChange={(e) => setNuevoCliente(e.target.value)}
+                placeholder="Ej: Carlos"
+                maxLength={60}
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={!turno || cargandoTurno}
+              title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
+            >
+              <Icon nombre="mas" size={15} />
+              Crear cliente
+            </button>
+          </div>
+        </form>
       </div>
 
+      {individuales.length > 0 && (
+        <section className="mesas-individuales">
+          <div className="mesas-individuales-head">
+            <h3>Clientes individuales activos</h3>
+            <span className="badge badge-individual">
+              {individuales.length} activo{individuales.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="mesas-grid">
+            {individuales.map((mesa) => (
+              <div
+                key={mesa.id}
+                className={`mesa-card mesa-individual mesa-${mesa.estado}`}
+              >
+                <div className="mesa-individual-head">
+                  <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
+                  <span className="badge badge-individual">Individual</span>
+                </div>
+                <div className="muted small">Cuenta personal sin mesa</div>
+                <div className="mesa-estado-fila">
+                  <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
+                </div>
+
+                {mesa.en_bolirana && (
+                  <span
+                    className="badge badge-bolirana"
+                    title={`En partida en ${mesa.bolirana_nombre}. La cuenta se puede consultar, pero no cobrar ni cerrar hasta liquidarla.`}
+                  >
+                    <Icon nombre="bolirana" size={12} />
+                    <span className="badge-bolirana-nombre">
+                      {mesa.bolirana_nombre || "Bolirana"}
+                    </span>
+                    <Icon nombre="candado" size={12} />
+                  </span>
+                )}
+
+                <div className="mesa-pendiente-valor">
+                  {formatearPrecio(mesa.total_cuenta || 0)}
+                </div>
+
+                <div className="mesa-acciones">
+                  <button
+                    className="btn-primary btn-small"
+                    onClick={() => abrirPedido(mesa)}
+                    title={
+                      !turno
+                        ? MENSAJE_TURNO_REQUERIDO
+                        : `Abrir el pedido de ${etiquetaMesa(mesa)}`
+                    }
+                    disabled={!turno || cargandoTurno}
+                  >
+                    <Icon nombre="pedidos" size={14} />
+                    Pedido
+                  </button>
+                  <button
+                    className="btn-secondary btn-small"
+                    onClick={() => setMesaCuenta(mesa.id)}
+                    title={
+                      mesa.en_bolirana
+                        ? `Consultar la cuenta (en partida de ${mesa.bolirana_nombre}). No se puede cobrar hasta liquidarla.`
+                        : `Ver la cuenta de ${etiquetaMesa(mesa)}`
+                    }
+                  >
+                    <Icon nombre="recibo" size={14} />
+                    Cuenta
+                  </button>
+                  {!mesa.tiene_cuenta_pendiente &&
+                    !mesa.en_bolirana &&
+                    Number(mesa.total_cuenta || 0) === 0 && (
+                      <button
+                        className="btn-icon danger"
+                        title="Eliminar cliente individual"
+                        onClick={() => {
+                          setErrorEliminar(null);
+                          setPorEliminar(mesa);
+                        }}
+                      >
+                        <Icon nombre="eliminar" size={15} />
+                      </button>
+                    )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="mesas-grid">
-        {mesas.map((mesa) => (
+        {mesasFisicas.map((mesa) => (
           <div
             key={mesa.id}
             className={`mesa-card mesa-${mesa.estado} ${mesa.tipo === "barra" ? "mesa-barra" : ""}`}
@@ -449,7 +600,9 @@ export default function MesasPage() {
             </div>
           </div>
         ))}
-        {mesas.length === 0 && <p className="empty-state">No hay mesas registradas.</p>}
+        {mesasFisicas.length === 0 && individuales.length === 0 && (
+          <p className="empty-state">No hay mesas registradas.</p>
+        )}
       </div>
 
       {/* Confirmación de borrado */}
@@ -458,11 +611,17 @@ export default function MesasPage() {
           titulo={
             porEliminar.tipo === "barra"
               ? "Eliminar barra"
+              : porEliminar.tipo === "individual"
+              ? "Eliminar cliente individual"
               : "Eliminar mesa"
           }
           mensaje={
             porEliminar.tipo === "barra"
               ? `¿Eliminar la barra ${porEliminar.numero}?`
+              : porEliminar.tipo === "individual"
+              ? `¿Eliminar el cliente individual "${
+                  porEliminar.nombre || "Cliente"
+                }"?`
               : `¿Eliminar la mesa ${porEliminar.numero}?`
           }
           aceptar="Aceptar"
@@ -519,8 +678,12 @@ export default function MesasPage() {
       {avisoBolirana && (
         <ConfirmModal
           titulo="Partida de Bolirana activa"
-          mensaje={`Esta ${
-            avisoBolirana.tipo === "barra" ? "barra" : "mesa"
+          mensaje={`${
+            avisoBolirana.tipo === "barra"
+              ? "Esta barra"
+              : avisoBolirana.tipo === "individual"
+              ? "Este cliente individual"
+              : "Esta mesa"
           } tiene una partida activa en ${
             avisoBolirana.bolirana_nombre || "Bolirana"
           }. Finaliza la partida y define el pago antes de liberarla.`}

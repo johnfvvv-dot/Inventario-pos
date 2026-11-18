@@ -56,6 +56,8 @@ interface Cuenta {
   mesa_id: number;
   mesa_numero: number;
   estado_mesa: string;
+  mesa_tipo?: string;
+  mesa_nombre?: string | null;
   total: number;
   total_general: number;
   total_divisiones: number;
@@ -97,7 +99,8 @@ export default function CuentaModal({
   const [cobro, setCobro] = useState<Cobro | null>(null);
 
   const esBarra = barraNumero != null;
-  const etiqueta = esBarra ? "barra" : "mesa";
+  const esIndividual = cuenta?.mesa_tipo === "individual";
+  const etiqueta = esIndividual ? "cliente" : esBarra ? "barra" : "mesa";
   const enBolirana = Boolean(cuenta?.en_bolirana);
   const nombreBolirana = cuenta?.bolirana_nombre || "Bolirana";
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
@@ -111,6 +114,17 @@ export default function CuentaModal({
         barraNumero != null
           ? await api.getCuentaBarra(barraNumero)
           : await api.getCuentaMesa(mesaId);
+      // El cliente individual se archiva al quedar saldado: la tarjeta ya no
+      // existe en Gestión de mesas, así que la ventana se cierra sola.
+      if (
+        data.mesa_tipo === "individual" &&
+        data.estado_mesa === "cerrada" &&
+        Number(data.total || 0) === 0
+      ) {
+        onActualizado?.();
+        onClose();
+        return;
+      }
       setCuenta(data);
       setError(null);
     } catch (err: any) {
@@ -231,7 +245,9 @@ export default function CuentaModal({
         <div className="modal-head">
           <h3>
             {cuenta
-              ? `Cuenta ${esBarra ? "Barra" : "Mesa"} ${cuenta.mesa_numero}`
+              ? cuenta.mesa_tipo === "individual"
+                ? `Cuenta — ${cuenta.mesa_nombre || "Cliente"} (Individual)`
+                : `Cuenta ${esBarra ? "Barra" : "Mesa"} ${cuenta.mesa_numero}`
               : "Cargando cuenta..."}
           </h3>
           <button className="btn-icon" onClick={onClose} title="Cerrar">
@@ -286,7 +302,14 @@ export default function CuentaModal({
               <div className="cuenta-grupo cuenta-grupo--general">
                 <div className="cuenta-grupo-head">
                   <div>
-                    <h4>Cuenta General de {esBarra ? "la barra" : "la mesa"}</h4>
+                    <h4>
+                      Cuenta General de{" "}
+                      {esIndividual
+                        ? "el cliente"
+                        : esBarra
+                        ? "la barra"
+                        : "la mesa"}
+                    </h4>
                     <span className="muted small">
                       {cuenta.pedidos.length} pedido(s) ·{" "}
                       {formatearPrecio(cuenta.total_general || 0)}
@@ -474,6 +497,8 @@ export default function CuentaModal({
                 ? "Cobrar Cuenta General"
                 : cobro.tipo === "alias"
                 ? `Cobrar cuenta de "${cobro.alias}"`
+                : esIndividual
+                ? `Cobrar cuenta total de ${cuenta?.mesa_nombre || "el cliente"}`
                 : `Cobrar cuenta total de la ${etiqueta}`
             }
             total={cobro.total}
@@ -482,13 +507,15 @@ export default function CuentaModal({
                 ? "Solo se cobra la Cuenta General. Las cuentas de clientes pendientes, si existen, permanecen abiertas."
                 : cobro.tipo === "alias"
                 ? `Se registra el pago de ${cobro.alias} con ${nombreUsuario}.`
+                : esIndividual
+                ? "Se cobrarán la Cuenta General y todas las cuentas pendientes. Al cobrar, la tarjeta del cliente individual se cierra y desaparece de Gestión de mesas."
                 : "Se cobrarán la Cuenta General y todas las cuentas de clientes pendientes. \"Aceptar\" mantiene el lugar ocupado; \"Aceptar y liberar mesa\" lo deja disponible."
             }
             procesando={procesando}
             error={errorCobro}
             confirmar={(formaPago) => confirmarCobro(formaPago, false)}
             confirmarLiberar={
-              cobro.tipo === "cuenta"
+              cobro.tipo === "cuenta" && !esIndividual
                 ? (formaPago) => confirmarCobro(formaPago, true)
                 : undefined
             }

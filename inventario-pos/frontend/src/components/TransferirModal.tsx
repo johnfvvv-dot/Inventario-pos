@@ -22,6 +22,7 @@ interface Mesa {
   tipo: string;
   grupo: string | null;
   posicion: number;
+  nombre?: string | null;
   tiene_cuenta_pendiente?: boolean;
   posiciones?: PosicionBarra[];
 }
@@ -106,6 +107,8 @@ export default function TransferirModal({
   const etiquetaOrigen = origenInfo
     ? origenInfo.posicion
       ? `Barra ${origenInfo.mesa.numero} · Plaza ${origenInfo.posicion.posicion}`
+      : origenInfo.mesa.tipo === "individual"
+      ? `Individual — ${origenInfo.mesa.nombre || "Cliente"}`
       : `Mesa ${origenInfo.mesa.numero}`
     : "la cuenta seleccionada";
 
@@ -147,6 +150,8 @@ export default function TransferirModal({
         continue;
       }
       if (Number(origen) === mesa.id) continue;
+      // Un cliente individual nunca puede recibir una cuenta transferida.
+      if (mesa.tipo === "individual") continue;
       if (mesa.tiene_cuenta_pendiente) continue;
       libres.push({
         id: mesa.id,

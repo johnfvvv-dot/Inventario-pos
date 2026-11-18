@@ -714,11 +714,20 @@ export default function ReportesPage() {
       );
       filas.push([]);
       filas.push(["=== PEDIDOS DETALLADOS ==="]);
-      filas.push(["Pedido", "Mesa", "Fecha", "Estado", "Total", "Productos"]);
+      filas.push([
+        "Pedido",
+        "Mesa / Barra",
+        "Cliente",
+        "Fecha",
+        "Estado",
+        "Total",
+        "Productos",
+      ]);
       detalle.forEach((p: any) =>
         filas.push([
           String(p.id),
           p.mesa_etiqueta || (p.mesa_numero != null ? `Mesa ${p.mesa_numero}` : "-"),
+          p.alias || "-",
           formatearFechaHora(p.fecha),
           p.estado,
           String(p.total),

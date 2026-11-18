@@ -287,6 +287,9 @@ def _crear_cargo_mesa(
         concepto=concepto,
         bolirana_partida_id=partida.id,
         fecha_ocupacion=mesa.fecha_ocupacion or ahora,
+        alias_cliente=(
+            mesa.nombre if (mesa.tipo or "mesa") == "individual" else None
+        ),
         es_pago_division=0,
     )
     cargo.guardar_origen(mesa)
@@ -484,9 +487,14 @@ def iniciar_partida(
                     status_code=400, detail="No repitas la misma mesa."
                 )
             if mesa.estado != "ocupada":
+                etiqueta = (
+                    f"Individual — {mesa.nombre or 'Cliente'}"
+                    if (mesa.tipo or "mesa") == "individual"
+                    else f"Mesa {mesa.numero}"
+                )
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Mesa {mesa.numero} debe estar ocupada para jugar.",
+                    detail=f"{etiqueta} debe estar ocupada para jugar.",
                 )
             from app.boliranas_servicio import exigir_mesa_sin_bolirana
 
