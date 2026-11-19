@@ -387,11 +387,16 @@ export const api = {
     boliranaId: number,
     datos: {
       usuario_id: number;
+      modalidad: "directo" | "equipos";
       participantes: {
         tipo: string;
         mesa_id?: number;
         barra_numero?: number;
         alias?: string;
+        origen_tipo?: "mesa" | "barra" | "individual";
+        origen_mesa_id?: number;
+        origen_barra_numero?: number;
+        equipo?: string;
       }[];
     }
   ) =>
@@ -414,7 +419,11 @@ export const api = {
 
   finalizarPartidaBolirana: (
     boliranaId: number,
-    datos: { usuario_id: number; perdedores: number[] }
+    datos: {
+      usuario_id: number;
+      perdedores?: number[];
+      equipos_perdedores?: string[];
+    }
   ) =>
     request(`/boliranas/${idPositivo(boliranaId, "Bolirana")}/finalizar`, {
       method: "POST",

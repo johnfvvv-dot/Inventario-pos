@@ -205,7 +205,16 @@ export default function MesasPage() {
       : `Mesa ${mesa.numero}`;
 
   const individuales = mesas.filter((m) => m.tipo === "individual");
-  const mesasFisicas = mesas.filter((m) => m.tipo !== "individual");
+  // Orden estricto de la cuadrícula: mesas, barras y clientes individuales.
+  const mesasOrdenadas = mesas
+    .filter((m) => m.tipo !== "barra" && m.tipo !== "individual")
+    .slice()
+    .sort((a, b) => a.numero - b.numero);
+  const barrasOrdenadas = mesas
+    .filter((m) => m.tipo === "barra")
+    .slice()
+    .sort((a, b) => a.numero - b.numero);
+  const mesasYBarras = [...mesasOrdenadas, ...barrasOrdenadas];
 
   const cuentasBarra = (grupo: string) =>
     mesas.filter((m) => m.grupo === grupo).length;
@@ -404,95 +413,8 @@ export default function MesasPage() {
         </form>
       </div>
 
-      {individuales.length > 0 && (
-        <section className="mesas-individuales">
-          <div className="mesas-individuales-head">
-            <h3>Clientes individuales activos</h3>
-            <span className="badge badge-individual">
-              {individuales.length} activo{individuales.length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="mesas-grid">
-            {individuales.map((mesa) => (
-              <div
-                key={mesa.id}
-                className={`mesa-card mesa-individual mesa-${mesa.estado}`}
-              >
-                <div className="mesa-individual-head">
-                  <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
-                  <span className="badge badge-individual">Individual</span>
-                </div>
-                <div className="muted small">Cuenta personal sin mesa</div>
-                <div className="mesa-estado-fila">
-                  <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
-                </div>
-
-                {mesa.en_bolirana && (
-                  <span
-                    className="badge badge-bolirana"
-                    title={`En partida en ${mesa.bolirana_nombre}. La cuenta se puede consultar, pero no cobrar ni cerrar hasta liquidarla.`}
-                  >
-                    <Icon nombre="bolirana" size={12} />
-                    <span className="badge-bolirana-nombre">
-                      {mesa.bolirana_nombre || "Bolirana"}
-                    </span>
-                    <Icon nombre="candado" size={12} />
-                  </span>
-                )}
-
-                <div className="mesa-pendiente-valor">
-                  {formatearPrecio(mesa.total_cuenta || 0)}
-                </div>
-
-                <div className="mesa-acciones">
-                  <button
-                    className="btn-primary btn-small"
-                    onClick={() => abrirPedido(mesa)}
-                    title={
-                      !turno
-                        ? MENSAJE_TURNO_REQUERIDO
-                        : `Abrir el pedido de ${etiquetaMesa(mesa)}`
-                    }
-                    disabled={!turno || cargandoTurno}
-                  >
-                    <Icon nombre="pedidos" size={14} />
-                    Pedido
-                  </button>
-                  <button
-                    className="btn-secondary btn-small"
-                    onClick={() => setMesaCuenta(mesa.id)}
-                    title={
-                      mesa.en_bolirana
-                        ? `Consultar la cuenta (en partida de ${mesa.bolirana_nombre}). No se puede cobrar hasta liquidarla.`
-                        : `Ver la cuenta de ${etiquetaMesa(mesa)}`
-                    }
-                  >
-                    <Icon nombre="recibo" size={14} />
-                    Cuenta
-                  </button>
-                  {!mesa.tiene_cuenta_pendiente &&
-                    !mesa.en_bolirana &&
-                    Number(mesa.total_cuenta || 0) === 0 && (
-                      <button
-                        className="btn-icon danger"
-                        title="Eliminar cliente individual"
-                        onClick={() => {
-                          setErrorEliminar(null);
-                          setPorEliminar(mesa);
-                        }}
-                      >
-                        <Icon nombre="eliminar" size={15} />
-                      </button>
-                    )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       <div className="mesas-grid">
-        {mesasFisicas.map((mesa) => (
+        {mesasYBarras.map((mesa) => (
           <div
             key={mesa.id}
             className={`mesa-card mesa-${mesa.estado} ${mesa.tipo === "barra" ? "mesa-barra" : ""}`}
@@ -600,7 +522,83 @@ export default function MesasPage() {
             </div>
           </div>
         ))}
-        {mesasFisicas.length === 0 && individuales.length === 0 && (
+
+        {individuales.map((mesa) => (
+          <div
+            key={mesa.id}
+            className={`mesa-card mesa-individual mesa-${mesa.estado}`}
+          >
+            <div className="mesa-individual-head">
+              <div className="mesa-numero">{etiquetaMesa(mesa)}</div>
+              <span className="badge badge-individual">Individual</span>
+            </div>
+            <div className="muted small">Cuenta personal sin mesa</div>
+            <div className="mesa-estado-fila">
+              <span className={claseEstado(mesa.estado)}>{mesa.estado}</span>
+            </div>
+
+            {mesa.en_bolirana && (
+              <span
+                className="badge badge-bolirana"
+                title={`En partida en ${mesa.bolirana_nombre}. La cuenta se puede consultar, pero no cobrar ni cerrar hasta liquidarla.`}
+              >
+                <Icon nombre="bolirana" size={12} />
+                <span className="badge-bolirana-nombre">
+                  {mesa.bolirana_nombre || "Bolirana"}
+                </span>
+                <Icon nombre="candado" size={12} />
+              </span>
+            )}
+
+            <div className="mesa-pendiente-valor">
+              {formatearPrecio(mesa.total_cuenta || 0)}
+            </div>
+
+            <div className="mesa-acciones">
+              <button
+                className="btn-primary btn-small"
+                onClick={() => abrirPedido(mesa)}
+                title={
+                  !turno
+                    ? MENSAJE_TURNO_REQUERIDO
+                    : `Abrir el pedido de ${etiquetaMesa(mesa)}`
+                }
+                disabled={!turno || cargandoTurno}
+              >
+                <Icon nombre="pedidos" size={14} />
+                Pedido
+              </button>
+              <button
+                className="btn-secondary btn-small"
+                onClick={() => setMesaCuenta(mesa.id)}
+                title={
+                  mesa.en_bolirana
+                    ? `Consultar la cuenta (en partida de ${mesa.bolirana_nombre}). No se puede cobrar hasta liquidarla.`
+                    : `Ver la cuenta de ${etiquetaMesa(mesa)}`
+                }
+              >
+                <Icon nombre="recibo" size={14} />
+                Cuenta
+              </button>
+              {!mesa.tiene_cuenta_pendiente &&
+                !mesa.en_bolirana &&
+                Number(mesa.total_cuenta || 0) === 0 && (
+                  <button
+                    className="btn-icon danger"
+                    title="Eliminar cliente individual"
+                    onClick={() => {
+                      setErrorEliminar(null);
+                      setPorEliminar(mesa);
+                    }}
+                  >
+                    <Icon nombre="eliminar" size={15} />
+                  </button>
+                )}
+            </div>
+          </div>
+        ))}
+
+        {mesasYBarras.length === 0 && individuales.length === 0 && (
           <p className="empty-state">No hay mesas registradas.</p>
         )}
       </div>

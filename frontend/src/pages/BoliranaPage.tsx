@@ -22,7 +22,12 @@ import IniciarPartidaBoliranaModal from "../components/IniciarPartidaBoliranaMod
 import LiquidarPartidaBoliranaModal from "../components/LiquidarPartidaBoliranaModal";
 import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 import Icon from "../components/Icon";
-import type { Bolirana, CargoBolirana } from "../types/bolirana";
+import type {
+  Bolirana,
+  CargoBolirana,
+  ParticipanteBolirana,
+  PartidaBolirana,
+} from "../types/bolirana";
 
 interface MesaDisponible {
   id: number;
@@ -32,6 +37,40 @@ interface MesaDisponible {
   grupo?: string | null;
   en_bolirana?: boolean;
   posiciones?: { id: number; estado: string }[];
+}
+
+function EquiposPartida({ partida }: { partida: PartidaBolirana }) {
+  const equipos = new Map<string, ParticipanteBolirana[]>();
+  partida.participantes.forEach((participante) => {
+    const nombre = (participante.equipo || "").trim();
+    if (!nombre) return;
+    const integrantes = equipos.get(nombre) || [];
+    integrantes.push(participante);
+    equipos.set(nombre, integrantes);
+  });
+
+  return (
+    <div className="bolirana-equipos-resumen">
+      {Array.from(equipos.entries()).map(([nombre, integrantes]) => (
+        <div key={nombre} className="bolirana-equipo-resumen">
+          <div className="bolirana-equipo-resumen-head">
+            <strong>{nombre}</strong>
+            <span className="muted small">
+              {integrantes.length} integrante
+              {integrantes.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="bolirana-participantes-chips">
+            {integrantes.map((participante) => (
+              <span key={participante.id} className="bolirana-chip">
+                {participante.etiqueta}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function BoliranaPage() {
@@ -308,13 +347,42 @@ export default function BoliranaPage() {
 
                 {partida ? (
                   <>
-                    <div className="bolirana-participantes-chips">
-                      {partida.participantes.map((participante) => (
-                        <span key={participante.id} className="bolirana-chip">
-                          {participante.etiqueta}
-                        </span>
-                      ))}
+                    <div className="bolirana-partida-meta">
+                      <span
+                        className={`bolirana-modalidad-badge ${
+                          partida.modalidad === "equipos"
+                            ? "bolirana-modalidad-badge--equipos"
+                            : "bolirana-modalidad-badge--directo"
+                        }`}
+                      >
+                        <Icon
+                          nombre={
+                            partida.modalidad === "equipos"
+                              ? "usuarios"
+                              : "usuario"
+                          }
+                          size={12}
+                        />
+                        {partida.modalidad === "equipos"
+                          ? "Por equipos"
+                          : "Directo"}
+                      </span>
                     </div>
+
+                    {partida.modalidad === "equipos" ? (
+                      <EquiposPartida partida={partida} />
+                    ) : (
+                      <div className="bolirana-participantes-chips">
+                        {partida.participantes.map((participante) => (
+                          <span
+                            key={participante.id}
+                            className="bolirana-chip"
+                          >
+                            {participante.etiqueta}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="bolirana-consumo-lista">
                       {partida.consumo.length === 0 ? (
