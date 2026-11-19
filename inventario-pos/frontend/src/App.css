@@ -4164,33 +4164,15 @@ tbody tr:last-child td {
 
 /* -------------------- CLIENTES INDIVIDUALES -------------------- */
 
-.mesas-individuales {
-  margin-top: 1.25rem;
-}
-
-.mesas-individuales-head {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.6rem;
-}
-
-.mesas-individuales-head h3 {
-  margin: 0;
-  color: #b45309;
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .badge-individual {
   background: #fef3c7;
   border: 1px solid #fcd34d;
   color: #92400e;
 }
 
+/* Mismo trazo punteado del panel "Crear cliente individual". */
 .mesa-card.mesa-individual {
-  border-top: 3px solid #f59e0b;
+  border-top: 3px dotted #f59e0b;
 }
 
 .mesa-individual-head {
@@ -5491,11 +5473,57 @@ tbody tr:last-child td {
   max-width: 920px;
 }
 
-.bolirana-modal-grid,
+.bolirana-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.2rem;
+}
+
 .bolirana-liquidacion-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.2rem;
+}
+
+/* Selector de modalidad de la partida */
+
+.bolirana-modalidad {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  padding: 0.25rem;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff7ed;
+}
+
+.bolirana-modalidad-opcion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #9a3412;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bolirana-modalidad-opcion:hover {
+  background: #ffedd5;
+}
+
+.bolirana-modalidad-opcion.activa {
+  border-color: #f97316;
+  background: #f97316;
+  color: #fff;
+}
+
+.bolirana-modalidad-opcion:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .bolirana-modal-grid h4,
@@ -5543,14 +5571,212 @@ tbody tr:last-child td {
 
 .bolirana-alias-fila {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.bolirana-alias-fila input {
-  flex: 1;
+.bolirana-alias-fila input,
+.bolirana-alias-fila select {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+}
+
+.bolirana-alias-fila input {
+  flex: 1 1 200px;
+}
+
+.bolirana-alias-fila select {
+  flex: 0 1 250px;
+  min-width: 190px;
+  max-width: 100%;
+}
+
+/* Equipos de la partida */
+
+.bolirana-equipos-seccion {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px dashed #fdba74;
+  border-radius: 10px;
+  background: #fffbf7;
+}
+
+.bolirana-equipos-seccion h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.bolirana-equipos-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+
+.bolirana-chip--equipo {
+  border-color: #fdba74;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.bolirana-equipo-conteo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #f97316;
+  color: #fff;
+  font-size: 0.68rem;
+}
+
+.bolirana-equipo-asignacion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+
+.bolirana-equipo-asignado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.88rem;
+}
+
+.bolirana-equipo-asignado select {
+  min-width: 130px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+}
+
+/* Resumen de equipos en la tarjeta de la partida */
+
+.bolirana-partida-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.bolirana-modalidad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bolirana-modalidad-badge--directo {
+  border: 1px solid #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.bolirana-modalidad-badge--equipos {
+  border: 1px solid #f97316;
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.bolirana-equipos-resumen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.bolirana-equipo-resumen {
+  padding: 0.55rem 0.65rem;
+  border: 1px dashed #fdba74;
+  border-radius: 9px;
+  background: #fffbf7;
+}
+
+.bolirana-equipo-resumen-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  color: #9a3412;
+}
+
+/* Liquidación por equipos */
+
+.bolirana-equipos-liquidacion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.bolirana-equipo-card {
+  display: block;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.bolirana-equipo-card.seleccionado {
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.bolirana-equipo-card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.bolirana-equipo-card-head input {
+  accent-color: #f97316;
+}
+
+.bolirana-equipo-monto {
+  margin-left: auto;
+  color: #c2410c;
+}
+
+.bolirana-equipo-integrantes {
+  margin: 0.45rem 0 0;
+  padding: 0 0 0 1.4rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.bolirana-equipo-integrantes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.12rem 0;
+}
+
+.bolirana-equipo-integrantes li span:last-child {
+  color: #c2410c;
+  font-weight: 600;
 }
 
 .bolirana-alias-chips {

@@ -1,16 +1,22 @@
 /**
  * Modal para liquidar una partida de Bolirana.
  *
- * Muestra el consumo de la ronda y reparte el total en partes iguales entre
- * los perdedores seleccionados. Las mesas/barras reciben el cargo en su
- * cuenta; los jugadores libres quedan como cargos pendientes de cobro.
+ * En modalidad directa reparte el total entre los participantes perdedores.
+ * En modalidad por equipos reparte primero entre los equipos perdedores y
+ * luego entre los integrantes de cada equipo. Las mesas, barras, clientes
+ * individuales y alias vinculados reciben el cargo en su cuenta; los alias
+ * libres quedan como cargos pendientes de cobro.
  */
 
 import { FormEvent, useMemo, useState } from "react";
 import { api } from "../services/api";
 import { formatearPrecio } from "../utils/format";
 import Icon from "./Icon";
-import type { Bolirana, PartidaBolirana } from "../types/bolirana";
+import type {
+  Bolirana,
+  ParticipanteBolirana,
+  PartidaBolirana,
+} from "../types/bolirana";
 
 interface Props {
   bolirana: Bolirana;
@@ -22,6 +28,21 @@ interface Props {
   }) => void;
 }
 
+interface EquipoPartida {
+  nombre: string;
+  integrantes: ParticipanteBolirana[];
+}
+
+const repartir = (monto: number, cantidad: number): number[] => {
+  if (cantidad <= 0) return [];
+  const base = Math.round((monto / cantidad) * 100) / 100;
+  const montos = Array(cantidad).fill(base);
+  montos[cantidad - 1] = Math.round(
+    (monto - base * (cantidad - 1)) * 100
+  ) / 100;
+  return montos;
+};
+
 export default function LiquidarPartidaBoliranaModal({
   bolirana,
   partida,
@@ -31,43 +52,121 @@ export default function LiquidarPartidaBoliranaModal({
   const usuario = JSON.parse(localStorage.getItem("user") || "{}");
   const usuarioId = Number(usuario?.id) || 1;
   const [perdedores, setPerdedores] = useState<number[]>([]);
+  const [equiposPerdedores, setEquiposPerdedores] = useState<string[]>([]);
   const [cobrarAliasAhora, setCobrarAliasAhora] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
 
+  const esEquipos = partida.modalidad === "equipos";
   const total = Number(partida.total_bebidas) || 0;
   const cantidad = perdedores.length;
 
-  const montos = useMemo(() => {
-    if (!cantidad) return {} as Record<number, number>;
-    const base = Math.round((total / cantidad) * 100) / 100;
-    const resultado: Record<number, number> = {};
-    perdedores.forEach((id, indice) => {
-      resultado[id] =
-        indice === cantidad - 1
-          ? Math.round((total - base * (cantidad - 1)) * 100) / 100
-          : base;
+  const equipos = useMemo<EquipoPartida[]>(() => {
+    const mapa = new Map<string, ParticipanteBolirana[]>();
+    partida.participantes.forEach((participante) => {
+      const nombre = (participante.equipo || "").trim();
+      if (!nombre) return;
+      const integrantes = mapa.get(nombre) || [];
+      integrantes.push(participante);
+      mapa.set(nombre, integrantes);
+    });
+    return Array.from(mapa.entries()).map(([nombre, integrantes]) => ({
+      nombre,
+      integrantes,
+    }));
+  }, [partida.participantes]);
+
+  const montosEquipo = useMemo(() => {
+    const resultado: Record<string, number> = {};
+    if (!esEquipos) return resultado;
+    const seleccionados = equipos.filter((equipo) =>
+      equiposPerdedores.includes(equipo.nombre)
+    );
+    const partes = repartir(total, seleccionados.length);
+    seleccionados.forEach((equipo, indice) => {
+      resultado[equipo.nombre] = partes[indice];
     });
     return resultado;
-  }, [perdedores, cantidad, total]);
+  }, [esEquipos, equipos, equiposPerdedores, total]);
 
-  const montoBase = cantidad ? Math.round((total / cantidad) * 100) / 100 : 0;
-  const hayAliasPerdedor = perdedores.some((id) => {
-    const participante = partida.participantes.find((p) => p.id === id);
-    return participante?.tipo === "alias";
-  });
+  const montos = useMemo(() => {
+    const resultado: Record<number, number> = {};
+    if (esEquipos) {
+      equipos.forEach((equipo) => {
+        if (!equiposPerdedores.includes(equipo.nombre)) return;
+        const partes = repartir(
+          montosEquipo[equipo.nombre] || 0,
+          equipo.integrantes.length
+        );
+        equipo.integrantes.forEach((participante, indice) => {
+          resultado[participante.id] = partes[indice] || 0;
+        });
+      });
+    } else {
+      const partes = repartir(total, perdedores.length);
+      perdedores.forEach((id, indice) => {
+        resultado[id] = partes[indice] || 0;
+      });
+    }
+    return resultado;
+  }, [
+    esEquipos,
+    equipos,
+    equiposPerdedores,
+    montosEquipo,
+    perdedores,
+    total,
+  ]);
+
+  const montoBase = cantidad
+    ? Math.round((total / cantidad) * 100) / 100
+    : 0;
+
+  const hayAliasPerdedor = useMemo(() => {
+    if (esEquipos) {
+      return equipos
+        .filter((equipo) => equiposPerdedores.includes(equipo.nombre))
+        .some((equipo) =>
+          equipo.integrantes.some(
+            (participante) =>
+              participante.tipo === "alias" && !participante.origen_tipo
+          )
+        );
+    }
+    return partida.participantes.some(
+      (participante) =>
+        perdedores.includes(participante.id) &&
+        participante.tipo === "alias" &&
+        !participante.origen_tipo
+    );
+  }, [esEquipos, equipos, equiposPerdedores, partida.participantes, perdedores]);
 
   const alternarPerdedor = (id: number) => {
     setPerdedores((actual) =>
       actual.includes(id) ? actual.filter((p) => p !== id) : [...actual, id]
     );
+    setError(null);
+  };
+
+  const alternarEquipo = (nombre: string) => {
+    setEquiposPerdedores((actual) =>
+      actual.includes(nombre)
+        ? actual.filter((equipo) => equipo !== nombre)
+        : [...actual, nombre]
+    );
+    setError(null);
   };
 
   const enviar = async (evento?: FormEvent) => {
     evento?.preventDefault();
     if (procesando) return;
 
-    if (perdedores.length === 0) {
+    if (esEquipos) {
+      if (equiposPerdedores.length === 0) {
+        setError("Marca al menos un equipo perdedor para repartir el consumo.");
+        return;
+      }
+    } else if (perdedores.length === 0) {
       setError("Marca al menos un perdedor para repartir el consumo.");
       return;
     }
@@ -77,7 +176,9 @@ export default function LiquidarPartidaBoliranaModal({
     try {
       await api.finalizarPartidaBolirana(bolirana.id, {
         usuario_id: usuarioId,
-        perdedores,
+        ...(esEquipos
+          ? { equipos_perdedores: equiposPerdedores }
+          : { perdedores }),
       });
       onLiquidado({
         cobrarAliasAhora: cobrarAliasAhora && hayAliasPerdedor,
@@ -131,9 +232,7 @@ export default function LiquidarPartidaBoliranaModal({
                   </thead>
                   <tbody>
                     {partida.consumo.map((item) => (
-                      <tr
-                        key={`${item.producto_id}-${item.precio_unitario}`}
-                      >
+                      <tr key={`${item.producto_id}-${item.precio_unitario}`}>
                         <td>{item.producto_nombre}</td>
                         <td>{item.cantidad}</td>
                         <td>{formatearPrecio(item.subtotal)}</td>
@@ -147,37 +246,114 @@ export default function LiquidarPartidaBoliranaModal({
               <span>Total de la ronda</span>
               <strong>{formatearPrecio(total)}</strong>
             </div>
+            <p className="muted small">
+              Modalidad:{" "}
+              <strong>{esEquipos ? "Por equipos" : "Directo"}</strong>
+            </p>
           </section>
 
           <section>
-            <h4>¿Quién perdió la partida?</h4>
+            <h4>
+              {esEquipos
+                ? "¿Qué equipos perdieron la partida?"
+                : "¿Quién perdió la partida?"}
+            </h4>
             <p className="muted small">
-              Marca uno o varios perdedores. El total se divide en partes
-              iguales.
+              {esEquipos
+                ? "Marca uno o varios equipos. El total se divide entre los equipos perdedores y luego entre sus integrantes."
+                : "Marca uno o varios perdedores. El total se divide en partes iguales."}
             </p>
-            <div className="bolirana-opciones">
-              {partida.participantes.map((participante) => (
-                <label
-                  key={participante.id}
-                  className="bolirana-opcion bolirana-opcion--perdedor"
-                >
-                  <input
-                    type="checkbox"
-                    checked={perdedores.includes(participante.id)}
-                    onChange={() => alternarPerdedor(participante.id)}
-                    disabled={procesando}
-                  />
-                  <span>{participante.etiqueta}</span>
-                  {perdedores.includes(participante.id) && (
-                    <strong>
-                      {formatearPrecio(montos[participante.id] || 0)}
-                    </strong>
-                  )}
-                </label>
-              ))}
-            </div>
 
-            {cantidad > 0 && (
+            {esEquipos ? (
+              <div className="bolirana-equipos-liquidacion">
+                {equipos.map((equipo) => {
+                  const seleccionado = equiposPerdedores.includes(
+                    equipo.nombre
+                  );
+                  return (
+                    <label
+                      key={equipo.nombre}
+                      className={`bolirana-equipo-card ${
+                        seleccionado ? "seleccionado" : ""
+                      }`}
+                    >
+                      <div className="bolirana-equipo-card-head">
+                        <input
+                          type="checkbox"
+                          checked={seleccionado}
+                          onChange={() => alternarEquipo(equipo.nombre)}
+                          disabled={procesando}
+                        />
+                        <strong>{equipo.nombre}</strong>
+                        <span className="muted small">
+                          {equipo.integrantes.length} integrante
+                          {equipo.integrantes.length === 1 ? "" : "s"}
+                        </span>
+                        {seleccionado && (
+                          <strong className="bolirana-equipo-monto">
+                            {formatearPrecio(
+                              montosEquipo[equipo.nombre] || 0
+                            )}
+                          </strong>
+                        )}
+                      </div>
+                      <ul className="bolirana-equipo-integrantes">
+                        {equipo.integrantes.map((participante) => (
+                          <li key={participante.id}>
+                            <span>{participante.etiqueta}</span>
+                            {seleccionado && (
+                              <span>
+                                {formatearPrecio(montos[participante.id] || 0)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bolirana-opciones">
+                {partida.participantes.map((participante) => (
+                  <label
+                    key={participante.id}
+                    className="bolirana-opcion bolirana-opcion--perdedor"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={perdedores.includes(participante.id)}
+                      onChange={() => alternarPerdedor(participante.id)}
+                      disabled={procesando}
+                    />
+                    <span>{participante.etiqueta}</span>
+                    {perdedores.includes(participante.id) && (
+                      <strong>
+                        {formatearPrecio(montos[participante.id] || 0)}
+                      </strong>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {esEquipos && equiposPerdedores.length > 0 && (
+              <div className="bolirana-division-info">
+                <span>
+                  {formatearPrecio(total)} ÷ {equiposPerdedores.length} equipo
+                  {equiposPerdedores.length > 1 ? "s" : ""} perdedor
+                  {equiposPerdedores.length > 1 ? "es" : ""}
+                </span>
+                <strong>
+                  {formatearPrecio(
+                    total / equiposPerdedores.length
+                  )}{" "}
+                  c/u
+                </strong>
+              </div>
+            )}
+
+            {!esEquipos && cantidad > 0 && (
               <div className="bolirana-division-info">
                 <span>
                   {formatearPrecio(total)} ÷ {cantidad} perdedor
@@ -202,9 +378,10 @@ export default function LiquidarPartidaBoliranaModal({
             )}
 
             <p className="muted small">
-              Las mesas y barras perdedoras reciben el cargo en su cuenta
-              general. Los jugadores libres quedan como cargos pendientes de
-              cobro.
+              Las mesas, barras y clientes individuales perdedores reciben el
+              cargo en su cuenta general. Los alias vinculados se cargan a su
+              cuenta de origen y los alias libres quedan como cargos pendientes
+              de cobro.
             </p>
           </section>
         </div>

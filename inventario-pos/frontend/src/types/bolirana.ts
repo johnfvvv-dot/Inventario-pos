@@ -14,6 +14,11 @@ export interface ParticipanteBolirana {
   mesa_id?: number | null;
   barra_numero?: number | null;
   alias?: string | null;
+  origen_tipo?: "mesa" | "barra" | "individual" | null;
+  origen_mesa_id?: number | null;
+  origen_barra_numero?: number | null;
+  origen_etiqueta?: string | null;
+  equipo?: string | null;
   etiqueta: string;
   es_perdedor: boolean;
   monto_asignado: number;
@@ -24,6 +29,7 @@ export interface PartidaBolirana {
   id: number;
   bolirana_id: number;
   estado: string;
+  modalidad: "directo" | "equipos";
   fecha_inicio: string;
   fecha_fin?: string | null;
   total_bebidas: number;

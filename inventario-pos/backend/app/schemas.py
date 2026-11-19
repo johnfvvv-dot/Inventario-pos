@@ -444,6 +444,12 @@ class ParticipanteBoliranaIn(BaseModel):
     mesa_id: Optional[int] = None
     barra_numero: Optional[int] = Field(default=None, gt=0)
     alias: Optional[str] = Field(default=None, max_length=60)
+    # Cuenta a la que se carga la deuda cuando el participante es un alias.
+    origen_tipo: Optional[str] = Field(default=None, max_length=20)
+    origen_mesa_id: Optional[int] = None
+    origen_barra_numero: Optional[int] = Field(default=None, gt=0)
+    # Equipo cuando la partida se juega en modalidad "equipos".
+    equipo: Optional[str] = Field(default=None, max_length=60)
 
     @model_validator(mode="after")
     def _referencia_valida(self):
@@ -455,17 +461,59 @@ class ParticipanteBoliranaIn(BaseModel):
             raise ValueError("Escribe el nombre del jugador.")
         if self.tipo not in {"mesa", "barra", "alias"}:
             raise ValueError("Tipo de participante inválido.")
+
+        if self.tipo == "alias":
+            if self.origen_tipo not in {None, "mesa", "barra", "individual"}:
+                raise ValueError("Cuenta de origen inválida.")
+            if self.origen_tipo is None:
+                if self.origen_mesa_id is not None or self.origen_barra_numero is not None:
+                    raise ValueError(
+                        "Selecciona el tipo de cuenta de origen del alias."
+                    )
+            elif self.origen_tipo in {"mesa", "individual"}:
+                if self.origen_mesa_id is None:
+                    raise ValueError(
+                        "Selecciona la mesa o cliente individual del alias."
+                    )
+                if self.origen_barra_numero is not None:
+                    raise ValueError(
+                        "La cuenta de origen no puede ser mesa y barra a la vez."
+                    )
+            elif self.origen_tipo == "barra":
+                if self.origen_barra_numero is None:
+                    raise ValueError("Selecciona la barra del alias.")
+                if self.origen_mesa_id is not None:
+                    raise ValueError(
+                        "La cuenta de origen no puede ser barra y mesa a la vez."
+                    )
+        elif self.origen_tipo or self.origen_mesa_id or self.origen_barra_numero:
+            raise ValueError("Solo los alias pueden vincularse a una cuenta de origen.")
         return self
 
 
 class IniciarPartidaBoliranaIn(BaseModel):
     usuario_id: int = Field(..., gt=0)
+    modalidad: str = Field(default="directo", max_length=20)
     participantes: List[ParticipanteBoliranaIn]
 
     @model_validator(mode="after")
-    def _minimo_dos(self):
+    def _participantes_validos(self):
         if len(self.participantes) < 2:
             raise ValueError("Selecciona al menos dos participantes.")
+        if self.modalidad not in {"directo", "equipos"}:
+            raise ValueError("Modalidad de partida inválida.")
+
+        if self.modalidad == "equipos":
+            equipos: dict = {}
+            for participante in self.participantes:
+                nombre = (participante.equipo or "").strip()
+                if not nombre:
+                    raise ValueError("Asigna un equipo a cada participante.")
+                equipos[nombre] = equipos.get(nombre, 0) + 1
+            if len(equipos) < 2:
+                raise ValueError("Crea al menos dos equipos con integrantes.")
+        elif any((p.equipo or "").strip() for p in self.participantes):
+            raise ValueError("La modalidad directa no usa equipos.")
         return self
 
 
@@ -475,6 +523,11 @@ class ParticipanteBoliranaOut(BaseModel):
     mesa_id: Optional[int] = None
     barra_numero: Optional[int] = None
     alias: Optional[str] = None
+    origen_tipo: Optional[str] = None
+    origen_mesa_id: Optional[int] = None
+    origen_barra_numero: Optional[int] = None
+    origen_etiqueta: Optional[str] = None
+    equipo: Optional[str] = None
     etiqueta: str
     es_perdedor: bool = False
     monto_asignado: float = 0.0
@@ -494,6 +547,7 @@ class PartidaBoliranaOut(BaseModel):
     id: int
     bolirana_id: int
     estado: str
+    modalidad: str = "directo"
     fecha_inicio: datetime
     fecha_fin: Optional[datetime] = None
     total_bebidas: float = 0.0
@@ -519,14 +573,19 @@ class PedidoBoliranaCreate(BaseModel):
 
 class LiquidarPartidaBoliranaIn(BaseModel):
     usuario_id: int = Field(..., gt=0)
-    perdedores: List[int]
+    # Modalidad directa: ids de los participantes perdedores.
+    perdedores: List[int] = []
+    # Modalidad por equipos: nombres de los equipos perdedores.
+    equipos_perdedores: List[str] = []
 
     @model_validator(mode="after")
     def _al_menos_un_perdedor(self):
-        if not self.perdedores:
-            raise ValueError("Selecciona al menos un perdedor.")
+        if not self.perdedores and not self.equipos_perdedores:
+            raise ValueError("Selecciona al menos un perdedor o un equipo.")
         if len(set(self.perdedores)) != len(self.perdedores):
             raise ValueError("No repitas el mismo perdedor.")
+        if len(set(self.equipos_perdedores)) != len(self.equipos_perdedores):
+            raise ValueError("No repitas el mismo equipo.")
         return self
 
 

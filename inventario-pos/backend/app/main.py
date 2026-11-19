@@ -40,7 +40,7 @@ from app.schemas import CLAVE_INICIAL
 from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.5.2"
+VERSION = "1.6.0"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
@@ -199,6 +199,11 @@ def _migrar_indices_cuentas() -> None:
         ("partidas_bolirana", "ix_partidas_bolirana_bolirana_id", "bolirana_id"),
         ("participantes_bolirana", "ix_participantes_bolirana_partida_id", "partida_id"),
         ("participantes_bolirana", "ix_participantes_bolirana_mesa_id", "mesa_id"),
+        (
+            "participantes_bolirana",
+            "ix_participantes_bolirana_origen_mesa_id",
+            "origen_mesa_id",
+        ),
         ("participantes_bolirana", "ix_participantes_bolirana_pedido_cobro_id", "pedido_cobro_id"),
     ]
     for tabla, nombre, columna in indices:

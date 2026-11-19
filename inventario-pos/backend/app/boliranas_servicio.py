@@ -58,7 +58,10 @@ def _participacion_activa(
             ParticipanteBolirana.partida_id == PartidaBolirana.id,
         )
         .join(Bolirana, Bolirana.id == PartidaBolirana.bolirana_id)
-        .filter(PartidaBolirana.estado == "en_curso", *condiciones)
+        # ``condiciones`` es una sola expresión con OR/AND; pasarla como un
+        # único argumento evita que SQLAlchemy la separe y convierta los OR
+        # en AND al desempaquetarla.
+        .filter(PartidaBolirana.estado == "en_curso", condiciones)
         .order_by(PartidaBolirana.id.desc())
         .first()
     )
@@ -68,7 +71,11 @@ def _participacion_activa(
 def participacion_activa_mesa(
     db: Session, mesa: Mesa
 ) -> Optional[Tuple[PartidaBolirana, Bolirana]]:
-    """Partida activa en la que participa una mesa o una barra completa."""
+    """Partida activa en la que participa una mesa o una barra completa.
+
+    Incluye tanto la participación directa como los alias vinculados a la
+    cuenta de la mesa, la barra o el cliente individual.
+    """
     if (mesa.tipo or "mesa") == "barra" and mesa.grupo:
         numero_barra = mesa.numero // 100
         ids_grupo = [
@@ -84,6 +91,14 @@ def participacion_activa_mesa(
             | (
                 (ParticipanteBolirana.tipo == "mesa")
                 & (ParticipanteBolirana.mesa_id.in_(ids_grupo))
+            )
+            | (
+                (ParticipanteBolirana.tipo == "alias")
+                & (ParticipanteBolirana.origen_barra_numero == numero_barra)
+            )
+            | (
+                (ParticipanteBolirana.tipo == "alias")
+                & (ParticipanteBolirana.origen_mesa_id.in_(ids_grupo))
             ),
         )
     return _participacion_activa(
@@ -91,6 +106,10 @@ def participacion_activa_mesa(
         (
             (ParticipanteBolirana.tipo == "mesa")
             & (ParticipanteBolirana.mesa_id == mesa.id)
+        )
+        | (
+            (ParticipanteBolirana.tipo == "alias")
+            & (ParticipanteBolirana.origen_mesa_id == mesa.id)
         ),
     )
 
@@ -112,12 +131,23 @@ def participacion_activa_barra(
         | (
             (ParticipanteBolirana.tipo == "mesa")
             & (ParticipanteBolirana.mesa_id.in_(ids_grupo))
+        )
+        | (
+            (ParticipanteBolirana.tipo == "alias")
+            & (ParticipanteBolirana.origen_barra_numero == numero_barra)
+        )
+        | (
+            (ParticipanteBolirana.tipo == "alias")
+            & (ParticipanteBolirana.origen_mesa_id.in_(ids_grupo))
         ),
     )
 
 
-def mensaje_candado(nombre_bolirana: str, es_barra: bool = False) -> str:
-    lugar = "barra" if es_barra else "mesa"
+def mensaje_candado(nombre_bolirana: str, tipo: str = "mesa") -> str:
+    lugar = {
+        "barra": "barra",
+        "individual": "cuenta individual",
+    }.get(tipo, "mesa")
     return (
         f"Esta {lugar} tiene una partida activa en Bolirana "
         f"{nombre_bolirana}. Finaliza la partida y define el pago antes de "
@@ -126,7 +156,7 @@ def mensaje_candado(nombre_bolirana: str, es_barra: bool = False) -> str:
 
 
 def exigir_mesa_sin_bolirana(db: Session, mesa: Mesa) -> None:
-    """Corta el cobro/cierre si la mesa o barra está en una partida activa."""
+    """Corta el cobro/cierre si la mesa, barra o individual está en partida."""
     if not modulo_habilitado(db):
         return
     participacion = participacion_activa_mesa(db, mesa)
@@ -134,9 +164,7 @@ def exigir_mesa_sin_bolirana(db: Session, mesa: Mesa) -> None:
         _, bolirana = participacion
         raise HTTPException(
             status_code=409,
-            detail=mensaje_candado(
-                bolirana.nombre, (mesa.tipo or "mesa") == "barra"
-            ),
+            detail=mensaje_candado(bolirana.nombre, mesa.tipo or "mesa"),
         )
 
 
@@ -149,7 +177,7 @@ def exigir_barra_sin_bolirana(db: Session, numero_barra: int) -> None:
         _, bolirana = participacion
         raise HTTPException(
             status_code=409,
-            detail=mensaje_candado(bolirana.nombre, es_barra=True),
+            detail=mensaje_candado(bolirana.nombre, "barra"),
         )
 
 
@@ -190,4 +218,10 @@ def mapa_boliranas_activas(db: Session) -> dict:
             por_mesa[participante.mesa_id] = bolirana.nombre
         elif participante.tipo == "barra" and participante.barra_numero:
             por_barra[participante.barra_numero] = bolirana.nombre
+        elif participante.tipo == "alias":
+            # Un alias vinculado bloquea la cuenta de su mesa/barra/individual.
+            if participante.origen_mesa_id:
+                por_mesa[participante.origen_mesa_id] = bolirana.nombre
+            elif participante.origen_barra_numero:
+                por_barra[participante.origen_barra_numero] = bolirana.nombre
     return {"mesa": por_mesa, "barra": por_barra}

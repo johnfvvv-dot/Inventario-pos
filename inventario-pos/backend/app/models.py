@@ -1,5 +1,7 @@
 """Modelos ORM SQLAlchemy para la base de datos."""
 
+from typing import Optional
+
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
@@ -297,6 +299,9 @@ class PartidaBolirana(Base):
     )
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     estado = Column(String(20), default="en_curso")  # en_curso | finalizada
+    # directo: cada participante juega por su cuenta.
+    # equipos: los jugadores se agrupan en equipos cruzados.
+    modalidad = Column(String(20), nullable=False, default="directo")
     fecha_inicio = Column(DateTime, default=ahora_local)
     fecha_fin = Column(DateTime, nullable=True)
     # Total de las bebidas cargadas en la ronda (una sola vez).
@@ -313,7 +318,12 @@ class PartidaBolirana(Base):
 
 
 class ParticipanteBolirana(Base):
-    """Mesa, barra o jugador libre que compite en una partida."""
+    """Mesa, barra, cliente individual o alias que compite en una partida.
+
+    Un alias puede estar vinculado a una cuenta de origen (mesa, barra o
+    cliente individual). Al liquidar, su parte se carga a esa cuenta. Si no
+    tiene origen queda como jugador libre con un cargo pendiente.
+    """
 
     __tablename__ = "participantes_bolirana"
 
@@ -325,6 +335,14 @@ class ParticipanteBolirana(Base):
     mesa_id = Column(Integer, ForeignKey("mesas.id"), nullable=True, index=True)
     barra_numero = Column(Integer, nullable=True)
     alias = Column(String(60), nullable=True)
+    # Cuenta de origen cuando el participante es un alias vinculado.
+    origen_tipo = Column(String(20), nullable=True)  # mesa | barra | individual
+    origen_mesa_id = Column(
+        Integer, ForeignKey("mesas.id"), nullable=True, index=True
+    )
+    origen_barra_numero = Column(Integer, nullable=True)
+    # Equipo al que pertenece cuando la partida es por equipos.
+    equipo = Column(String(60), nullable=True)
     es_perdedor = Column(Integer, nullable=False, default=0)
     monto_asignado = Column(Float, nullable=False, default=0.0)
     estado_pago = Column(String(20), nullable=False, default="pendiente")
@@ -332,17 +350,31 @@ class ParticipanteBolirana(Base):
     pedido_cobro_id = Column(Integer, nullable=True, index=True)
 
     partida = relationship("PartidaBolirana", back_populates="participantes")
-    mesa = relationship("Mesa")
+    mesa = relationship("Mesa", foreign_keys=[mesa_id])
+    origen_mesa = relationship("Mesa", foreign_keys=[origen_mesa_id])
+
+    @property
+    def origen_etiqueta(self) -> Optional[str]:
+        """Cuenta de origen visible de un alias vinculado."""
+        if self.origen_tipo == "mesa" and self.origen_mesa:
+            return f"Mesa {self.origen_mesa.numero}"
+        if self.origen_tipo == "individual":
+            return "Individual"
+        if self.origen_tipo == "barra" and self.origen_barra_numero:
+            return f"Barra {self.origen_barra_numero}"
+        return None
 
     def etiqueta(self) -> str:
-        """Nombre visible del participante."""
+        """Nombre visible del participante, con su cuenta de origen."""
         if self.tipo == "mesa":
             if self.mesa and (self.mesa.tipo or "mesa") == "individual":
                 return f"Individual — {self.mesa.nombre or 'Cliente'}"
             return f"Mesa {self.mesa.numero}" if self.mesa else "Mesa"
         if self.tipo == "barra":
             return f"Barra {self.barra_numero}"
-        return self.alias or "Jugador"
+        nombre = self.alias or "Jugador"
+        origen = self.origen_etiqueta
+        return f"{nombre} · {origen}" if origen else nombre
 
 
 class ConfiguracionNegocio(Base):

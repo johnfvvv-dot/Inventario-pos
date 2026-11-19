@@ -16,7 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.boliranas_servicio import partida_activa
+from app.boliranas_servicio import (
+    exigir_barra_sin_bolirana,
+    exigir_mesa_sin_bolirana,
+    partida_activa,
+)
 from app.database import get_db
 from app.models import (
     Bolirana,
@@ -104,7 +108,10 @@ def _partida_de_bolirana(
         .options(
             joinedload(PartidaBolirana.participantes).joinedload(
                 ParticipanteBolirana.mesa
-            )
+            ),
+            joinedload(PartidaBolirana.participantes).joinedload(
+                ParticipanteBolirana.origen_mesa
+            ),
         )
         .filter(
             PartidaBolirana.bolirana_id == bolirana_id,
@@ -166,6 +173,11 @@ def _participantes_out(
             mesa_id=p.mesa_id,
             barra_numero=p.barra_numero,
             alias=p.alias,
+            origen_tipo=p.origen_tipo,
+            origen_mesa_id=p.origen_mesa_id,
+            origen_barra_numero=p.origen_barra_numero,
+            origen_etiqueta=p.origen_etiqueta,
+            equipo=p.equipo,
             etiqueta=p.etiqueta(),
             es_perdedor=bool(p.es_perdedor),
             monto_asignado=round(float(p.monto_asignado or 0.0), 2),
@@ -180,6 +192,7 @@ def _partida_out(db: Session, partida: PartidaBolirana) -> PartidaBoliranaOut:
         id=partida.id,
         bolirana_id=partida.bolirana_id,
         estado=partida.estado,
+        modalidad=partida.modalidad or "directo",
         fecha_inicio=partida.fecha_inicio,
         fecha_fin=partida.fecha_fin,
         total_bebidas=round(float(partida.total_bebidas or 0.0), 2),
@@ -248,48 +261,85 @@ def _validar_pagos(total: float, pagos) -> None:
         )
 
 
-def _crear_cargo_mesa(
+def _mesa_de_barra_para_cargo(db: Session, numero_barra: int) -> Mesa:
+    """Elige la plaza de una barra que recibirá el cargo de la partida."""
+    mesas = _mesas_de_barra(db, numero_barra)
+    con_pedidos = {
+        fila[0]
+        for fila in db.query(Pedido.mesa_id)
+        .filter(
+            Pedido.mesa_id.in_([m.id for m in mesas]),
+            Pedido.estado == "abierto",
+        )
+        .distinct()
+        .all()
+    }
+    mesa = next((m for m in mesas if m.id in con_pedidos), None)
+    if mesa is None:
+        # Sin pedidos abiertos: se usa una plaza ocupada para no bloquear
+        # un puesto libre de la barra.
+        mesa = next((m for m in mesas if m.estado == "ocupada"), mesas[0])
+    return mesa
+
+
+def _mesa_destino_participante(
+    db: Session, participante: ParticipanteBolirana
+) -> Optional[Mesa]:
+    """Cuenta que debe recibir la deuda de un participante.
+
+    Devuelve None para los alias libres, que se cobran como cargo pendiente.
+    """
+    if participante.tipo == "mesa":
+        return _mesa_por_id(db, participante.mesa_id or 0)
+    if participante.tipo == "barra":
+        return _mesa_de_barra_para_cargo(db, participante.barra_numero or 0)
+    if participante.origen_tipo in {"mesa", "individual"}:
+        return _mesa_por_id(db, participante.origen_mesa_id or 0)
+    if participante.origen_tipo == "barra":
+        return _mesa_de_barra_para_cargo(
+            db, participante.origen_barra_numero or 0
+        )
+    return None
+
+
+def _concepto_cargo(
+    partida: PartidaBolirana, participante: ParticipanteBolirana
+) -> str:
+    """Concepto del cargo; en equipos indica el equipo perdedor."""
+    if partida.modalidad == "equipos" and participante.equipo:
+        return (
+            f"Consumo Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)} "
+            f"— {participante.equipo} (Equipo perdedor)"
+        )
+    return _concepto_partida(partida)
+
+
+def _crear_cargo_cuenta(
     db: Session,
     partida: PartidaBolirana,
     participante: ParticipanteBolirana,
+    mesa: Mesa,
     monto: float,
     usuario_id: int,
     ahora,
 ) -> Pedido:
-    """Crea un cargo abierto en la cuenta de la mesa o barra perdedora."""
-    if participante.tipo == "mesa":
-        mesa = _mesa_por_id(db, participante.mesa_id or 0)
-    else:
-        mesas = _mesas_de_barra(db, participante.barra_numero or 0)
-        con_pedidos = {
-            fila[0]
-            for fila in db.query(Pedido.mesa_id)
-            .filter(
-                Pedido.mesa_id.in_([m.id for m in mesas]),
-                Pedido.estado == "abierto",
-            )
-            .distinct()
-            .all()
-        }
-        mesa = next((m for m in mesas if m.id in con_pedidos), None)
-        if mesa is None:
-            # Sin pedidos abiertos: se usa una plaza ocupada para no bloquear
-            # un puesto libre de la barra.
-            mesa = next((m for m in mesas if m.estado == "ocupada"), mesas[0])
+    """Crea un cargo abierto en la cuenta de origen del perdedor."""
+    alias_cliente = None
+    if participante.tipo == "alias":
+        alias_cliente = participante.alias
+    elif (mesa.tipo or "mesa") == "individual":
+        alias_cliente = mesa.nombre
 
-    concepto = _concepto_partida(partida)
     cargo = Pedido(
         mesa_id=mesa.id,
         usuario_id=usuario_id,
         fecha=ahora,
         total=round(float(monto), 2),
         estado="abierto",
-        concepto=concepto,
+        concepto=_concepto_cargo(partida, participante),
         bolirana_partida_id=partida.id,
         fecha_ocupacion=mesa.fecha_ocupacion or ahora,
-        alias_cliente=(
-            mesa.nombre if (mesa.tipo or "mesa") == "individual" else None
-        ),
+        alias_cliente=alias_cliente,
         es_pago_division=0,
     )
     cargo.guardar_origen(mesa)
@@ -316,7 +366,7 @@ def _crear_cargo_alias(
         fecha=ahora,
         total=round(float(monto), 2),
         estado="pendiente",
-        concepto=_concepto_partida(partida),
+        concepto=_concepto_cargo(partida, participante),
         bolirana_partida_id=partida.id,
         fecha_ocupacion=ahora,
         alias_cliente=participante.alias,
@@ -328,6 +378,35 @@ def _crear_cargo_alias(
     db.add(cargo)
     db.flush()
     return cargo
+
+
+def _liquidar_participante(
+    db: Session,
+    partida: PartidaBolirana,
+    participante: ParticipanteBolirana,
+    monto: float,
+    usuario_id: int,
+    ahora,
+) -> None:
+    """Marca al perdedor y crea su cargo en la cuenta que corresponda."""
+    participante.es_perdedor = 1
+    participante.monto_asignado = round(float(monto), 2)
+    if monto <= 0:
+        participante.estado_pago = "sin_consumo"
+        return
+
+    mesa = _mesa_destino_participante(db, participante)
+    if mesa is not None:
+        cargo = _crear_cargo_cuenta(
+            db, partida, participante, mesa, monto, usuario_id, ahora
+        )
+        participante.estado_pago = "transferido"
+    else:
+        cargo = _crear_cargo_alias(
+            db, partida, participante, monto, usuario_id, ahora
+        )
+        participante.estado_pago = "pendiente"
+    participante.pedido_cobro_id = cargo.id
 
 
 # ------------------------------------------------------------------
@@ -475,9 +554,10 @@ def iniciar_partida(
             ),
         )
 
-    # Validar referencias y candados antes de crear la partida.
+    # Validar referencias, cuentas repetidas y candados antes de crear.
     mesas_vistas = set()
     barras_vistas = set()
+    cuentas_vistas = set()
     alias_vistos = set()
     for participante in datos.participantes:
         if participante.tipo == "mesa":
@@ -496,13 +576,13 @@ def iniciar_partida(
                     status_code=400,
                     detail=f"{etiqueta} debe estar ocupada para jugar.",
                 )
-            from app.boliranas_servicio import exigir_mesa_sin_bolirana
-
             exigir_mesa_sin_bolirana(db, mesa)
             mesas_vistas.add(mesa.id)
+            cuentas_vistas.add(("mesa", mesa.id))
         elif participante.tipo == "barra":
-            mesas = _mesas_de_barra(db, participante.barra_numero or 0)
-            if participante.barra_numero in barras_vistas:
+            numero_barra = participante.barra_numero or 0
+            mesas = _mesas_de_barra(db, numero_barra)
+            if numero_barra in barras_vistas:
                 raise HTTPException(
                     status_code=400, detail="No repitas la misma barra."
                 )
@@ -510,14 +590,13 @@ def iniciar_partida(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Barra {participante.barra_numero} debe tener al menos "
+                        f"Barra {numero_barra} debe tener al menos "
                         "una plaza ocupada para jugar."
                     ),
                 )
-            from app.boliranas_servicio import exigir_barra_sin_bolirana
-
-            exigir_barra_sin_bolirana(db, participante.barra_numero or 0)
-            barras_vistas.add(participante.barra_numero)
+            exigir_barra_sin_bolirana(db, numero_barra)
+            barras_vistas.add(numero_barra)
+            cuentas_vistas.add(("barra", numero_barra))
         else:
             alias = (participante.alias or "").strip()
             if alias.lower() in alias_vistos:
@@ -544,10 +623,72 @@ def iniciar_partida(
                 )
             alias_vistos.add(alias.lower())
 
+            # Un alias vinculado bloquea y cobra en la cuenta de su origen.
+            if participante.origen_tipo in {"mesa", "individual"}:
+                origen = _mesa_por_id(db, participante.origen_mesa_id or 0)
+                es_individual = (origen.tipo or "mesa") == "individual"
+                if participante.origen_tipo == "individual" and not es_individual:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"El origen de {alias} no es un cliente individual."
+                        ),
+                    )
+                if participante.origen_tipo == "mesa" and es_individual:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"El origen de {alias} es un cliente individual; "
+                            "selecciónalo como Individual."
+                        ),
+                    )
+                if origen.estado != "ocupada":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"La cuenta de origen de {alias} debe estar ocupada "
+                            "para vincularlo."
+                        ),
+                    )
+                exigir_mesa_sin_bolirana(db, origen)
+                clave = ("mesa", origen.id)
+                if clave in cuentas_vistas:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"La cuenta de origen de {alias} ya participa "
+                            "en esta partida."
+                        ),
+                    )
+                cuentas_vistas.add(clave)
+            elif participante.origen_tipo == "barra":
+                numero_barra = participante.origen_barra_numero or 0
+                mesas = _mesas_de_barra(db, numero_barra)
+                if not any(m.estado == "ocupada" for m in mesas):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"La Barra {numero_barra} (origen de {alias}) debe "
+                            "tener al menos una plaza ocupada."
+                        ),
+                    )
+                exigir_barra_sin_bolirana(db, numero_barra)
+                clave = ("barra", numero_barra)
+                if clave in cuentas_vistas:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"La cuenta de origen de {alias} ya participa "
+                            "en esta partida."
+                        ),
+                    )
+                cuentas_vistas.add(clave)
+
     partida = PartidaBolirana(
         bolirana_id=bolirana.id,
         usuario_id=datos.usuario_id,
         estado="en_curso",
+        modalidad=datos.modalidad,
         fecha_inicio=ahora_local(),
         total_bebidas=0.0,
     )
@@ -555,6 +696,7 @@ def iniciar_partida(
     db.flush()
 
     for participante in datos.participantes:
+        es_alias = participante.tipo == "alias"
         db.add(
             ParticipanteBolirana(
                 partida_id=partida.id,
@@ -562,8 +704,20 @@ def iniciar_partida(
                 mesa_id=participante.mesa_id,
                 barra_numero=participante.barra_numero,
                 alias=(
-                    (participante.alias or "").strip()
-                    if participante.tipo == "alias"
+                    (participante.alias or "").strip() if es_alias else None
+                ),
+                origen_tipo=(
+                    participante.origen_tipo if es_alias else None
+                ),
+                origen_mesa_id=(
+                    participante.origen_mesa_id if es_alias else None
+                ),
+                origen_barra_numero=(
+                    participante.origen_barra_numero if es_alias else None
+                ),
+                equipo=(
+                    (participante.equipo or "").strip()
+                    if datos.modalidad == "equipos"
                     else None
                 ),
                 estado_pago="pendiente",
@@ -671,7 +825,7 @@ def finalizar_partida(
     datos: LiquidarPartidaBoliranaIn,
     db: Session = Depends(get_db),
 ):
-    """Liquida la ronda y reparte el total entre los perdedores elegidos."""
+    """Liquida la ronda y reparte el total entre perdedores o equipos."""
     exigir_turno_abierto(db)
     _usuario(db, datos.usuario_id)
     bolirana = _bolirana(db, bolirana_id)
@@ -680,6 +834,9 @@ def finalizar_partida(
         .options(
             joinedload(PartidaBolirana.participantes).joinedload(
                 ParticipanteBolirana.mesa
+            ),
+            joinedload(PartidaBolirana.participantes).joinedload(
+                ParticipanteBolirana.origen_mesa
             ),
             joinedload(PartidaBolirana.bolirana),
         )
@@ -704,12 +861,57 @@ def finalizar_partida(
         )
 
     participantes = {p.id: p for p in partida.participantes}
-    for participante_id in datos.perdedores:
-        if participante_id not in participantes:
+    modalidad = partida.modalidad or "directo"
+
+    if modalidad == "equipos":
+        if datos.perdedores:
             raise HTTPException(
                 status_code=400,
-                detail="Uno de los perdedores no pertenece a esta partida.",
+                detail=(
+                    "La partida es por equipos: selecciona los equipos "
+                    "perdedores, no participantes individuales."
+                ),
             )
+        if not datos.equipos_perdedores:
+            raise HTTPException(
+                status_code=400,
+                detail="Selecciona al menos un equipo perdedor.",
+            )
+        equipos: dict = {}
+        for participante in sorted(
+            partida.participantes, key=lambda p: p.id
+        ):
+            nombre_equipo = (participante.equipo or "").strip()
+            if nombre_equipo:
+                equipos.setdefault(nombre_equipo, []).append(participante)
+        for nombre_equipo in datos.equipos_perdedores:
+            if nombre_equipo not in equipos:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"El equipo {nombre_equipo} no pertenece a esta partida."
+                    ),
+                )
+    else:
+        if datos.equipos_perdedores:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "La partida es directa: selecciona participantes "
+                    "perdedores, no equipos."
+                ),
+            )
+        if not datos.perdedores:
+            raise HTTPException(
+                status_code=400,
+                detail="Selecciona al menos un perdedor.",
+            )
+        for participante_id in datos.perdedores:
+            if participante_id not in participantes:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Uno de los perdedores no pertenece a esta partida.",
+                )
 
     # El total se recalcula desde las comandas para no confiar en un valor
     # que pudo quedar desactualizado.
@@ -728,44 +930,47 @@ def finalizar_partida(
     partida.total_bebidas = total
 
     ahora = ahora_local()
-    cantidad = len(datos.perdedores)
-    base = round(total / cantidad, 2) if cantidad else 0.0
-    montos = [base] * cantidad
-    if cantidad:
+
+    def _repartir(monto_total: float, cantidad: int) -> List[float]:
+        """Divide un monto en partes iguales ajustando los centavos."""
+        if cantidad <= 0:
+            return []
+        base = round(monto_total / cantidad, 2)
+        montos = [base] * cantidad
         # Ajuste de centavos para que la suma sea exactamente el total.
-        montos[-1] = round(total - base * (cantidad - 1), 2)
+        montos[-1] = round(monto_total - base * (cantidad - 1), 2)
+        return montos
 
-    for indice, participante_id in enumerate(datos.perdedores):
-        participante = participantes[participante_id]
-        monto = montos[indice]
-        participante.es_perdedor = 1
-        participante.monto_asignado = monto
-
-        if total <= 0:
-            participante.estado_pago = "sin_consumo"
-            continue
-
-        if participante.tipo in {"mesa", "barra"}:
-            cargo = _crear_cargo_mesa(
+    if modalidad == "equipos":
+        # Primero se reparte entre los equipos perdedores y luego la parte
+        # de cada equipo entre sus integrantes.
+        equipos_perdedores = datos.equipos_perdedores
+        montos_equipo = _repartir(total, len(equipos_perdedores))
+        for nombre_equipo, monto_equipo in zip(
+            equipos_perdedores, montos_equipo
+        ):
+            integrantes = equipos[nombre_equipo]
+            montos = _repartir(monto_equipo, len(integrantes))
+            for integrante, monto in zip(integrantes, montos):
+                _liquidar_participante(
+                    db,
+                    partida,
+                    integrante,
+                    monto,
+                    datos.usuario_id,
+                    ahora,
+                )
+    else:
+        montos = _repartir(total, len(datos.perdedores))
+        for participante_id, monto in zip(datos.perdedores, montos):
+            _liquidar_participante(
                 db,
                 partida,
-                participante,
+                participantes[participante_id],
                 monto,
                 datos.usuario_id,
                 ahora,
             )
-            participante.estado_pago = "transferido"
-        else:
-            cargo = _crear_cargo_alias(
-                db,
-                partida,
-                participante,
-                monto,
-                datos.usuario_id,
-                ahora,
-            )
-            participante.estado_pago = "pendiente"
-        participante.pedido_cobro_id = cargo.id
 
     partida.estado = "finalizada"
     partida.fecha_fin = ahora
