@@ -2,7 +2,8 @@
 
 Flujo:
   1. El Administrador crea las boliranas (Bartender solo opera).
-  2. Se inicia una partida con dos o más mesas, barras o alias libres.
+  2. Se inicia una partida con dos o más mesas, barras o jugadores; varios
+     jugadores pueden compartir la misma mesa, barra o cliente individual.
   3. Las bebidas se cargan a la ronda y descuentan stock, pero no son una
      venta todavía.
   4. Al finalizar, el total se reparte en partes iguales entre los perdedores.
@@ -305,13 +306,17 @@ def _mesa_destino_participante(
 def _concepto_cargo(
     partida: PartidaBolirana, participante: ParticipanteBolirana
 ) -> str:
-    """Concepto del cargo; en equipos indica el equipo perdedor."""
+    """Concepto del cargo; en equipos indica jugador y equipo perdedor."""
     if partida.modalidad == "equipos" and participante.equipo:
+        jugador = f"{participante.alias} · " if participante.alias else ""
         return (
             f"Consumo Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)} "
-            f"— {participante.equipo} (Equipo perdedor)"
+            f"— {jugador}{participante.equipo} (Equipo perdedor)"
         )
-    return _concepto_partida(partida)
+    concepto = _concepto_partida(partida)
+    if participante.tipo == "alias" and participante.alias:
+        return f"{concepto} — {participante.alias}"
+    return concepto
 
 
 def _crear_cargo_cuenta(
@@ -541,7 +546,12 @@ def iniciar_partida(
     datos: IniciarPartidaBoliranaIn,
     db: Session = Depends(get_db),
 ):
-    """Inicia una partida con dos o más mesas, barras o jugadores libres."""
+    """Inicia una partida con dos o más participantes.
+
+    Varios alias pueden vincularse a la misma mesa o barra; cada uno recibe
+    su propio cargo en esa cuenta al liquidar. Los clientes individuales
+    representan a una sola persona y participan una única vez.
+    """
     exigir_turno_abierto(db)
     _usuario(db, datos.usuario_id)
     bolirana = _bolirana(db, bolirana_id)
@@ -554,11 +564,14 @@ def iniciar_partida(
             ),
         )
 
-    # Validar referencias, cuentas repetidas y candados antes de crear.
+    # Validar referencias, cuentas individuales y candados antes de crear.
+    # Varios alias pueden compartir la misma mesa o barra: cada jugador se
+    # carga por separado a esa cuenta al liquidar. Los clientes individuales
+    # representan a una sola persona, así que participan una única vez.
     mesas_vistas = set()
     barras_vistas = set()
-    cuentas_vistas = set()
-    alias_vistos = set()
+    individuales_usados = set()
+    alias_vistos = set()  # (nombre en minúsculas, cuenta de origen)
     for participante in datos.participantes:
         if participante.tipo == "mesa":
             mesa = _mesa_por_id(db, participante.mesa_id or 0)
@@ -566,19 +579,29 @@ def iniciar_partida(
                 raise HTTPException(
                     status_code=400, detail="No repitas la misma mesa."
                 )
+            es_individual = (mesa.tipo or "mesa") == "individual"
             if mesa.estado != "ocupada":
                 etiqueta = (
                     f"Individual — {mesa.nombre or 'Cliente'}"
-                    if (mesa.tipo or "mesa") == "individual"
+                    if es_individual
                     else f"Mesa {mesa.numero}"
                 )
                 raise HTTPException(
                     status_code=400,
                     detail=f"{etiqueta} debe estar ocupada para jugar.",
                 )
+            if es_individual and mesa.id in individuales_usados:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"El cliente individual {mesa.nombre or 'Cliente'} "
+                        "ya participa en esta partida."
+                    ),
+                )
             exigir_mesa_sin_bolirana(db, mesa)
             mesas_vistas.add(mesa.id)
-            cuentas_vistas.add(("mesa", mesa.id))
+            if es_individual:
+                individuales_usados.add(mesa.id)
         elif participante.tipo == "barra":
             numero_barra = participante.barra_numero or 0
             mesas = _mesas_de_barra(db, numero_barra)
@@ -596,13 +619,8 @@ def iniciar_partida(
                 )
             exigir_barra_sin_bolirana(db, numero_barra)
             barras_vistas.add(numero_barra)
-            cuentas_vistas.add(("barra", numero_barra))
         else:
             alias = (participante.alias or "").strip()
-            if alias.lower() in alias_vistos:
-                raise HTTPException(
-                    status_code=400, detail=f"No repitas el jugador {alias}."
-                )
             ya_juega = (
                 db.query(ParticipanteBolirana.id)
                 .join(
@@ -621,9 +639,9 @@ def iniciar_partida(
                     status_code=409,
                     detail=f"El jugador {alias} ya está en otra partida activa.",
                 )
-            alias_vistos.add(alias.lower())
 
-            # Un alias vinculado bloquea y cobra en la cuenta de su origen.
+            # Clave de la cuenta de origen para validar duplicados.
+            origen_clave = ("libre", "")
             if participante.origen_tipo in {"mesa", "individual"}:
                 origen = _mesa_por_id(db, participante.origen_mesa_id or 0)
                 es_individual = (origen.tipo or "mesa") == "individual"
@@ -651,16 +669,22 @@ def iniciar_partida(
                         ),
                     )
                 exigir_mesa_sin_bolirana(db, origen)
-                clave = ("mesa", origen.id)
-                if clave in cuentas_vistas:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"La cuenta de origen de {alias} ya participa "
-                            "en esta partida."
-                        ),
-                    )
-                cuentas_vistas.add(clave)
+                if es_individual:
+                    if origen.id in individuales_usados:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"El cliente individual "
+                                f"{origen.nombre or 'Cliente'} ya participa "
+                                "en esta partida."
+                            ),
+                        )
+                    individuales_usados.add(origen.id)
+                origen_clave = (
+                    ("individual", origen.id)
+                    if es_individual
+                    else ("mesa", origen.id)
+                )
             elif participante.origen_tipo == "barra":
                 numero_barra = participante.origen_barra_numero or 0
                 mesas = _mesas_de_barra(db, numero_barra)
@@ -673,16 +697,19 @@ def iniciar_partida(
                         ),
                     )
                 exigir_barra_sin_bolirana(db, numero_barra)
-                clave = ("barra", numero_barra)
-                if clave in cuentas_vistas:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=(
-                            f"La cuenta de origen de {alias} ya participa "
-                            "en esta partida."
-                        ),
-                    )
-                cuentas_vistas.add(clave)
+                origen_clave = ("barra", numero_barra)
+
+            # Solo se bloquea el mismo nombre en la misma cuenta de origen.
+            combinacion = (alias.lower(), origen_clave)
+            if combinacion in alias_vistos:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"El jugador {alias} ya está en esta partida con la "
+                        "misma cuenta de origen."
+                    ),
+                )
+            alias_vistos.add(combinacion)
 
     partida = PartidaBolirana(
         bolirana_id=bolirana.id,

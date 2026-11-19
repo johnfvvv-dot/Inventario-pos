@@ -5560,6 +5560,13 @@ tbody tr:last-child td {
   accent-color: #f97316;
 }
 
+.bolirana-opcion-nota {
+  margin-left: auto;
+  color: #b45309;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
 .bolirana-opcion--perdedor strong {
   margin-left: auto;
   color: #c2410c;

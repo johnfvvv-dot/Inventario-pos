@@ -370,7 +370,9 @@ class BoliranaTest(unittest.TestCase):
         cargos_historial = [
             h
             for h in historial
-            if h.get("concepto") == "Consumo Bolirana Test 1 (Partida)"
+            if (h.get("concepto") or "").startswith(
+                "Consumo Bolirana Test 1 (Partida)"
+            )
         ]
         self.assertEqual(len(cargos_historial), 2)
 
@@ -813,6 +815,228 @@ class BoliranaTest(unittest.TestCase):
             )
             self.assertEqual(cierre.status_code, 200, cierre.text)
 
+        eliminada = self.client.delete(
+            f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
+        )
+        self.assertEqual(eliminada.status_code, 200, eliminada.text)
+
+    def test_02f_varios_jugadores_por_mesa_y_barra(self):
+        """Varios alias comparten mesa/barra y se reparten en equipos."""
+        self.client.put(
+            "/api/configuracion/modulos",
+            json={"usuario_id": 1, "modulo_bolirana": True},
+        )
+        mesa = self.crear_mesa(907)
+        self.ocupar_mesa(mesa["id"])
+        plazas = self.client.post(
+            "/api/mesas/barra", json={"numero": 98, "capacidad": 1}
+        ).json()
+        self.ocupar_mesa(plazas[0]["id"])
+        bolirana = self.crear_bolirana("Bolirana Varios Jugadores")
+
+        # El mismo nombre en la misma mesa sí se rechaza.
+        duplicado = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/iniciar",
+            json={
+                "usuario_id": 1,
+                "modalidad": "equipos",
+                "participantes": [
+                    {
+                        "tipo": "alias",
+                        "alias": "Camilo",
+                        "origen_tipo": "mesa",
+                        "origen_mesa_id": mesa["id"],
+                        "equipo": "Equipo A",
+                    },
+                    {
+                        "tipo": "alias",
+                        "alias": "Camilo",
+                        "origen_tipo": "mesa",
+                        "origen_mesa_id": mesa["id"],
+                        "equipo": "Equipo B",
+                    },
+                ],
+            },
+        )
+        self.assertEqual(duplicado.status_code, 400, duplicado.text)
+
+        partida = self.iniciar_partida(
+            bolirana["id"],
+            [
+                {
+                    "tipo": "alias",
+                    "alias": "Camilo",
+                    "origen_tipo": "mesa",
+                    "origen_mesa_id": mesa["id"],
+                    "equipo": "Equipo A",
+                },
+                {
+                    "tipo": "alias",
+                    "alias": "Andrés",
+                    "origen_tipo": "mesa",
+                    "origen_mesa_id": mesa["id"],
+                    "equipo": "Equipo A",
+                },
+                {
+                    "tipo": "alias",
+                    "alias": "Laura",
+                    "origen_tipo": "barra",
+                    "origen_barra_numero": 98,
+                    "equipo": "Equipo B",
+                },
+                {
+                    "tipo": "alias",
+                    "alias": "Marta",
+                    "origen_tipo": "barra",
+                    "origen_barra_numero": 98,
+                    "equipo": "Equipo B",
+                },
+            ],
+            modalidad="equipos",
+        )
+        self.assertEqual(
+            [p["etiqueta"] for p in partida["partida"]["participantes"]],
+            [
+                "Camilo · Mesa 907",
+                "Andrés · Mesa 907",
+                "Laura · Barra 98",
+                "Marta · Barra 98",
+            ],
+        )
+
+        # La mesa y la barra quedan bloqueadas una sola vez para la partida.
+        listado = self.client.get("/api/mesas/").json()
+        fila_mesa = next(m for m in listado if m["id"] == mesa["id"])
+        self.assertTrue(fila_mesa["en_bolirana"])
+        self.assertEqual(
+            fila_mesa["bolirana_nombre"], "Bolirana Varios Jugadores"
+        )
+        tarjeta_barra = next(
+            m for m in listado if m["tipo"] == "barra" and m["numero"] == 98
+        )
+        self.assertTrue(tarjeta_barra["en_bolirana"])
+
+        carga = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/pedidos",
+            json={
+                "usuario_id": 1,
+                "items": [{"producto_id": self.refresco["id"], "cantidad": 2}],
+            },
+        )
+        self.assertEqual(carga.status_code, 200, carga.text)
+        total = carga.json()["partida"]["total_bebidas"]
+
+        liquidar = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/finalizar",
+            json={"usuario_id": 1, "equipos_perdedores": ["Equipo A"]},
+        )
+        self.assertEqual(liquidar.status_code, 200, liquidar.text)
+
+        # Los dos integrantes del equipo perdedor cargan a la misma mesa.
+        cuenta_mesa = self.client.get(
+            f"/api/cuentas/mesa/{mesa['id']}"
+        ).json()
+        cargos = [
+            p
+            for p in cuenta_mesa["pedidos"]
+            if p["concepto"] and "Equipo perdedor" in p["concepto"]
+        ]
+        self.assertEqual(len(cargos), 2)
+        self.assertEqual({p["alias"] for p in cargos}, {"Camilo", "Andrés"})
+        self.assertTrue(
+            all(
+                "Camilo" in p["concepto"] or "Andrés" in p["concepto"]
+                for p in cargos
+            )
+        )
+        self.assertAlmostEqual(
+            sum(p["total"] for p in cargos), total, places=2
+        )
+        base = round(total / 2, 2)
+        self.assertAlmostEqual(cargos[0]["total"], base, places=2)
+        self.assertAlmostEqual(
+            cargos[1]["total"], round(total - base, 2), places=2
+        )
+
+        # La barra ganadora no recibe cargos.
+        cuenta_barra = self.client.get("/api/cuentas/barra/98").json()
+        self.assertFalse(
+            any(
+                p["concepto"] and "Equipo perdedor" in p["concepto"]
+                for p in cuenta_barra["pedidos"]
+            )
+        )
+
+        cierre_mesa = self.client.post(
+            f"/api/cuentas/mesa/{mesa['id']}/cerrar",
+            params={"forma_pago": "efectivo", "liberar_mesa": "true"},
+        )
+        self.assertEqual(cierre_mesa.status_code, 200, cierre_mesa.text)
+        cierre_barra = self.client.post(
+            "/api/cuentas/barra/98/cerrar",
+            params={"forma_pago": "efectivo", "liberar_barra": "true"},
+        )
+        self.assertEqual(cierre_barra.status_code, 200, cierre_barra.text)
+        eliminada = self.client.delete(
+            f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
+        )
+        self.assertEqual(eliminada.status_code, 200, eliminada.text)
+
+    def test_02g_individual_solo_participa_una_vez(self):
+        """Un cliente individual no puede repetirse ni directo ni como alias."""
+        self.client.put(
+            "/api/configuracion/modulos",
+            json={"usuario_id": 1, "modulo_bolirana": True},
+        )
+        individual = self.client.post(
+            "/api/mesas/individual", json={"nombre": "Cliente Único"}
+        ).json()
+        bolirana = self.crear_bolirana("Bolirana Individual Único")
+
+        repetido = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/iniciar",
+            json={
+                "usuario_id": 1,
+                "participantes": [
+                    {
+                        "tipo": "alias",
+                        "alias": "Uno",
+                        "origen_tipo": "individual",
+                        "origen_mesa_id": individual["id"],
+                    },
+                    {
+                        "tipo": "alias",
+                        "alias": "Dos",
+                        "origen_tipo": "individual",
+                        "origen_mesa_id": individual["id"],
+                    },
+                ],
+            },
+        )
+        self.assertEqual(repetido.status_code, 400, repetido.text)
+
+        directo = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/iniciar",
+            json={
+                "usuario_id": 1,
+                "participantes": [
+                    {"tipo": "mesa", "mesa_id": individual["id"]},
+                    {
+                        "tipo": "alias",
+                        "alias": "Tres",
+                        "origen_tipo": "individual",
+                        "origen_mesa_id": individual["id"],
+                    },
+                ],
+            },
+        )
+        self.assertEqual(directo.status_code, 400, directo.text)
+
+        cierre = self.client.post(
+            f"/api/cuentas/mesa/{individual['id']}/cerrar",
+            params={"forma_pago": "efectivo"},
+        )
+        self.assertEqual(cierre.status_code, 200, cierre.text)
         eliminada = self.client.delete(
             f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
         )

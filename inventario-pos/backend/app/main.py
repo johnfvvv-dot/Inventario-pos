@@ -40,7 +40,7 @@ from app.schemas import CLAVE_INICIAL
 from app.seguridad import hash_password
 from app.tiempo import ahora_local, utc_a_local
 
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 CLAVE_MIGRACION_FECHAS = "fechas_locales_v1"
 
