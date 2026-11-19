@@ -52,7 +52,9 @@ const EQUIPOS_INICIALES = ["Equipo A", "Equipo B"];
 const claveMesa = (id: number) => `mesa:${id}`;
 const claveIndividual = (id: number) => `individual:${id}`;
 const claveBarra = (numero: number) => `barra:${numero}`;
-const claveAlias = (nombre: string) => `alias:${nombre.trim().toLowerCase()}`;
+// Un mismo nombre puede repetirse si está vinculado a cuentas distintas.
+const claveAlias = (nombre: string, origen: string) =>
+  `alias:${nombre.trim().toLowerCase()}:${origen || "libre"}`;
 
 export default function IniciarPartidaBoliranaModal({
   bolirana,
@@ -158,7 +160,7 @@ export default function IniciarPartidaBoliranaModal({
     alias.forEach((jugador) => {
       const origen = etiquetaOrigen(jugador.origen);
       lista.push({
-        clave: claveAlias(jugador.nombre),
+        clave: claveAlias(jugador.nombre, jugador.origen),
         etiqueta: origen
           ? `${jugador.nombre} · ${origen}`
           : jugador.nombre,
@@ -185,33 +187,38 @@ export default function IniciarPartidaBoliranaModal({
     [seleccionados]
   );
 
-  const origenesUsados = useMemo(
-    () => new Set(alias.map((jugador) => jugador.origen).filter(Boolean)),
+  // Solo los clientes individuales se agotan: representan a una sola persona.
+  // Las mesas y barras quedan siempre disponibles para más jugadores.
+  const origenesIndividualesUsados = useMemo(
+    () =>
+      new Set(
+        alias
+          .map((jugador) => jugador.origen)
+          .filter((origen) => origen.startsWith("individual:"))
+      ),
     [alias]
   );
 
   const opcionesOrigen = useMemo(() => {
-    const usados = new Set([...cuentasSeleccionadas, ...origenesUsados]);
+    const usados = new Set(
+      [...cuentasSeleccionadas, ...origenesIndividualesUsados].filter(
+        (clave) => clave.startsWith("individual:")
+      )
+    );
     const opciones: { valor: string; etiqueta: string; grupo: string }[] = [];
     mesasLibres.forEach((mesa) => {
-      const valor = claveMesa(mesa.id);
-      if (!usados.has(valor)) {
-        opciones.push({
-          valor,
-          etiqueta: `Mesa ${mesa.numero}`,
-          grupo: "Mesas",
-        });
-      }
+      opciones.push({
+        valor: claveMesa(mesa.id),
+        etiqueta: `Mesa ${mesa.numero}`,
+        grupo: "Mesas",
+      });
     });
     barrasLibres.forEach((barra) => {
-      const valor = claveBarra(barra.numero);
-      if (!usados.has(valor)) {
-        opciones.push({
-          valor,
-          etiqueta: `Barra ${barra.numero}`,
-          grupo: "Barras",
-        });
-      }
+      opciones.push({
+        valor: claveBarra(barra.numero),
+        etiqueta: `Barra ${barra.numero}`,
+        grupo: "Barras",
+      });
     });
     individualesActivos.forEach((cliente) => {
       const valor = claveIndividual(cliente.id);
@@ -229,7 +236,7 @@ export default function IniciarPartidaBoliranaModal({
     barrasLibres,
     individualesActivos,
     cuentasSeleccionadas,
-    origenesUsados,
+    origenesIndividualesUsados,
   ]);
 
   const gruposOrigen = useMemo(() => {
@@ -284,13 +291,6 @@ export default function IniciarPartidaBoliranaModal({
   const alternarMesa = (id: number) => {
     const clave = claveMesa(id);
     if (!mesasSeleccionadas.includes(id)) {
-      const vinculado = aliasConOrigen(clave);
-      if (vinculado) {
-        setError(
-          `La cuenta ya está vinculada al jugador ${vinculado.nombre}.`
-        );
-        return;
-      }
       if (origenNuevoAlias === clave) setOrigenNuevoAlias("");
       setMesasSeleccionadas((actual) => [...actual, id]);
       registrarEquipo(clave);
@@ -326,13 +326,6 @@ export default function IniciarPartidaBoliranaModal({
   const alternarBarra = (numero: number) => {
     const clave = claveBarra(numero);
     if (!barrasSeleccionadas.includes(numero)) {
-      const vinculado = aliasConOrigen(clave);
-      if (vinculado) {
-        setError(
-          `La cuenta ya está vinculada al jugador ${vinculado.nombre}.`
-        );
-        return;
-      }
       if (origenNuevoAlias === clave) setOrigenNuevoAlias("");
       setBarrasSeleccionadas((actual) => [...actual, numero]);
       registrarEquipo(clave);
@@ -348,31 +341,50 @@ export default function IniciarPartidaBoliranaModal({
   const agregarAlias = () => {
     const limpio = nuevoAlias.trim();
     if (!limpio) return;
-    if (alias.some((a) => a.nombre.toLowerCase() === limpio.toLowerCase())) {
-      setError(`El jugador ${limpio} ya está en la lista.`);
+
+    // Solo se bloquea el mismo nombre con la misma cuenta de origen.
+    const duplicado = alias.some(
+      (a) =>
+        a.nombre.toLowerCase() === limpio.toLowerCase() &&
+        a.origen === origenNuevoAlias
+    );
+    if (duplicado) {
+      const origen = etiquetaOrigen(origenNuevoAlias);
+      setError(
+        origen
+          ? `El jugador ${limpio} ya está en la lista con ${origen}.`
+          : `El jugador ${limpio} ya está en la lista como jugador libre.`
+      );
       return;
     }
+
+    // Un cliente individual representa a una sola persona.
     if (
-      origenNuevoAlias &&
+      origenNuevoAlias.startsWith("individual:") &&
       (cuentasSeleccionadas.has(origenNuevoAlias) ||
-        origenesUsados.has(origenNuevoAlias))
+        origenesIndividualesUsados.has(origenNuevoAlias))
     ) {
-      setError("La cuenta de origen ya está participando en esta partida.");
+      setError("Ese cliente individual ya está participando en esta partida.");
       return;
     }
+
     setAlias((actual) => [
       ...actual,
       { nombre: limpio, origen: origenNuevoAlias },
     ]);
-    registrarEquipo(claveAlias(limpio));
+    registrarEquipo(claveAlias(limpio, origenNuevoAlias));
     setNuevoAlias("");
     setOrigenNuevoAlias("");
     setError(null);
   };
 
-  const quitarAlias = (nombre: string) => {
-    setAlias((actual) => actual.filter((a) => a.nombre !== nombre));
-    quitarEquipo(claveAlias(nombre));
+  const quitarAlias = (jugador: AliasSeleccion) => {
+    setAlias((actual) =>
+      actual.filter(
+        (a) => !(a.nombre === jugador.nombre && a.origen === jugador.origen)
+      )
+    );
+    quitarEquipo(claveAlias(jugador.nombre, jugador.origen));
     setError(null);
   };
 
@@ -604,19 +616,34 @@ export default function IniciarPartidaBoliranaModal({
               </p>
             ) : (
               <div className="bolirana-opciones">
-                {individualesActivos.map((cliente) => (
-                  <label key={cliente.id} className="bolirana-opcion">
-                    <input
-                      type="checkbox"
-                      checked={individualesSeleccionados.includes(cliente.id)}
-                      onChange={() => alternarIndividual(cliente.id)}
-                      disabled={procesando}
-                    />
-                    <span>
-                      Individual — {cliente.nombre || "Cliente"}
-                    </span>
-                  </label>
-                ))}
+                {individualesActivos.map((cliente) => {
+                  const seleccionado = individualesSeleccionados.includes(
+                    cliente.id
+                  );
+                  const usadoComoOrigen = origenesIndividualesUsados.has(
+                    claveIndividual(cliente.id)
+                  );
+                  return (
+                    <label key={cliente.id} className="bolirana-opcion">
+                      <input
+                        type="checkbox"
+                        checked={seleccionado}
+                        onChange={() => alternarIndividual(cliente.id)}
+                        disabled={
+                          procesando || (usadoComoOrigen && !seleccionado)
+                        }
+                      />
+                      <span>
+                        Individual — {cliente.nombre || "Cliente"}
+                      </span>
+                      {usadoComoOrigen && !seleccionado && (
+                        <span className="bolirana-opcion-nota">
+                          ya agregado
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -625,8 +652,9 @@ export default function IniciarPartidaBoliranaModal({
         <section className="bolirana-alias-seccion">
           <h4>Jugadores / alias</h4>
           <p className="muted small">
-            Puedes vincular un alias a una mesa, barra o cliente individual
-            para cargarle su parte en esa cuenta.
+            Puedes agregar varios jugadores de la misma mesa o barra y
+            vincular cada alias a su cuenta para cargarle allí su parte. Los
+            clientes individuales solo se pueden agregar una vez.
           </p>
           <div className="bolirana-alias-fila">
             <input
@@ -673,15 +701,18 @@ export default function IniciarPartidaBoliranaModal({
             <div className="bolirana-alias-chips">
               {alias.map((jugador) => {
                 const origen = etiquetaOrigen(jugador.origen);
+                const clave = claveAlias(jugador.nombre, jugador.origen);
                 return (
-                  <span key={jugador.nombre} className="bolirana-chip">
+                  <span key={clave} className="bolirana-chip">
                     {jugador.nombre}
                     {origen ? ` · ${origen}` : ""}
                     <button
                       type="button"
                       className="btn-icon"
-                      title={`Quitar ${jugador.nombre}`}
-                      onClick={() => quitarAlias(jugador.nombre)}
+                      title={`Quitar ${jugador.nombre}${
+                        origen ? ` de ${origen}` : ""
+                      }`}
+                      onClick={() => quitarAlias(jugador)}
                       disabled={procesando}
                     >
                       <Icon nombre="cerrar" size={12} />
