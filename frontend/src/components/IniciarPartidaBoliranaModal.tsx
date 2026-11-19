@@ -438,6 +438,16 @@ export default function IniciarPartidaBoliranaModal({
         );
         return;
       }
+      // Todos los equipos creados deben tener al menos un integrante.
+      const equiposVacios = equipos.filter(
+        (equipo) => !equiposConIntegrantes.has(equipo)
+      );
+      if (equiposVacios.length > 0) {
+        setError(
+          `Asigna al menos un integrante a ${equiposVacios.join(", ")}.`
+        );
+        return;
+      }
     }
 
     setProcesando(true);
