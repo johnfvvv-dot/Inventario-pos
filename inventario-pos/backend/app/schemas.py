@@ -309,17 +309,20 @@ class TicketItemOut(BaseModel):
     cantidad: int
     precio_unitario: float
     subtotal: float
+    # Sub-línea del cargo (bebidas de la partida y fracción cobrada).
+    detalle: Optional[str] = None
 
 
 class TicketOut(BaseModel):
     id: str
-    tipo: str  # pedido | division
+    tipo: str  # pedido | division | individual
     folio: str
     mesa: str
     fecha_ocupacion: datetime
     fecha_pago: datetime
     alias: Optional[str] = None
     forma_pago: str = "efectivo"
+    total: Optional[float] = None
     items: List[TicketItemOut]
 
 
@@ -426,6 +429,7 @@ class PedidoOut(BaseModel):
     participante_id: Optional[int] = None
     alias: Optional[str] = None
     concepto: Optional[str] = None
+    concepto_detalle: Optional[str] = None
     bolirana_partida_id: Optional[int] = None
     es_pago_division: bool = False
     usuario_cierre_id: Optional[int] = None
@@ -463,14 +467,11 @@ class ParticipanteBoliranaIn(BaseModel):
             raise ValueError("Tipo de participante inválido.")
 
         if self.tipo == "alias":
-            if self.origen_tipo not in {None, "mesa", "barra", "individual"}:
-                raise ValueError("Cuenta de origen inválida.")
-            if self.origen_tipo is None:
-                if self.origen_mesa_id is not None or self.origen_barra_numero is not None:
-                    raise ValueError(
-                        "Selecciona el tipo de cuenta de origen del alias."
-                    )
-            elif self.origen_tipo in {"mesa", "individual"}:
+            if self.origen_tipo not in {"mesa", "barra", "individual"}:
+                raise ValueError(
+                    "Selecciona la mesa, barra o cliente individual del jugador."
+                )
+            if self.origen_tipo in {"mesa", "individual"}:
                 if self.origen_mesa_id is None:
                     raise ValueError(
                         "Selecciona la mesa o cliente individual del alias."

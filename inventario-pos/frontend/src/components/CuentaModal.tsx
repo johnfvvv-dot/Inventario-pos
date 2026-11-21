@@ -21,6 +21,8 @@ interface LineaItem {
   subtotal: number;
   participante_item_id?: number | null;
   pedido_id?: number | null;
+  /** Sub-línea de los cargos de Bolirana (bebidas y fracción). */
+  detalle?: string | null;
 }
 
 interface Participante {
@@ -49,6 +51,7 @@ interface Pedido {
   alias?: string | null;
   /** Concepto de los cargos sin productos (ej. consumo de Bolirana). */
   concepto?: string | null;
+  concepto_detalle?: string | null;
   items: LineaItem[];
 }
 
@@ -225,6 +228,7 @@ export default function CuentaModal({
             pedido_id: pedido.id,
             pedidoId: pedido.id,
             indice: 0,
+            detalle: pedido.concepto_detalle,
           },
         ];
       })
@@ -348,8 +352,13 @@ export default function CuentaModal({
                         item.producto_id ?? indice
                       }-${item.indice}`}
                     >
-                      <span>
+                      <span className="cuenta-linea-texto">
                         {item.cantidad} × {item.producto_nombre}
+                        {item.detalle && (
+                          <small className="cuenta-linea-detalle">
+                            {item.detalle}
+                          </small>
+                        )}
                       </span>
                       <strong>{formatearPrecio(item.subtotal)}</strong>
                     </div>

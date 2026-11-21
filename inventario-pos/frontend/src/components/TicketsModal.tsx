@@ -23,6 +23,8 @@ interface TicketItem {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  /** Sub-línea de los cargos de Bolirana (bebidas y fracción). */
+  detalle?: string | null;
 }
 
 interface Ticket {
@@ -136,9 +138,20 @@ function TicketCard({
         <div className="ticket-items-titulo">Productos</div>
         {ticket.items.map((item, indice) => (
           <div className="ticket-item" key={`${ticket.id}-${indice}`}>
-            <span className="ticket-item-nombre">{item.nombre}</span>
+            <span className="ticket-item-nombre">
+              {item.detalle
+                ? `${item.cantidad} × ${item.nombre}`
+                : item.nombre}
+              {item.detalle && (
+                <span className="ticket-item-detalle">{item.detalle}</span>
+              )}
+            </span>
             <span className="ticket-item-precio">
-              {item.cantidad} × {formatearPrecio(item.precio_unitario)}
+              {item.detalle
+                ? formatearPrecio(item.subtotal)
+                : `${item.cantidad} × ${formatearPrecio(
+                    item.precio_unitario
+                  )}`}
             </span>
           </div>
         ))}

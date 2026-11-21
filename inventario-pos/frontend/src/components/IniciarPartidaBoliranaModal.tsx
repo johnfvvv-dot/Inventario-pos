@@ -54,7 +54,7 @@ const claveIndividual = (id: number) => `individual:${id}`;
 const claveBarra = (numero: number) => `barra:${numero}`;
 // Un mismo nombre puede repetirse si está vinculado a cuentas distintas.
 const claveAlias = (nombre: string, origen: string) =>
-  `alias:${nombre.trim().toLowerCase()}:${origen || "libre"}`;
+  `alias:${nombre.trim().toLowerCase()}:${origen}`;
 
 export default function IniciarPartidaBoliranaModal({
   bolirana,
@@ -341,6 +341,12 @@ export default function IniciarPartidaBoliranaModal({
   const agregarAlias = () => {
     const limpio = nuevoAlias.trim();
     if (!limpio) return;
+    if (!origenNuevoAlias) {
+      setError(
+        "Selecciona la mesa, barra o cliente individual al que se carga el jugador."
+      );
+      return;
+    }
 
     // Solo se bloquea el mismo nombre con la misma cuenta de origen.
     const duplicado = alias.some(
@@ -350,11 +356,7 @@ export default function IniciarPartidaBoliranaModal({
     );
     if (duplicado) {
       const origen = etiquetaOrigen(origenNuevoAlias);
-      setError(
-        origen
-          ? `El jugador ${limpio} ya está en la lista con ${origen}.`
-          : `El jugador ${limpio} ya está en la lista como jugador libre.`
-      );
+      setError(`El jugador ${limpio} ya está en la lista con ${origen}.`);
       return;
     }
 
@@ -487,7 +489,6 @@ export default function IniciarPartidaBoliranaModal({
           alias: jugador.nombre,
           equipo,
         };
-        if (!jugador.origen) return base;
 
         const [tipoOrigen, valor] = jugador.origen.split(":");
         if (tipoOrigen === "barra") {
@@ -543,8 +544,8 @@ export default function IniciarPartidaBoliranaModal({
 
         <p className="muted small modal-nota">
           <Icon nombre="info" size={14} />
-          Elige mesas, barras, clientes individuales o jugadores libres.
-          Necesitas al menos dos participantes.
+          Elige mesas, barras o clientes individuales. Necesitas al menos dos
+          participantes.
         </p>
 
         <div className="bolirana-modalidad" role="group" aria-label="Modalidad">
@@ -662,9 +663,9 @@ export default function IniciarPartidaBoliranaModal({
         <section className="bolirana-alias-seccion">
           <h4>Jugadores / alias</h4>
           <p className="muted small">
-            Puedes agregar varios jugadores de la misma mesa o barra y
-            vincular cada alias a su cuenta para cargarle allí su parte. Los
-            clientes individuales solo se pueden agregar una vez.
+            Cada jugador debe estar vinculado a una mesa, barra o cliente
+            individual; su parte se cargará a esa cuenta. Los clientes
+            individuales solo se pueden agregar una vez.
           </p>
           <div className="bolirana-alias-fila">
             <input
@@ -685,8 +686,11 @@ export default function IniciarPartidaBoliranaModal({
               onChange={(e) => setOrigenNuevoAlias(e.target.value)}
               disabled={procesando}
               title="Cuenta de origen del alias"
+              required
             >
-              <option value="">Sin cuenta (jugador libre)</option>
+              <option value="" disabled>
+                Selecciona la cuenta de origen
+              </option>
               {gruposOrigen.map(([grupo, opciones]) => (
                 <optgroup key={grupo} label={grupo}>
                   {opciones.map((opcion) => (

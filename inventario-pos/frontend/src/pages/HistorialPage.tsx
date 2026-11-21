@@ -28,6 +28,7 @@ interface PedidoHistorial {
   usuario_nombre: string;
   usuario_cierre_nombre?: string;
   alias?: string | null;
+  concepto_detalle?: string | null;
   productos: string[];
 }
 
@@ -229,6 +230,7 @@ export default function HistorialPage() {
           "Forma de pago",
           "Total",
           "Productos",
+          "Detalle",
         ],
         ...todos.map((p) => [
           String(p.id),
@@ -244,7 +246,10 @@ export default function HistorialPage() {
             ? `Mixto: ${detallePagoMixto(p)}`
             : p.forma_pago,
           formatearPrecio(p.total),
-          p.productos.join(" | "),
+          p.concepto_detalle
+            ? `1 × ${p.productos.join(" | ")}`
+            : p.productos.join(" | "),
+          p.concepto_detalle || "",
         ]),
       ];
       const csv = filas
@@ -419,7 +424,14 @@ export default function HistorialPage() {
                       </span>
                     </td>
                     <td className="muted small historial-productos">
-                      {p.productos.join(", ")}
+                      {p.concepto_detalle
+                        ? `1 × ${p.productos.join(", ")}`
+                        : p.productos.join(", ")}
+                      {p.concepto_detalle && (
+                        <span className="historial-detalle">
+                          {p.concepto_detalle}
+                        </span>
+                      )}
                     </td>
                     <td className="historial-total">
                       <strong>{formatearPrecio(p.total)}</strong>

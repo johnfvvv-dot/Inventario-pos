@@ -641,6 +641,101 @@ def _etiqueta_mesa_ticket(
     return "Sin mesa"
 
 
+def _items_de_pedido_ticket(pedido: Pedido) -> List[TicketItemOut]:
+    """Líneas imprimibles de un pedido cerrado (productos o cargo)."""
+    items = [
+        TicketItemOut(
+            nombre=item.producto.nombre if item.producto else "Producto eliminado",
+            cantidad=item.cantidad,
+            precio_unitario=item.precio_unitario,
+            subtotal=item.subtotal,
+        )
+        for item in sorted(pedido.items, key=lambda i: i.id)
+    ]
+    if not items and pedido.concepto:
+        # Los cargos de Bolirana no llevan productos: se imprimen como una
+        # sola línea de concepto con su detalle de bebidas y fracción.
+        total_cargo = round(float(pedido.total or 0.0), 2)
+        items = [
+            TicketItemOut(
+                nombre=pedido.concepto,
+                cantidad=1,
+                precio_unitario=total_cargo,
+                subtotal=total_cargo,
+                detalle=pedido.concepto_detalle,
+            )
+        ]
+    return items
+
+
+def _forma_pago_consolidada(pedidos: List[Pedido]) -> str:
+    """Forma de pago de un ticket que agrupa varios pedidos."""
+    totales: dict = {}
+    for pedido in pedidos:
+        for forma, monto in _pagos_de_pedido(pedido):
+            totales[forma] = round(totales.get(forma, 0.0) + monto, 2)
+    if len(totales) > 1:
+        detalle = " + ".join(
+            f"{NOMBRES_FORMA_PAGO.get(forma, forma)} (${totales[forma]:.2f})"
+            for forma in FORMAS_PAGO
+            if forma in totales
+        )
+        return f"Mixto: {detalle}"
+    return next(iter(totales), "efectivo")
+
+
+def _ticket_individual(
+    grupo: List[Pedido], desde: datetime
+) -> Optional[TicketOut]:
+    """Un solo comprobante con todos los pedidos de un cliente individual."""
+    grupo = sorted(grupo, key=lambda p: (p.fecha or desde, p.id))
+    items: List[TicketItemOut] = []
+    indices: dict = {}
+    for pedido in grupo:
+        for item in _items_de_pedido_ticket(pedido):
+            if item.detalle:
+                # Cada cargo conserva su propia fracción y bebidas.
+                items.append(item)
+                continue
+            clave = (item.nombre, round(float(item.precio_unitario), 2))
+            if clave in indices:
+                existente = items[indices[clave]]
+                existente.cantidad += item.cantidad
+                existente.subtotal = round(
+                    existente.subtotal + item.subtotal, 2
+                )
+            else:
+                indices[clave] = len(items)
+                items.append(item)
+    if not items:
+        return None
+
+    primero = grupo[0]
+    ultimo = grupo[-1]
+    fecha_ocupacion = next(
+        (p.fecha_ocupacion for p in grupo if p.fecha_ocupacion),
+        primero.fecha or desde,
+    )
+    fecha_pago = ultimo.fecha_cierre or primero.fecha_cierre or desde
+    nombre_cliente = (
+        (primero.mesa.nombre if primero.mesa else None)
+        or primero.alias_cliente
+        or "Cliente"
+    )
+    return TicketOut(
+        id=f"individual-{primero.mesa_id or 0}-{primero.id}",
+        tipo="individual",
+        folio=f"I-{primero.id:05d}",
+        mesa="Individual",
+        fecha_ocupacion=fecha_ocupacion,
+        fecha_pago=fecha_pago,
+        alias=nombre_cliente,
+        forma_pago=_forma_pago_consolidada(grupo),
+        total=round(sum(float(item.subtotal) for item in items), 2),
+        items=items,
+    )
+
+
 @router.get("/tickets", response_model=TicketsTurnoOut)
 def tickets_turno(
     turno_id: Optional[int] = None, db: Session = Depends(get_db)
@@ -691,28 +786,24 @@ def tickets_turno(
         .order_by(Pedido.fecha_cierre, Pedido.id)
         .all()
     )
+
+    # Los pedidos de un cliente individual se consolidan en un solo ticket
+    # por cobro. El resto conserva un comprobante por pedido.
+    individuales: dict = {}
+    sueltos: List[Pedido] = []
     for pedido in pedidos:
-        items = [
-            TicketItemOut(
-                nombre=item.producto.nombre if item.producto else "Producto eliminado",
-                cantidad=item.cantidad,
-                precio_unitario=item.precio_unitario,
-                subtotal=item.subtotal,
-            )
-            for item in sorted(pedido.items, key=lambda i: i.id)
-        ]
-        if not items and pedido.concepto:
-            # Los cargos de Bolirana no llevan productos: se imprimen como
-            # una sola línea de concepto por el total transferido.
-            total_cargo = round(float(pedido.total or 0.0), 2)
-            items = [
-                TicketItemOut(
-                    nombre=pedido.concepto,
-                    cantidad=1,
-                    precio_unitario=total_cargo,
-                    subtotal=total_cargo,
-                )
-            ]
+        es_individual = bool(
+            pedido.mesa
+            and (pedido.mesa.tipo or "mesa") == "individual"
+        ) or pedido.mesa_etiqueta_historica == "Individual"
+        if es_individual and pedido.mesa_id is not None:
+            clave = (pedido.mesa_id, pedido.fecha_cierre)
+            individuales.setdefault(clave, []).append(pedido)
+        else:
+            sueltos.append(pedido)
+
+    for pedido in sueltos:
+        items = _items_de_pedido_ticket(pedido)
         if not items:
             continue
         tickets.append(
@@ -729,9 +820,15 @@ def tickets_turno(
                 fecha_pago=pedido.fecha_cierre or hasta,
                 alias=pedido.alias_cliente,
                 forma_pago=_etiqueta_forma_pago(pedido),
+                total=round(sum(float(item.subtotal) for item in items), 2),
                 items=items,
             )
         )
+
+    for grupo in individuales.values():
+        ticket = _ticket_individual(grupo, desde)
+        if ticket:
+            tickets.append(ticket)
 
     # Un ticket por cada cliente que pagó su parte de una división.
     participantes = (
@@ -814,6 +911,9 @@ def tickets_turno(
                 forma_pago=participante.forma_pago
                 or (division.forma_pago if division else None)
                 or "efectivo",
+                total=round(
+                    sum(float(item.subtotal) for item in items), 2
+                ),
                 items=items,
             )
         )
@@ -1001,6 +1101,7 @@ def historial_ventas(
                     else pedido.alias_cliente
                 ),
                 "concepto": pedido.concepto,
+                "concepto_detalle": pedido.concepto_detalle,
                 "productos": productos_txt,
             }
         )

@@ -99,6 +99,7 @@ def _pedido_out(pedido: Pedido) -> PedidoOut:
             else pedido.alias_cliente
         ),
         concepto=pedido.concepto,
+        concepto_detalle=pedido.concepto_detalle,
         bolirana_partida_id=pedido.bolirana_partida_id,
         es_pago_division=bool(pedido.es_pago_division),
         usuario_cierre_id=pedido.usuario_cierre_id,

@@ -3,9 +3,8 @@
  *
  * En modalidad directa reparte el total entre los participantes perdedores.
  * En modalidad por equipos reparte primero entre los equipos perdedores y
- * luego entre los integrantes de cada equipo. Las mesas, barras, clientes
- * individuales y alias vinculados reciben el cargo en su cuenta; los alias
- * libres quedan como cargos pendientes de cobro.
+ * luego entre los integrantes de cada equipo. Todas las partes se cargan a
+ * la cuenta de origen (mesa, barra o cliente individual).
  */
 
 import { FormEvent, useMemo, useState } from "react";
@@ -22,10 +21,7 @@ interface Props {
   bolirana: Bolirana;
   partida: PartidaBolirana;
   onClose: () => void;
-  onLiquidado: (opciones: {
-    cobrarAliasAhora: boolean;
-    partidaId: number;
-  }) => void;
+  onLiquidado: () => void;
 }
 
 interface EquipoPartida {
@@ -53,7 +49,6 @@ export default function LiquidarPartidaBoliranaModal({
   const usuarioId = Number(usuario?.id) || 1;
   const [perdedores, setPerdedores] = useState<number[]>([]);
   const [equiposPerdedores, setEquiposPerdedores] = useState<string[]>([]);
-  const [cobrarAliasAhora, setCobrarAliasAhora] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
 
@@ -122,25 +117,6 @@ export default function LiquidarPartidaBoliranaModal({
     ? Math.round((total / cantidad) * 100) / 100
     : 0;
 
-  const hayAliasPerdedor = useMemo(() => {
-    if (esEquipos) {
-      return equipos
-        .filter((equipo) => equiposPerdedores.includes(equipo.nombre))
-        .some((equipo) =>
-          equipo.integrantes.some(
-            (participante) =>
-              participante.tipo === "alias" && !participante.origen_tipo
-          )
-        );
-    }
-    return partida.participantes.some(
-      (participante) =>
-        perdedores.includes(participante.id) &&
-        participante.tipo === "alias" &&
-        !participante.origen_tipo
-    );
-  }, [esEquipos, equipos, equiposPerdedores, partida.participantes, perdedores]);
-
   const alternarPerdedor = (id: number) => {
     setPerdedores((actual) =>
       actual.includes(id) ? actual.filter((p) => p !== id) : [...actual, id]
@@ -180,10 +156,7 @@ export default function LiquidarPartidaBoliranaModal({
           ? { equipos_perdedores: equiposPerdedores }
           : { perdedores }),
       });
-      onLiquidado({
-        cobrarAliasAhora: cobrarAliasAhora && hayAliasPerdedor,
-        partidaId: partida.id,
-      });
+      onLiquidado();
       onClose();
     } catch (err: any) {
       setError(err?.message || "No se pudo liquidar la partida.");
@@ -363,25 +336,10 @@ export default function LiquidarPartidaBoliranaModal({
               </div>
             )}
 
-            {hayAliasPerdedor && (
-              <label className="bolirana-check-cobro">
-                <input
-                  type="checkbox"
-                  checked={cobrarAliasAhora}
-                  onChange={(e) => setCobrarAliasAhora(e.target.checked)}
-                  disabled={procesando}
-                />
-                <span>
-                  Cobrar ahora el cargo pendiente del jugador libre al confirmar
-                </span>
-              </label>
-            )}
-
             <p className="muted small">
-              Las mesas, barras y clientes individuales perdedores reciben el
-              cargo en su cuenta general. Los alias vinculados se cargan a su
-              cuenta de origen y los alias libres quedan como cargos pendientes
-              de cobro.
+              Todas las partes se cargan a la cuenta de origen de cada
+              perdedor: mesa, barra o cliente individual. Los jugadores
+              vinculados a una misma cuenta aparecen como cargos separados.
             </p>
           </section>
         </div>

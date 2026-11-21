@@ -13,6 +13,7 @@ export interface TicketImagenItem {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  detalle?: string | null;
 }
 
 export interface TicketImagen {
@@ -149,22 +150,35 @@ function crearCanvasTicket(ticket: TicketImagen, nombreNegocio: string): HTMLCan
   });
 
   for (const item of ticket.items) {
-    const detalle = `${item.cantidad} × ${formatearPrecio(item.precio_unitario)}`;
+    const titulo = item.detalle
+      ? `${item.cantidad} × ${item.nombre}`
+      : item.nombre;
+    const detalleDerecha = item.detalle
+      ? formatearPrecio(item.subtotal)
+      : `${item.cantidad} × ${formatearPrecio(item.precio_unitario)}`;
     ctx.font = FUENTE_BASE;
-    const anchoDetalle = ctx.measureText(detalle).width;
+    const anchoDetalle = ctx.measureText(detalleDerecha).width;
     const partes = envolverTexto(
       ctx,
-      item.nombre,
+      titulo,
       anchoUtil - anchoDetalle - 12
     );
     partes.forEach((parte, indice) => {
       lineas.push({
         izquierda: parte,
-        derecha: indice === 0 ? detalle : undefined,
+        derecha: indice === 0 ? detalleDerecha : undefined,
         font: FUENTE_BASE,
         margenArriba: indice === 0 ? 6 : 0,
       });
     });
+    if (item.detalle) {
+      lineas.push({
+        izquierda: item.detalle,
+        font: FUENTE_MINI,
+        color: "#6b7785",
+        margenArriba: 1,
+      });
+    }
   }
 
   lineas.push({ separador: true, margenArriba: 10, margenAbajo: 5 });
