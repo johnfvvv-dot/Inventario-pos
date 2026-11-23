@@ -311,6 +311,8 @@ class TicketItemOut(BaseModel):
     subtotal: float
     # Sub-línea del cargo (bebidas de la partida y fracción cobrada).
     detalle: Optional[str] = None
+    # true cuando la línea es un cargo de Bolirana y no un producto.
+    es_cargo: bool = False
 
 
 class TicketOut(BaseModel):
@@ -430,6 +432,11 @@ class PedidoOut(BaseModel):
     alias: Optional[str] = None
     concepto: Optional[str] = None
     concepto_detalle: Optional[str] = None
+    bolirana_numero: Optional[int] = None
+    bolirana_equipo: Optional[str] = None
+    bolirana_fraccion_num: Optional[int] = None
+    bolirana_fraccion_den: Optional[int] = None
+    bolirana_bebidas: Optional[str] = None
     bolirana_partida_id: Optional[int] = None
     es_pago_division: bool = False
     usuario_cierre_id: Optional[int] = None

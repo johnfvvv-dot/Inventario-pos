@@ -246,9 +246,7 @@ export default function HistorialPage() {
             ? `Mixto: ${detallePagoMixto(p)}`
             : p.forma_pago,
           formatearPrecio(p.total),
-          p.concepto_detalle
-            ? `1 × ${p.productos.join(" | ")}`
-            : p.productos.join(" | "),
+          p.productos.join(" | "),
           p.concepto_detalle || "",
         ]),
       ];
@@ -424,9 +422,7 @@ export default function HistorialPage() {
                       </span>
                     </td>
                     <td className="muted small historial-productos">
-                      {p.concepto_detalle
-                        ? `1 × ${p.productos.join(", ")}`
-                        : p.productos.join(", ")}
+                      {p.productos.join(", ")}
                       {p.concepto_detalle && (
                         <span className="historial-detalle">
                           {p.concepto_detalle}

@@ -29,11 +29,14 @@ class CuentasAsignacionTest(unittest.TestCase):
     def setUpClass(cls):
         cls.client_ctx = TestClient(app)
         cls.client = cls.client_ctx.__enter__()
-        respuesta = cls.client.post(
-            "/api/caja/abrir-turno",
-            json={"usuario_id": 1, "fondo_inicial": 0},
-        )
-        assert respuesta.status_code == 200, respuesta.text
+        # La suite completa puede dejar un turno abierto de otro módulo.
+        turno = cls.client.get("/api/caja/turno-actual")
+        if not (turno.status_code == 200 and turno.json()):
+            respuesta = cls.client.post(
+                "/api/caja/abrir-turno",
+                json={"usuario_id": 1, "fondo_inicial": 0},
+            )
+            assert respuesta.status_code == 200, respuesta.text
         productos = cls.client.get("/api/inventario/?limite=500").json()["items"]
         cls.productos = {p["nombre"]: p for p in productos}
         cls.p1 = cls.productos["Hamburguesa"]

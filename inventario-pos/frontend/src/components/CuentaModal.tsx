@@ -23,6 +23,8 @@ interface LineaItem {
   pedido_id?: number | null;
   /** Sub-línea de los cargos de Bolirana (bebidas y fracción). */
   detalle?: string | null;
+  /** True cuando la línea es un cargo de Bolirana y no un producto. */
+  es_cargo?: boolean;
 }
 
 interface Participante {
@@ -52,6 +54,12 @@ interface Pedido {
   /** Concepto de los cargos sin productos (ej. consumo de Bolirana). */
   concepto?: string | null;
   concepto_detalle?: string | null;
+  bolirana_numero?: number | null;
+  bolirana_equipo?: string | null;
+  bolirana_fraccion_num?: number | null;
+  bolirana_fraccion_den?: number | null;
+  bolirana_bebidas?: string | null;
+  bolirana_partida_id?: number | null;
   items: LineaItem[];
 }
 
@@ -84,6 +92,136 @@ interface Props {
   onDividir?: () => void;
   onTransferir?: () => void;
   onActualizado?: () => void;
+}
+
+interface LineaGeneral extends LineaItem {
+  pedidoId: number;
+  indice: number;
+}
+
+/** Une nombres con lenguaje natural: "Fabio y Camilo". */
+function unirNombres(nombres: string[]): string {
+  if (nombres.length <= 1) return nombres[0] || "";
+  if (nombres.length === 2) return `${nombres[0]} y ${nombres[1]}`;
+  return `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
+}
+
+/** Fracción compacta y reducida: ½, 1/3, 2/3, 1/4... */
+function fraccionCorta(numerador: number, denominador: number): string | null {
+  if (denominador <= 0 || numerador >= denominador) return null;
+  const mcd = (a: number, b: number): number => (b === 0 ? a : mcd(b, a % b));
+  const divisor = mcd(numerador, denominador);
+  const num = numerador / divisor;
+  const den = denominador / divisor;
+  if (num === 1 && den === 2) return "½";
+  return `${num}/${den}`;
+}
+
+/** Título agrupado: "Bolirana #1 · Fabio y Camilo (Equipo B)". */
+function tituloCargoGrupo(cargos: Pedido[]): string {
+  const primero = cargos[0];
+  let numero =
+    cargos.find((p) => p.bolirana_numero != null)?.bolirana_numero ?? null;
+  if (numero == null) {
+    for (const pedido of cargos) {
+      const coincidencia = /#\s*(\d+)/.exec(pedido.concepto || "");
+      if (coincidencia) {
+        numero = Number(coincidencia[1]);
+        break;
+      }
+    }
+  }
+  if (numero == null) return primero.concepto || "Bolirana";
+
+  const nombres: string[] = [];
+  for (const pedido of cargos) {
+    const alias = (pedido.alias || "").trim();
+    if (alias && !nombres.includes(alias)) nombres.push(alias);
+  }
+  const equipo = cargos.find((p) => p.bolirana_equipo)?.bolirana_equipo;
+
+  let titulo = `Bolirana #${numero}`;
+  if (nombres.length > 0) titulo += ` · ${unirNombres(nombres)}`;
+  if (equipo) titulo += ` (${equipo})`;
+  return titulo;
+}
+
+/** Sub-línea agrupada: "2/3 de: ..." o "Ronda completa: ...". */
+function detalleCargoGrupo(cargos: Pedido[]): string | null {
+  const bebidas = cargos.find((p) => p.bolirana_bebidas)?.bolirana_bebidas;
+  const fracciones = cargos.map((p) => ({
+    num: p.bolirana_fraccion_num,
+    den: p.bolirana_fraccion_den,
+  }));
+  if (
+    bebidas &&
+    fracciones.every((f) => f.num != null && f.den != null && f.den > 0)
+  ) {
+    const denominador = fracciones[0].den as number;
+    if (fracciones.every((f) => f.den === denominador)) {
+      const numerador = fracciones.reduce((suma, f) => suma + (f.num || 0), 0);
+      const fraccion = fraccionCorta(numerador, denominador);
+      return fraccion
+        ? `${fraccion} de: ${bebidas}`
+        : `Ronda completa: ${bebidas}`;
+    }
+  }
+  return cargos.find((p) => p.concepto_detalle)?.concepto_detalle || null;
+}
+
+/**
+ * Líneas de la Cuenta General. Los productos se listan uno a uno y los
+ * cargos de Bolirana de una misma partida se agrupan en una sola fila,
+ * sumando montos y fracciones (por ejemplo "2/3 de: ...").
+ */
+function construirLineasGenerales(pedidos: Pedido[]): LineaGeneral[] {
+  const lineas: LineaGeneral[] = [];
+  const cargos = new Map<
+    string,
+    { linea: LineaGeneral; pedidos: Pedido[] }
+  >();
+
+  for (const pedido of pedidos) {
+    if (pedido.items.length > 0) {
+      pedido.items.forEach((item, indice) => {
+        lineas.push({ ...item, pedidoId: pedido.id, indice });
+      });
+      continue;
+    }
+    if (!pedido.concepto) continue;
+
+    const clave =
+      pedido.bolirana_partida_id != null
+        ? `partida-${pedido.bolirana_partida_id}`
+        : `pedido-${pedido.id}`;
+    const acumulado = cargos.get(clave);
+    if (acumulado) {
+      acumulado.pedidos.push(pedido);
+      acumulado.linea.cantidad += 1;
+      acumulado.linea.subtotal = Number(
+        (acumulado.linea.subtotal + Number(pedido.total || 0)).toFixed(2)
+      );
+      acumulado.linea.producto_nombre = tituloCargoGrupo(acumulado.pedidos);
+      acumulado.linea.detalle = detalleCargoGrupo(acumulado.pedidos);
+      continue;
+    }
+
+    const linea: LineaGeneral = {
+      producto_id: 0,
+      producto_nombre: tituloCargoGrupo([pedido]),
+      cantidad: 1,
+      subtotal: Number(pedido.total || 0),
+      pedido_id: pedido.id,
+      pedidoId: pedido.id,
+      indice: 0,
+      detalle: detalleCargoGrupo([pedido]),
+      es_cargo: true,
+    };
+    cargos.set(clave, { linea, pedidos: [pedido] });
+    lineas.push(linea);
+  }
+
+  return lineas;
 }
 
 export default function CuentaModal({
@@ -207,32 +345,7 @@ export default function CuentaModal({
     setErrorCobro(null);
   };
 
-  const lineasGenerales = cuenta
-    ? cuenta.pedidos.flatMap((pedido) => {
-        if (pedido.items.length > 0) {
-          return pedido.items.map((item, indice) => ({
-            ...item,
-            pedidoId: pedido.id,
-            indice,
-          }));
-        }
-        if (!pedido.concepto) return [];
-        // Cargos de Bolirana: no tienen productos, se muestran como una
-        // sola línea de concepto por el total transferido.
-        return [
-          {
-            producto_id: 0,
-            producto_nombre: pedido.concepto,
-            cantidad: 1,
-            subtotal: pedido.total,
-            pedido_id: pedido.id,
-            pedidoId: pedido.id,
-            indice: 0,
-            detalle: pedido.concepto_detalle,
-          },
-        ];
-      })
-    : [];
+  const lineasGenerales = cuenta ? construirLineasGenerales(cuenta.pedidos) : [];
 
   const clientes = cuenta
     ? cuenta.divisiones.flatMap((division) =>
@@ -353,7 +466,9 @@ export default function CuentaModal({
                       }-${item.indice}`}
                     >
                       <span className="cuenta-linea-texto">
-                        {item.cantidad} × {item.producto_nombre}
+                        {item.es_cargo
+                          ? item.producto_nombre
+                          : `${item.cantidad} × ${item.producto_nombre}`}
                         {item.detalle && (
                           <small className="cuenta-linea-detalle">
                             {item.detalle}

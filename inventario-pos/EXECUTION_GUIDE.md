@@ -1,5 +1,7 @@
 # Guía de Ejecución Local - Inventario POS
 
+**Versión:** 1.6.3 · **Última actualización:** 23/11/2026
+
 ## Requisitos Previos para tu PC
 
 ### 1. Instalar Python 3.11+
@@ -179,12 +181,26 @@ Para que otros dispositivos en tu red local puedan acceder:
 
 Al ejecutar por primera vez, el sistema crea un usuario administrador:
 
-- **Email**: admin@localpos.com
-- **Nombre**: Administrador
-- **Rol**: admin
-- **Contraseña**: (ninguna por defecto, usar el sistema de login)
+- **Usuario:** `Admin`
+- **Clave inicial:** `1234` (cámbiala al empezar a operar)
+- **Rol:** `admin`
 
-Para crear un usuario mesero, registrarse a través de la aplicación o crear manualmente en la base de datos.
+Desde **Usuarios → Usuarios registrados** el Administrador crea Bartenders con
+alias, rol y clave inicial `1234`, y habilita por usuario:
+
+- **Ingreso de Stock:** muestra al Bartender la columna para sumar stock.
+- **Edición de pedidos:** permite cambiar cantidades con los botones `− / +`.
+- **Bolirana:** el interruptor global se controla desde Personalización; el
+  Bartender solo opera partidas cuando está activo.
+
+Otros roles:
+
+- **`admin`:** acceso total, reportes, historial, personalización y usuarios.
+- **`bartender`:** inventario en solo lectura, mesas/barras, pedidos, clientes
+  individuales, Para llevar, Bolirana (si está activa) y corte de caja.
+
+No se usan correos ni tokens JWT: el login valida el campo `usuario` y el
+control de rutas se aplica en el cliente (`/admin` y `/bartender`).
 
 ---
 
@@ -225,7 +241,7 @@ NODE_ENV=production
 **Solución**: `pip install sqlalchemy`
 
 ### Error: "Address already in use" (puerto 8000 o 3000)
-**Solución**: 
+**Solución**:
 - Detener cualquier proceso anterior que use esos puertos
 - Cambiar los puertos en los scripts: `--port 8001` o `--port 3001`
 - Usar `lsof -i :8000` para encontrar y matar el proceso
@@ -279,13 +295,61 @@ cp backend/inventario.db ~/backup/inventario_fecha.db
 
 ---
 
+## Módulos, colores y flujos principales
+
+La interfaz usa tarjetas blancas con pestaña de color por módulo. El menú
+lateral repite el acento pastel del módulo activo:
+
+| Módulo | Color | Contenido |
+|---|---|---|
+| Inventario | `emerald-500` | Productos, categorías y stock |
+| Mesas | `cyan-500` | Mesas, barras y clientes individuales |
+| Pedidos | `blue-500` | Carrito, Para llevar y cobro |
+| Bolirana | `orange-500` | Partidas, equipos, bebidas y cargos |
+| Reportes | `indigo-500` | KPIs, gráficos y CSV |
+| Corte de caja | `amber-500` | Turnos, tickets y cierre |
+| Historial | `violet-500` | Ventas y exportación |
+| Personalización | `pink-500` | Nombre, logo e interruptor de Bolirana |
+| Usuarios | `sky-600` | Roles y permisos por usuario |
+
+Flujos que conviene probar después de instalar:
+
+1. **Mesa/barra:** crear, ocupar, pedido, cuenta, dividir, transferir y cobrar.
+2. **Para llevar:** elegir el destino, agregar productos, cobrar con pago simple
+   o mixto y verificar que no se ocupa ninguna mesa.
+3. **Cliente individual:** crearlo en Mesas, agregar pedidos, cobrar y confirmar
+   que la tarjeta se archiva sin perder historial ni ticket.
+4. **Bolirana:** activar el módulo en Personalización, crear una bolirana,
+   iniciar una partida con cuentas de origen, cargar bebidas, finalizar con
+   perdedores y comprobar el cargo agrupado en Cuenta y Tickets.
+5. **Caja:** abrir turno, cobrar, revisar tickets consolidados y cerrar el turno.
+
+## Reglas de protección
+
+- El stock se descuenta una sola vez por venta. Los cargos de Bolirana no
+  vuelven a descontar stock ni crean una segunda venta.
+- Los pedidos cerrados no se editan ni eliminan desde la operación normal; sus
+  etiquetas históricas se conservan aunque la mesa/barra se elimine.
+- Todo participante de Bolirana proviene de una mesa, barra o cliente
+  individual; no se permiten jugadores libres.
+- Una cuenta en partida activa no se cobra, divide, transfiere ni libera, y el
+  turno no cierra con partidas activas o cargos pendientes.
+- Antes de publicar: 27 pruebas de backend, `npx tsc --noEmit` y build de
+  producción sin errores.
+
+---
+
 ## Características del Sistema
 
-✅ **Multi-usuario**: Roles admin y mesero  
-✅ **Inventario**: Registro de entrada y salida automática  
-✅ **Gestión de mesas**: Asignar pedidos, consumo por mesa, dividir cuentas  
-✅ **Reportes**: Ventas e inventario con KPIs  
-✅ **Responsive**: Funciona en PC, tablet y smartphone  
-✅ **Local-first**: Sin costos de servidor iniciales  
-✅ **Escalable**: Migración a PostgreSQL y hosting en la nube  
+✅ **Multi-usuario**: Roles `admin` y `bartender` con permisos por usuario
+✅ **Inventario**: Registro de entrada y salida automática
+✅ **Gestión de mesas**: Asignar pedidos, consumo por mesa, dividir cuentas
+✅ **Para llevar**: Venta de mostrador con pago simple o mixto
+✅ **Clientes individuales**: Cuenta propia y archivo automático al saldar
+✅ **Bolirana**: Partidas, equipos, bebidas y cargos por cuenta
+✅ **Reportes**: Ventas e inventario con KPIs
+✅ **Tickets consolidados**: Un comprobante por cuenta cobrada
+✅ **Responsive**: Funciona en PC, tablet y smartphone
+✅ **Local-first**: Sin costos de servidor iniciales
+✅ **Escalable**: Migración a PostgreSQL y hosting en la nube
 ✅ **Versionado**: Git con ramas main, dev, feature/*

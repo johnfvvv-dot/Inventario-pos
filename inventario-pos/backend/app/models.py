@@ -139,6 +139,13 @@ class Pedido(Base):
     concepto = Column(String(140), nullable=True)
     # Sub-línea visible del cargo (bebidas y fracción que paga la cuenta).
     concepto_detalle = Column(String(400), nullable=True)
+    # Metadatos del cargo de Bolirana para agrupar y mostrar fracciones sin
+    # depender del texto: número de máquina, equipo, fracción y bebidas.
+    bolirana_numero = Column(Integer, nullable=True)
+    bolirana_equipo = Column(String(60), nullable=True)
+    bolirana_fraccion_num = Column(Integer, nullable=True)
+    bolirana_fraccion_den = Column(Integer, nullable=True)
+    bolirana_bebidas = Column(String(400), nullable=True)
     # Partida de bolirana que originó el consumo o el cargo transferido.
     bolirana_partida_id = Column(
         Integer, ForeignKey("partidas_bolirana.id"), nullable=True, index=True

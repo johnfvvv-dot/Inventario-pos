@@ -25,6 +25,8 @@ interface TicketItem {
   subtotal: number;
   /** Sub-línea de los cargos de Bolirana (bebidas y fracción). */
   detalle?: string | null;
+  /** True cuando la línea es un cargo de Bolirana y no un producto. */
+  es_cargo?: boolean;
 }
 
 interface Ticket {
@@ -139,15 +141,15 @@ function TicketCard({
         {ticket.items.map((item, indice) => (
           <div className="ticket-item" key={`${ticket.id}-${indice}`}>
             <span className="ticket-item-nombre">
-              {item.detalle
-                ? `${item.cantidad} × ${item.nombre}`
-                : item.nombre}
+              {item.es_cargo
+                ? item.nombre
+                : `${item.cantidad} × ${item.nombre}`}
               {item.detalle && (
                 <span className="ticket-item-detalle">{item.detalle}</span>
               )}
             </span>
             <span className="ticket-item-precio">
-              {item.detalle
+              {item.es_cargo
                 ? formatearPrecio(item.subtotal)
                 : `${item.cantidad} × ${formatearPrecio(
                     item.precio_unitario

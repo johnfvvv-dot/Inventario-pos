@@ -77,37 +77,49 @@ def _etiqueta_bolirana(nombre: str) -> str:
     return limpio or "Bolirana"
 
 
-def _concepto_partida(partida: PartidaBolirana) -> str:
-    """Concepto único con el que se registra el consumo de una partida."""
+def _numero_bolirana(partida: PartidaBolirana) -> int:
+    """Número visible de la máquina; usa el primer número del nombre."""
     nombre = _etiqueta_bolirana(partida.bolirana.nombre)
     coincidencia = re.search(r"\d+", nombre)
-    numero = coincidencia.group(0) if coincidencia else str(partida.bolirana_id)
-    return f"Consumo Bolirana # {numero} (Partida)"
+    if coincidencia:
+        return int(coincidencia.group(0))
+    return int(partida.bolirana_id or 0)
 
 
-def _fraccion_texto(denominador: int) -> str:
-    """Nombre visible de la fracción que paga una cuenta."""
-    if denominador <= 1:
-        return "Total"
-    if denominador == 2:
-        return "Mitad"
-    if denominador == 3:
-        return "Tercera parte"
-    if denominador == 4:
-        return "Cuarta parte"
-    return f"1/{denominador} parte"
+def _concepto_partida(partida: PartidaBolirana) -> str:
+    """Título corto del cargo: "Bolirana #1"."""
+    return f"Bolirana #{_numero_bolirana(partida)}"
+
+
+def _fraccion_corta(numerador: int, denominador: int) -> Optional[str]:
+    """Fracción compacta: ½, 1/3, 2/3, 1/4, 3/4, 1/5..."""
+    if denominador <= 0 or numerador >= denominador:
+        return None
+    if numerador == 1 and denominador == 2:
+        return "½"
+    return f"{numerador}/{denominador}"
+
+
+def _bebidas_texto(consumo: List[ConsumoBoliranaOut]) -> Optional[str]:
+    """Lista corta de bebidas: "2 Aguila 350ml · 2 Poker 350ml"."""
+    if not consumo:
+        return None
+    return " · ".join(
+        f"{item.cantidad} {item.producto_nombre}" for item in consumo
+    )
 
 
 def _detalle_cargo(
-    consumo: List[ConsumoBoliranaOut], denominador: int
+    consumo: List[ConsumoBoliranaOut], numerador: int, denominador: int
 ) -> Optional[str]:
-    """Sub-línea del cargo: bebidas exactas y fracción que paga la cuenta."""
-    if not consumo:
+    """Sub-línea del cargo: fracción y bebidas exactas de la ronda."""
+    bebidas = _bebidas_texto(consumo)
+    if not bebidas:
         return None
-    bebidas = ", ".join(
-        f"{item.cantidad} × {item.producto_nombre}" for item in consumo
-    )
-    return f"{_fraccion_texto(denominador)} de ({bebidas})"
+    fraccion = _fraccion_corta(numerador, denominador)
+    if fraccion is None:
+        return f"Ronda completa: {bebidas}"
+    return f"{fraccion} de: {bebidas}"
 
 
 def _exigir_admin(db: Session, usuario_id: int) -> Usuario:
@@ -337,13 +349,16 @@ def _mesa_destino_participante(
 def _concepto_cargo(
     partida: PartidaBolirana, participante: ParticipanteBolirana
 ) -> str:
-    """Concepto del cargo; en equipos indica jugador y equipo perdedor."""
+    """Título del cargo: "Bolirana #1 · Fabio (Equipo B)"."""
     concepto = _concepto_partida(partida)
-    if partida.modalidad == "equipos" and participante.equipo:
-        jugador = f"{participante.alias} · " if participante.alias else ""
-        return f"{concepto} — {jugador}{participante.equipo} (Equipo perdedor)"
-    if participante.tipo == "alias" and participante.alias:
-        return f"{concepto} — {participante.alias}"
+    jugador = participante.alias if participante.tipo == "alias" else None
+    equipo = participante.equipo or None
+    if jugador and equipo:
+        return f"{concepto} · {jugador} ({equipo})"
+    if jugador:
+        return f"{concepto} · {jugador}"
+    if equipo:
+        return f"{concepto} · {equipo}"
     return concepto
 
 
@@ -356,6 +371,9 @@ def _crear_cargo_cuenta(
     usuario_id: int,
     ahora,
     detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> Pedido:
     """Crea un cargo abierto en la cuenta de origen del perdedor."""
     alias_cliente = None
@@ -372,6 +390,11 @@ def _crear_cargo_cuenta(
         estado="abierto",
         concepto=_concepto_cargo(partida, participante),
         concepto_detalle=detalle,
+        bolirana_numero=_numero_bolirana(partida),
+        bolirana_equipo=participante.equipo or None,
+        bolirana_fraccion_num=fraccion_num,
+        bolirana_fraccion_den=fraccion_den,
+        bolirana_bebidas=bebidas,
         bolirana_partida_id=partida.id,
         fecha_ocupacion=mesa.fecha_ocupacion or ahora,
         alias_cliente=alias_cliente,
@@ -394,6 +417,9 @@ def _crear_cargo_alias(
     usuario_id: int,
     ahora,
     detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> Pedido:
     """Cargo legacy para jugadores libres de partidas antiguas.
 
@@ -408,6 +434,11 @@ def _crear_cargo_alias(
         estado="pendiente",
         concepto=_concepto_cargo(partida, participante),
         concepto_detalle=detalle,
+        bolirana_numero=_numero_bolirana(partida),
+        bolirana_equipo=participante.equipo or None,
+        bolirana_fraccion_num=fraccion_num,
+        bolirana_fraccion_den=fraccion_den,
+        bolirana_bebidas=bebidas,
         bolirana_partida_id=partida.id,
         fecha_ocupacion=ahora,
         alias_cliente=participante.alias,
@@ -429,6 +460,9 @@ def _liquidar_participante(
     usuario_id: int,
     ahora,
     detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> None:
     """Marca al perdedor y crea su cargo en la cuenta que corresponda."""
     participante.es_perdedor = 1
@@ -440,12 +474,31 @@ def _liquidar_participante(
     mesa = _mesa_destino_participante(db, participante)
     if mesa is not None:
         cargo = _crear_cargo_cuenta(
-            db, partida, participante, mesa, monto, usuario_id, ahora, detalle
+            db,
+            partida,
+            participante,
+            mesa,
+            monto,
+            usuario_id,
+            ahora,
+            detalle,
+            bebidas,
+            fraccion_num,
+            fraccion_den,
         )
         participante.estado_pago = "transferido"
     else:
         cargo = _crear_cargo_alias(
-            db, partida, participante, monto, usuario_id, ahora, detalle
+            db,
+            partida,
+            participante,
+            monto,
+            usuario_id,
+            ahora,
+            detalle,
+            bebidas,
+            fraccion_num,
+            fraccion_den,
         )
         participante.estado_pago = "pendiente"
     participante.pedido_cobro_id = cargo.id
@@ -1000,6 +1053,7 @@ def finalizar_partida(
     )
     partida.total_bebidas = total
     consumo = _consumo_partida(db, partida.id)
+    bebidas = _bebidas_texto(consumo)
 
     ahora = ahora_local()
 
@@ -1024,7 +1078,7 @@ def finalizar_partida(
             integrantes = equipos[nombre_equipo]
             montos = _repartir(monto_equipo, len(integrantes))
             denominador = len(equipos_perdedores) * len(integrantes)
-            detalle = _detalle_cargo(consumo, denominador)
+            detalle = _detalle_cargo(consumo, 1, denominador)
             for integrante, monto in zip(integrantes, montos):
                 _liquidar_participante(
                     db,
@@ -1034,10 +1088,14 @@ def finalizar_partida(
                     datos.usuario_id,
                     ahora,
                     detalle,
+                    bebidas,
+                    1,
+                    denominador,
                 )
     else:
         montos = _repartir(total, len(datos.perdedores))
-        detalle = _detalle_cargo(consumo, len(datos.perdedores))
+        denominador = len(datos.perdedores)
+        detalle = _detalle_cargo(consumo, 1, denominador)
         for participante_id, monto in zip(datos.perdedores, montos):
             _liquidar_participante(
                 db,
@@ -1047,6 +1105,9 @@ def finalizar_partida(
                 datos.usuario_id,
                 ahora,
                 detalle,
+                bebidas,
+                1,
+                denominador,
             )
 
     partida.estado = "finalizada"

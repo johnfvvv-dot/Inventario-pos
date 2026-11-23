@@ -14,6 +14,8 @@ export interface TicketImagenItem {
   precio_unitario: number;
   subtotal: number;
   detalle?: string | null;
+  /** True cuando la línea es un cargo de Bolirana y no un producto. */
+  es_cargo?: boolean;
 }
 
 export interface TicketImagen {
@@ -150,10 +152,10 @@ function crearCanvasTicket(ticket: TicketImagen, nombreNegocio: string): HTMLCan
   });
 
   for (const item of ticket.items) {
-    const titulo = item.detalle
-      ? `${item.cantidad} × ${item.nombre}`
-      : item.nombre;
-    const detalleDerecha = item.detalle
+    const titulo = item.es_cargo
+      ? item.nombre
+      : `${item.cantidad} × ${item.nombre}`;
+    const detalleDerecha = item.es_cargo
       ? formatearPrecio(item.subtotal)
       : `${item.cantidad} × ${formatearPrecio(item.precio_unitario)}`;
     ctx.font = FUENTE_BASE;

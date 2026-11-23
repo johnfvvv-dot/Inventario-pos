@@ -3346,6 +3346,12 @@ body {
   --nav-activo-borde: #3b82f6;
 }
 
+.admin-nav a.menu-link--bolirana {
+  --nav-activo-bg: #fff7ed;
+  --nav-activo-texto: #c2410c;
+  --nav-activo-borde: #f97316;
+}
+
 .admin-nav a.menu-link--reportes {
   --nav-activo-bg: #eef2ff;
   --nav-activo-texto: #4338ca;
