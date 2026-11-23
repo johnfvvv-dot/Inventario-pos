@@ -430,20 +430,6 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
-  getCargosBolirana: () => request("/boliranas/cargos-pendientes"),
-
-  pagarCargoBolirana: (
-    pedidoId: number,
-    datos: {
-      usuario_id: number;
-      pagos: { forma_pago: string; monto: number }[];
-    }
-  ) =>
-    request(`/boliranas/cargos/${idPositivo(pedidoId, "Cargo")}/pagar`, {
-      method: "POST",
-      body: JSON.stringify(datos),
-    }),
-
   // ---------- Usuarios ----------
   login: (usuario: string, password: string) =>
     request("/usuarios/login", {

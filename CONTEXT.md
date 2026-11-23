@@ -1,8 +1,8 @@
 # Inventario POS - Ficha de Contexto
 
-**Versión actual:** 1.4.0
+**Versión actual:** 1.6.3
 
-**Última actualización:** 10/11/2026
+**Última actualización:** 23/11/2026
 
 ## 1. Propósito del sistema
 
@@ -52,7 +52,7 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   `https://inventario-pos-bfw.pages.dev/admin/usuarios`. El frontend siempre se
   sirve desde Cloudflare Pages; al iniciar sesión prueba en paralelo
   `localhost:8000`, `127.0.0.1:8000` y la IP LAN compilada, y si ninguna
-  responde usa Render. El login solo muestra `Inventario POS v1.4.0`; no hay
+  responde usa Render. El login solo muestra `Inventario POS v1.6.3`; no hay
   botón de conexión ni estado del servidor. El fallback seguro solo reintenta
   `GET`, `HEAD` y login.
 - **1.2.2 (05/11/2026):** tipografía uniforme en el modal de apertura, máscara de miles sin decimales para el Fondo Inicial de Caja e impresión de todos los tickets del turno con salto de página.
@@ -66,6 +66,17 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   y el modal de asignación; cierre independiente de Cuenta General o de cada
   alias con modal de pago; auditoría en `pedidos.usuario_cierre_id` y columna
   "Cobrado por" en Historial.
+- **1.5.0 (11/2026):** ventas **Para llevar** con cobro inmediato y pago
+  simple/mixto, clientes individuales con cuenta propia, rediseño visual con
+  tarjetas blancas y pestaña de color por módulo, y módulo de Bolirana.
+- **1.6.0–1.6.2 (11/2026):** participantes de Bolirana siempre vinculados a una
+  cuenta de origen (mesa, barra o cliente individual), partidas por equipos con
+  validación de integrantes, varios jugadores por mesa/barra y bloqueo de
+  cuentas mientras la partida está activa.
+- **1.6.3 (23/11/2026):** cargos de Bolirana unificados y tickets consolidados
+  por cuenta; títulos compactos (`Bolirana #N · Jugador (Equipo)`), fracciones
+  cortas (`½`, `1/3`, `2/3`), agrupación de perdedores de una misma cuenta y
+  supresión del prefijo `1 ×` en cargos de Cuenta, Tickets e Historial.
 - **1.2.1 (03/11/2026):** se elimina el endpoint forzado por
   `REACT_APP_API_URL` (se ignora aunque venga definido). `REACT_APP_CLOUD_API_URL`
   solo se acepta si es HTTPS, sin `ngrok`, sin localhost ni IP privada; en caso
@@ -95,6 +106,28 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - Solo un enlace recibe la clase `activo` y `aria-current="page"`. Aplica en
   los paneles de Administrador y Bartender, también en el modo móvil.
 
+### Módulos, colores y roles (1.6.3)
+
+- **Estética:** fondo claro, tarjetas blancas con borde superior de color por
+  módulo (`panel-acento`) y menú lateral con el mismo acento pastel en el ítem
+  activo. No se usan degradados ni tarjetas oscuras.
+- **Colores de referencia:** Inventario `emerald-500` (`#10b981`), Mesas
+  `cyan-500` (`#06b6d4`), Pedidos `blue-500` (`#3b82f6`), Bolirana
+  `orange-500` (`#f97316`), Reportes `indigo-500` (`#6366f1`), Corte de caja
+  `amber-500` (`#f59e0b`), Historial `violet-500` (`#8b5cf6`),
+  Personalización `pink-500` (`#ec4899`) y Usuarios `sky-600` (`#0284c7`).
+- **Administrador:** accede a todos los módulos, configura el interruptor de
+  Bolirana, crea/edita usuarios, asigna permisos por Bartender y administra
+  inventario, precios, personalización y reportes. Puede abrir `/admin`.
+- **Bartender:** trabaja en `/bartender` con Inventario (solo lectura salvo
+  `ingreso_stock`), Mesas, Pedidos, Bolirana (si está habilitado) y Corte de
+  caja. No ve Reportes, Historial, Personalización ni Usuarios. Puede editar
+  cantidades solo con `editar_cantidades = 1`.
+- **Permisos por usuario:** `ingreso_stock` y `editar_cantidades` viven en la
+  tabla `usuarios`, se administran desde **Usuarios → Usuarios registrados** y
+  el Bartender los refresca cada 5 s. El Administrador siempre los tiene
+  activos.
+
 ### Mesas y barras
 
 - Las barras se muestran como **"Barra N"** en el selector de pedidos y en el
@@ -123,6 +156,26 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   con el formato único de precios (ej. `$30.400`).
 - Todos los precios del sistema usan el mismo formato: separador de miles y
   sin decimales (ej. `$3.800`).
+
+### Para llevar y clientes individuales (1.5.0)
+
+- **Para llevar:** se elige como destino en **Pedidos**, no ocupa mesa ni
+  bloquea plazas. El cobro es inmediato desde `CobroParaLlevarModal`, admite
+  efectivo, tarjeta, transferencia o pago mixto y descuenta el stock al
+  confirmar. El cliente es opcional; si se escribe un nombre, aparece en el
+  ticket y en el Historial. El pedido se guarda con
+  `mesa_etiqueta_historica = "Para llevar"` y sin `mesa_id`.
+- **Clientes individuales:** se crean desde **Mesas → Crear cliente
+  individual** y reciben una tarjeta propia con tipo `individual`. Tienen cuenta
+  general, divisiones, pedidos, cobro total, transferencia y participación en
+  Bolirana como cualquier cuenta. El nombre es único entre clientes
+  individuales.
+- Al quedar saldado, el cliente individual se archiva: la fila de `Mesa`
+  conserva `estado = "cerrada"` para que el historial y los tickets mantengan
+  su origen, pero la tarjeta desaparece de la operación diaria. Los pedidos
+  conservan `mesa_id` y `fecha_cierre` para consolidar su ticket.
+- Un cliente individual puede tener aliases vinculados; el alias siempre
+  pertenece a esa cuenta y no puede quedar como jugador libre.
 
 ### Inventario
 
@@ -175,6 +228,47 @@ también empaquetarse como ejecutable de Windows o APK de Android.
     backend responde `409` si se intenta asignarles un pedido.
   - En barras, `GET /api/pedidos/barra/{numero}` lista los pedidos de todas las
     plazas para que la pantalla muestre también los guardados en otra plaza.
+
+### Bolirana (1.6.x)
+
+- Módulo opcional que el **Administrador** activa/desactiva desde
+  **Personalización** (`modulo_bolirana`). Cuando está activo aparece el ítem
+  **Bolirana** con acento `orange-500`; el Bartender puede operar partidas pero
+  no crear/eliminar boliranas ni cambiar la configuración.
+- Cada **bolirana** tiene nombre visible (`Bolirana #N` se deriva del primer
+  número del nombre o, si no tiene, de su id). Las partidas admiten modalidad
+  **directa** o **equipos**.
+- **Participantes:** solo `mesa`, `barra` o `alias`. Los aliases deben declarar
+  una cuenta de origen (`origen_tipo` + `origen_mesa_id` o
+  `origen_barra_numero`); no existen jugadores libres. En una misma cuenta no
+  se repite el mismo alias ni se duplica la cuenta como participante directa y
+  como alias.
+- **Equipos:** se exigen al menos dos equipos y al menos un integrante en cada
+  equipo. Los equipos perdedores se reparten el total de la ronda y luego cada
+  equipo reparte entre sus integrantes, ajustando centavos para que la suma sea
+  exacta.
+- **Consumo:** las bebidas se cargan a la partida como pedidos
+  `estado = "bolirana"`, descuentan stock una sola vez y forman
+  `total_bebidas`. No se pueden cargar consumos después de finalizar.
+- **Liquidación:** al finalizar se marcan los perdedores y se crea un `Pedido`
+  de cargo por participante en la cuenta de su origen (mesa, barra o individual)
+  con `bolirana_partida_id`, número, equipo, fracción (`num`/`den`) y bebidas.
+  El cargo no crea líneas de producto ni vuelve a descontar stock: solo
+  transfiere el consumo ya registrado.
+- **Formato visible:** título `Bolirana #1 · Fabio (Equipo B)`; sub-línea
+  `Ronda completa: ...`, `½ de: ...`, `1/3 de: ...`, `2/3 de: ...`,
+  `1/4 de: ...`, etc. Las bebidas se separan con ` · `.
+- **Agrupación:** los cargos de una misma partida y cuenta se muestran como una
+  sola fila, sumando montos y fracciones: `Bolirana #1 · Fabio y Camilo
+  (Equipo B)` con `2/3 de: ...` o `Ronda completa: ...`. Si los cargos no
+  tienen metadatos (histórico antiguo), se conserva el texto original.
+- **Candados:** mientras la cuenta tenga una partida activa no se puede cobrar,
+  cerrar, dividir, transferir ni liberar; el corte de caja tampoco puede cerrar
+  con partidas activas o cargos pendientes. Al finalizar, la cuenta se libera
+  para cobro normal.
+- Se conservan los endpoints legacy `/api/boliranas/cargos-pendientes` y
+  `/api/boliranas/cargos/{id}/pagar` para compatibilidad, aunque la interfaz
+  actual ya no los usa: los cargos se cobran dentro de la cuenta de origen.
 
 ### Cuentas, caja y reportes
 
@@ -242,13 +336,13 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   (`migraciones_sistema.fechas_locales_v1`).
 - El filtro "Hasta" del historial incluye el día completo.
 
-### Personalización y tickets internos (05/11/2026)
+### Personalización y tickets internos (1.6.3)
 
 - **Personalización:** nuevo ítem del menú del Administrador en
-  `/admin/personalizacion`. Cambia el nombre visible de la cabecera y agrega un
-  logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP). El nombre oficial del
-  sistema sigue siendo **Inventario POS** y el login conserva
-  `Inventario POS v1.4.0`.
+  `/admin/personalizacion`. Cambia el nombre visible de la cabecera, agrega un
+  logotipo cuadrado de 256×256 (data URL PNG/JPEG/WebP) y controla el
+  interruptor del módulo **Bolirana**. El nombre oficial del sistema sigue
+  siendo **Inventario POS** y el login conserva `Inventario POS v1.6.3`.
 - Los valores se guardan en la tabla `configuracion_negocio` (fila única
   `id=1`). La cabecera del Administrador y la del Bartender los leen mediante
   `useConfiguracionNegocio`, con copia en `localStorage` y evento
@@ -259,16 +353,29 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   en el historial de turnos (abiertos o cerrados). El modal
   `TicketsModal` llama a `GET /api/caja/tickets?turno_id=<id>` (sin `turno_id`
   usa el turno abierto) y arma los comprobantes en memoria.
-- Un ticket por pedido cerrado y uno por cada participante pagado de una
-  división. Muestran nombre del negocio, folio, mesa/barra, alias del cliente,
-  fecha de ocupación, fecha de pago, productos (nombre, cantidad y precio) y
-  forma de pago. **No incluyen total ni impuestos** y no se guardan en la base.
+- **Consolidación por cuenta (1.6.3):** todos los pedidos de una misma cuenta
+  cobrados en el mismo `fecha_cierre` generan **un solo ticket**. Los productos
+  se agrupan por nombre y precio; los cargos de Bolirana se agrupan por
+  `bolirana_partida_id` y se imprimen con su título/fracción combinada. El
+  ticket muestra un único total y una única forma de pago (o el desglose
+  `Mixto: ...`). Los clientes individuales conservan además su ticket
+  `individual-...` con nombre y origen **Individual**.
+- Cada comprobante incluye nombre del negocio, folio, mesa/barra, alias del
+  cliente, fecha de ocupación, fecha de pago, líneas y forma de pago. Los
+  cargos llevan `es_cargo = true` para no mostrar `1 ×`; los productos sí
+  muestran cantidad y precio unitario. No se guardan en la base.
+- Los pedidos históricos sin mesa y los cargos legacy sin metadatos conservan
+  su ticket individual y su texto anterior como respaldo.
 - Marcas temporales nuevas: `Mesa.fecha_ocupacion`, `Pedido.fecha_ocupacion`,
   `Division.fecha_ocupacion` y `Participante.fecha_pago`. `Pedido.fecha_cierre`
   sigue siendo la fecha de pago de los pedidos completos.
 - Descarga: **Imprimir / PDF** usa la impresión del navegador con estilos
   `@media print`; cada tarjeta tiene **Descargar imagen**, que genera un PNG
   local con canvas (`utils/ticketImagen.ts`). Al cerrar el modal desaparecen.
+- **Historial:** una fila por pedido/cargo para que el cuadre de caja siga
+  siendo verificable. Los títulos de Bolirana son cortos (`Bolirana #N · ...`),
+  el detalle muestra la fracción y las bebidas, y el CSV usa los mismos textos
+  sin prefijo `1 ×` en cargos.
 
 ### Despliegue público
 
@@ -295,11 +402,11 @@ también empaquetarse como ejecutable de Windows o APK de Android.
   temporal. El `.exe` usa Neon, mantiene el backend local activo mientras la
   consola esté abierta y lanza Chrome/Edge con `--new-window` en la URL fija de
   Pages. No se registra como servicio de Windows.
-- **Validación:** 29/29 pruebas públicas (30/10/2026) y 21/21 pruebas del flujo
-  híbrido en la 1.2.1 (03/11/2026: 7 local, 7 Pages→local con permiso LNA y 7
-  Pages→Render sin permiso). Admin y Yeison inician sesión en local y Render con
-  hashes `pbkdf2_sha256` (longitud 118). La base quedó sin ventas de prueba:
-  4 productos (stock 159), 9 mesas y 2 usuarios.
+- **Validación 1.6.3 (23/11/2026):** 27/27 pruebas de integración del backend,
+  `npx tsc --noEmit` y build de producción del frontend sin errores. Se
+  mantiene la validación histórica del modo híbrido (local, Pages→local y
+  Pages→Render). La base de producción conserva solo los datos reales; las
+  pruebas usan SQLite temporal.
 - **Limitación móvil:** Pages HTTPS bloquea `http://IP_LAN:8000` por Mixed
   Content; el permiso LNA solo habilita `localhost` en el navegador de prueba.
   Para el celular en la misma WiFi se abre `http://IP_LAN:8000`; si se usa
@@ -323,18 +430,18 @@ también empaquetarse como ejecutable de Windows o APK de Android.
    el mensaje.
 3. **`start_dev.sh`:** crea/activa el entorno virtual en la raíz pero luego
    espera `backend/venv`; unificar la ruta.
-4. **Pruebas automatizadas:** hay 4 pruebas de integración de cuentas divididas
-   en `backend/tests/test_cuentas_asignacion.py`; falta ampliar la cobertura de
-   frontend y validar la migración de etiquetas históricas sobre una base de
-   datos antigua.
+4. **Pruebas automatizadas:** la suite de integración cubre 27 pruebas
+   (Bolirana, cuentas divididas y clientes individuales) en
+   `backend/tests/`; falta ampliar la cobertura de frontend y validar la
+   migración de etiquetas históricas sobre una base de datos antigua.
 5. **Nota de desarrollo:** si `npm run build` reporta un error de sintaxis
    inexistente en `HistorialPage.tsx`, borrar `frontend/node_modules/.cache` y
    volver a compilar.
 6. **Despliegue público e híbrido:** completado el 30/10/2026 y actualizado el
-   03/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.4.0
-   agrega el panel completo de Cuenta General/divisiones, la edición de
-   cantidades con permiso, la creación de alias y los cierres independientes con
-   auditoría. Queda
+   23/11/2026 con Neon + Render Free + Cloudflare Pages. La versión 1.6.3
+   consolida los tickets por cuenta, unifica los cargos de Bolirana y mantiene
+   el panel de Cuenta General/divisiones, la edición de cantidades con permiso,
+   la creación de alias y los cierres independientes con auditoría. Queda
    opcional eliminar el servicio Render antiguo `Inventario-pos` cuando se
    confirme el nuevo. No se envía ping a Render: la operación interna usa el
    `.exe`.
@@ -354,3 +461,29 @@ también empaquetarse como ejecutable de Windows o APK de Android.
 - No analizar carpetas de dependencias (`node_modules`, `venv`), builds ni
   binarios.
 - Mantener los cambios sin commitear hasta que el usuario lo solicite.
+
+### Reglas de protección del negocio
+
+- **Una sola fuente de verdad:** el stock se descuenta al registrar la venta
+  (`PedidoItem` + movimiento de inventario). Los cargos de Bolirana solo
+  transfieren un consumo ya registrado; nunca vuelven a descontar stock ni
+  crean una segunda venta.
+- **Caja e historial cuadran:** los pedidos cerrados y los pagos de divisiones
+  son la fuente de los ingresos. Un cargo de Bolirana se suma una sola vez al
+  total de la cuenta y no se duplica como venta independiente.
+- **Cuentas históricas protegidas:** no se edita ni elimina un pedido cerrado
+  desde la operación normal; los reportes, tickets y el historial conservan sus
+  etiquetas históricas (`mesa_etiqueta_historica`, `mesa_numero_historico`) aunque
+  la mesa, barra o cliente se elimine después.
+- **Sin jugadores libres:** todo participante de Bolirana debe provenir de una
+  mesa, barra o cliente individual. Los aliases siempre tienen cuenta de origen
+  y no se pueden cobrar por fuera de ella.
+- **Sin cambios durante partidas activas:** una cuenta bloqueada por Bolirana
+  no se cobra, divide, transfiere ni libera; el turno tampoco cierra con
+  partidas activas o cargos pendientes.
+- **Cargos trazables:** cada cargo guarda `bolirana_partida_id`, número de
+  máquina, equipo, fracción y bebidas. Si faltan metadatos (datos antiguos), se
+  usa el texto legacy como respaldo, sin romper el cuadre.
+- **Antes de desplegar:** ejecutar las 27 pruebas del backend, `npx tsc --noEmit`
+  y el build de producción. No publicar con pruebas rojas ni con cálculos de
+  totales modificados sobre datos reales.

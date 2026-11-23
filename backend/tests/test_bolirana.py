@@ -1,7 +1,8 @@
 """Pruebas de integración del módulo de Bolirana.
 
 Cubre el flujo completo: activación del módulo, candados de mesas, carga de
-bebidas, liquidación entre perdedores y cobro del cargo de un jugador libre.
+bebidas, liquidación entre perdedores y cargos cargados siempre a la cuenta de
+origen (mesa, barra o cliente individual).
 """
 
 import unittest
@@ -19,11 +20,14 @@ class BoliranaTest(unittest.TestCase):
     def setUpClass(cls):
         cls.client_ctx = TestClient(app)
         cls.client = cls.client_ctx.__enter__()
-        respuesta = cls.client.post(
-            "/api/caja/abrir-turno",
-            json={"usuario_id": 1, "fondo_inicial": 0},
-        )
-        assert respuesta.status_code == 200, respuesta.text
+        # La suite completa puede dejar un turno abierto de otro módulo.
+        turno = cls.client.get("/api/caja/turno-actual")
+        if not (turno.status_code == 200 and turno.json()):
+            respuesta = cls.client.post(
+                "/api/caja/abrir-turno",
+                json={"usuario_id": 1, "fondo_inicial": 0},
+            )
+            assert respuesta.status_code == 200, respuesta.text
         productos = cls.client.get("/api/inventario/?limite=500").json()["items"]
         cls.productos = {p["nombre"]: p for p in productos}
         cls.refresco = cls.productos["Refresco"]
@@ -112,7 +116,12 @@ class BoliranaTest(unittest.TestCase):
             bolirana["id"],
             [
                 {"tipo": "mesa", "mesa_id": mesa["id"]},
-                {"tipo": "alias", "alias": "Jugador Candado"},
+                {
+                    "tipo": "alias",
+                    "alias": "Jugador Candado",
+                    "origen_tipo": "mesa",
+                    "origen_mesa_id": mesa["id"],
+                },
             ],
         )
         participantes = partida["partida"]["participantes"]
@@ -179,7 +188,12 @@ class BoliranaTest(unittest.TestCase):
             bolirana["id"],
             [
                 {"tipo": "barra", "barra_numero": 95},
-                {"tipo": "alias", "alias": "Jugador Barra"},
+                {
+                    "tipo": "alias",
+                    "alias": "Jugador Barra",
+                    "origen_tipo": "barra",
+                    "origen_barra_numero": 95,
+                },
             ],
         )
         participante_barra = next(
@@ -237,7 +251,12 @@ class BoliranaTest(unittest.TestCase):
             bolirana["id"],
             [
                 {"tipo": "mesa", "mesa_id": mesa["id"]},
-                {"tipo": "alias", "alias": "Carlos"},
+                {
+                    "tipo": "alias",
+                    "alias": "Carlos",
+                    "origen_tipo": "mesa",
+                    "origen_mesa_id": mesa["id"],
+                },
             ],
         )
         self.assertEqual(partida["estado"], "en_partida")
@@ -276,7 +295,12 @@ class BoliranaTest(unittest.TestCase):
                 "usuario_id": 1,
                 "participantes": [
                     {"tipo": "mesa", "mesa_id": mesa["id"]},
-                    {"tipo": "alias", "alias": "Otro"},
+                    {
+                        "tipo": "alias",
+                        "alias": "Otro",
+                        "origen_tipo": "mesa",
+                        "origen_mesa_id": mesa["id"],
+                    },
                 ],
             },
         )
@@ -318,7 +342,7 @@ class BoliranaTest(unittest.TestCase):
             "/api/caja/cerrar", json={"observaciones": ""}
         )
         self.assertEqual(cierre_turno.status_code, 409, cierre_turno.text)
-        self.assertIn("cargos de Bolirana", cierre_turno.json()["detail"])
+        self.assertIn("pedidos pendientes de pago", cierre_turno.json()["detail"])
 
         # La mesa recibe el cargo en su cuenta general con el concepto.
         cuenta = self.client.get(f"/api/cuentas/mesa/{mesa['id']}").json()
@@ -330,39 +354,43 @@ class BoliranaTest(unittest.TestCase):
             for p in cuenta["pedidos"]
             if p["concepto"] and "Bolirana" in p["concepto"]
         ]
-        self.assertEqual(len(cargos), 1)
-        self.assertAlmostEqual(cargos[0]["total"], esperado, places=2)
-        self.assertEqual(
-            cargos[0]["concepto"], "Consumo Bolirana Test 1 (Partida)"
+        self.assertEqual(len(cargos), 2)
+        for cargo in cargos:
+            self.assertAlmostEqual(cargo["total"], esperado, places=2)
+        self.assertAlmostEqual(
+            sum(p["total"] for p in cargos), total_ronda, places=2
         )
+        for cargo in cargos:
+            self.assertTrue(cargo["concepto"].startswith("Bolirana #1"))
+            self.assertEqual(
+                cargo["concepto_detalle"], "½ de: 2 Refresco"
+            )
+        conceptos = {p["concepto"] for p in cargos}
+        self.assertIn("Bolirana #1", conceptos)
+        self.assertIn("Bolirana #1 · Carlos", conceptos)
 
-        # El alias libre queda como cargo pendiente y se cobra de forma mixta.
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        cargo_alias = next(c for c in pendientes if c["alias"] == "Carlos")
-        self.assertAlmostEqual(cargo_alias["total"], esperado, places=2)
-
-        pago = self.client.post(
-            f"/api/boliranas/cargos/{cargo_alias['pedido_id']}/pagar",
-            json={
-                "usuario_id": 1,
-                "pagos": [
-                    {"forma_pago": "efectivo", "monto": round(esperado / 2, 2)},
-                    {"forma_pago": "tarjeta", "monto": round(esperado / 2, 2)},
-                ],
-            },
-        )
-        self.assertEqual(pago.status_code, 200, pago.text)
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        self.assertFalse(any(c["alias"] == "Carlos" for c in pendientes))
-
-        # Ya sin partida activa, la mesa puede cobrarse y liberarse.
+        # Ya sin partida activa, la mesa puede cobrarse y liberarse. El cobro
+        # incluye los dos cargos de la partida en la misma cuenta.
         cierre = self.client.post(
             f"/api/cuentas/mesa/{mesa['id']}/cerrar",
             params={"forma_pago": "efectivo", "liberar_mesa": "true"},
         )
         self.assertEqual(cierre.status_code, 200, cierre.text)
 
-        # El consumo se registra una sola vez en el historial del turno.
+        # Los dos cargos de la misma cuenta se consolidan en un único ticket:
+        # una sola fila visual, con las fracciones sumadas.
+        tickets = self.client.get("/api/caja/tickets").json()["tickets"]
+        ticket_mesa = next(t for t in tickets if t["mesa"] == "Mesa 901")
+        self.assertEqual(len(ticket_mesa["items"]), 1)
+        cargo_ticket = ticket_mesa["items"][0]
+        self.assertTrue(cargo_ticket["es_cargo"])
+        self.assertEqual(cargo_ticket["nombre"], "Bolirana #1 · Carlos")
+        self.assertEqual(cargo_ticket["detalle"], "Ronda completa: 2 Refresco")
+        self.assertAlmostEqual(cargo_ticket["subtotal"], total_ronda, places=2)
+        self.assertAlmostEqual(ticket_mesa["total"], total_ronda, places=2)
+
+        # El consumo se registra una sola vez en el historial del turno, con
+        # su detalle de bebidas y fracción.
         historial = self.client.get(
             "/api/caja/historial",
             params={"limite": 50, "origen": ""},
@@ -370,11 +398,13 @@ class BoliranaTest(unittest.TestCase):
         cargos_historial = [
             h
             for h in historial
-            if (h.get("concepto") or "").startswith(
-                "Consumo Bolirana Test 1 (Partida)"
-            )
+            if (h.get("concepto") or "").startswith("Bolirana #1")
         ]
         self.assertEqual(len(cargos_historial), 2)
+        for cargo in cargos_historial:
+            self.assertEqual(
+                cargo["concepto_detalle"], "½ de: 2 Refresco"
+            )
 
         # La bolirana con historial se elimina lógicamente.
         eliminada = self.client.delete(
@@ -383,6 +413,43 @@ class BoliranaTest(unittest.TestCase):
         self.assertEqual(eliminada.status_code, 200, eliminada.text)
         activas = self.client.get("/api/boliranas/").json()
         self.assertFalse(any(b["id"] == bolirana["id"] for b in activas))
+
+    def test_02a_alias_sin_cuenta_de_origen_es_rechazado(self):
+        """Ningún alias puede quedar como jugador libre sin cuenta."""
+        self.client.put(
+            "/api/configuracion/modulos",
+            json={"usuario_id": 1, "modulo_bolirana": True},
+        )
+        mesa = self.crear_mesa(909)
+        self.ocupar_mesa(mesa["id"])
+        bolirana = self.crear_bolirana("Bolirana Sin Origen")
+
+        respuesta = self.client.post(
+            f"/api/boliranas/{bolirana['id']}/iniciar",
+            json={
+                "usuario_id": 1,
+                "participantes": [
+                    {"tipo": "mesa", "mesa_id": mesa["id"]},
+                    {"tipo": "alias", "alias": "Sin Cuenta"},
+                ],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 422, respuesta.text)
+        self.assertIn(
+            "Selecciona la mesa, barra o cliente individual",
+            respuesta.text,
+        )
+
+        eliminada = self.client.delete(
+            f"/api/boliranas/{bolirana['id']}", params={"usuario_id": 1}
+        )
+        self.assertEqual(eliminada.status_code, 200, eliminada.text)
+
+        cierre = self.client.post(
+            f"/api/cuentas/mesa/{mesa['id']}/cerrar",
+            params={"forma_pago": "efectivo", "liberar_mesa": "true"},
+        )
+        self.assertEqual(cierre.status_code, 200, cierre.text)
 
     def test_02b_alias_vinculado_a_mesa_carga_en_su_cuenta(self):
         """Un alias vinculado bloquea y cobra en la cuenta de su mesa."""
@@ -403,7 +470,12 @@ class BoliranaTest(unittest.TestCase):
                     "origen_tipo": "mesa",
                     "origen_mesa_id": mesa["id"],
                 },
-                {"tipo": "alias", "alias": "Pedro"},
+                {
+                    "tipo": "alias",
+                    "alias": "Pedro",
+                    "origen_tipo": "mesa",
+                    "origen_mesa_id": mesa["id"],
+                },
             ],
         )
         participantes = partida["partida"]["participantes"]
@@ -447,13 +519,16 @@ class BoliranaTest(unittest.TestCase):
         cargos = [
             p
             for p in cuenta["pedidos"]
-            if p["concepto"] and "Consumo Bolirana" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
         self.assertEqual(len(cargos), 1)
         self.assertAlmostEqual(cargos[0]["total"], total, places=2)
-
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        self.assertFalse(any(c["alias"] == "Luis" for c in pendientes))
+        self.assertEqual(
+            cargos[0]["concepto"], f"Bolirana #{bolirana['id']} · Luis"
+        )
+        self.assertEqual(
+            cargos[0]["concepto_detalle"], "Ronda completa: 1 Refresco"
+        )
 
         cierre = self.client.post(
             f"/api/cuentas/mesa/{mesa['id']}/cerrar",
@@ -476,6 +551,17 @@ class BoliranaTest(unittest.TestCase):
         individual = self.client.post(
             "/api/mesas/individual", json={"nombre": "Cliente Equipos"}
         ).json()
+        pedido_individual = self.client.post(
+            "/api/pedidos/",
+            json={
+                "mesa_id": individual["id"],
+                "usuario_id": 1,
+                "items": [
+                    {"producto_id": self.hamburguesa["id"], "cantidad": 2}
+                ],
+            },
+        )
+        self.assertEqual(pedido_individual.status_code, 201, pedido_individual.text)
         plazas = self.client.post(
             "/api/mesas/barra", json={"numero": 96, "capacidad": 2}
         ).json()
@@ -507,7 +593,13 @@ class BoliranaTest(unittest.TestCase):
                     "origen_mesa_id": individual["id"],
                     "equipo": "Azules",
                 },
-                {"tipo": "alias", "alias": "Beto", "equipo": "Azules"},
+                {
+                    "tipo": "alias",
+                    "alias": "Beto",
+                    "origen_tipo": "barra",
+                    "origen_barra_numero": 96,
+                    "equipo": "Azules",
+                },
                 {"tipo": "barra", "barra_numero": 96, "equipo": "Azules"},
             ],
             modalidad="equipos",
@@ -566,29 +658,43 @@ class BoliranaTest(unittest.TestCase):
         cargos_individual = [
             p
             for p in cuenta_individual["pedidos"]
-            if p["concepto"] and "Equipo perdedor" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
         self.assertEqual(len(cargos_individual), 1)
-        self.assertIn("Azules", cargos_individual[0]["concepto"])
+        self.assertEqual(
+            cargos_individual[0]["concepto"],
+            f"Bolirana #{bolirana['id']} · Ana (Azules)",
+        )
         self.assertAlmostEqual(
             cargos_individual[0]["total"], base, places=2
+        )
+        self.assertEqual(
+            cargos_individual[0]["concepto_detalle"],
+            "1/3 de: 2 Refresco",
         )
 
         cuenta_barra = self.client.get("/api/cuentas/barra/96").json()
         cargos_barra = [
             p
             for p in cuenta_barra["pedidos"]
-            if p["concepto"] and "Equipo perdedor" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
-        self.assertEqual(len(cargos_barra), 1)
-        self.assertAlmostEqual(cargos_barra[0]["total"], ultimo, places=2)
-
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        cargo_beto = next(c for c in pendientes if c["alias"] == "Beto")
+        # La barra recibe el cargo directo y el de Beto, su jugador vinculado.
+        self.assertEqual(len(cargos_barra), 2)
+        cargo_beto = next(p for p in cargos_barra if p["alias"] == "Beto")
+        cargo_barra = next(p for p in cargos_barra if p["alias"] is None)
         self.assertAlmostEqual(cargo_beto["total"], base, places=2)
-        self.assertIn("Azules", cargo_beto["concepto"])
-        self.assertIn("Equipo perdedor", cargo_beto["concepto"])
-        self.assertFalse(any(c["alias"] == "Ana" for c in pendientes))
+        self.assertAlmostEqual(cargo_barra["total"], ultimo, places=2)
+        self.assertAlmostEqual(
+            sum(p["total"] for p in cargos_barra),
+            round(total - base, 2),
+            places=2,
+        )
+        for cargo in cargos_barra:
+            self.assertEqual(
+                cargo["concepto_detalle"],
+                "1/3 de: 2 Refresco",
+            )
 
         # El equipo ganador no recibe cargo.
         cuenta_mesa = self.client.get(
@@ -596,22 +702,12 @@ class BoliranaTest(unittest.TestCase):
         ).json()
         self.assertFalse(
             any(
-                p["concepto"] and "Equipo perdedor" in p["concepto"]
+                p.get("bolirana_partida_id") is not None
                 for p in cuenta_mesa["pedidos"]
             )
         )
 
-        # Limpieza: cobrar el cargo libre y cerrar las cuentas participantes.
-        pago = self.client.post(
-            f"/api/boliranas/cargos/{cargo_beto['pedido_id']}/pagar",
-            json={
-                "usuario_id": 1,
-                "pagos": [
-                    {"forma_pago": "efectivo", "monto": cargo_beto["total"]}
-                ],
-            },
-        )
-        self.assertEqual(pago.status_code, 200, pago.text)
+        # Limpieza: cerrar las cuentas participantes.
         cierre_individual = self.client.post(
             f"/api/cuentas/mesa/{individual['id']}/cerrar",
             params={"forma_pago": "efectivo"},
@@ -619,6 +715,55 @@ class BoliranaTest(unittest.TestCase):
         self.assertEqual(
             cierre_individual.status_code, 200, cierre_individual.text
         )
+
+        # El cliente individual genera un único ticket con el pedido normal y
+        # el cargo de Bolirana agrupados.
+        tickets = self.client.get("/api/caja/tickets").json()["tickets"]
+        tickets_individual = [
+            t
+            for t in tickets
+            if t["tipo"] == "individual"
+            and t["alias"] == "Cliente Equipos"
+        ]
+        self.assertEqual(len(tickets_individual), 1)
+        ticket = tickets_individual[0]
+        self.assertEqual(ticket["mesa"], "Individual")
+        self.assertEqual(ticket["forma_pago"], "efectivo")
+        hamburguesa_item = next(
+            i for i in ticket["items"] if i["nombre"] == "Hamburguesa"
+        )
+        self.assertEqual(hamburguesa_item["cantidad"], 2)
+        self.assertAlmostEqual(
+            hamburguesa_item["subtotal"],
+            self.hamburguesa["precio"] * 2,
+            places=2,
+        )
+        cargo_ticket = next(
+            i
+            for i in ticket["items"]
+            if i["nombre"].startswith("Bolirana #")
+        )
+        self.assertTrue(cargo_ticket["es_cargo"])
+        self.assertEqual(
+            cargo_ticket["nombre"],
+            f"Bolirana #{bolirana['id']} · Ana (Azules)",
+        )
+        self.assertEqual(
+            cargo_ticket["detalle"],
+            "1/3 de: 2 Refresco",
+        )
+        self.assertAlmostEqual(cargo_ticket["subtotal"], base, places=2)
+        self.assertAlmostEqual(
+            ticket["total"],
+            round(self.hamburguesa["precio"] * 2 + base, 2),
+            places=2,
+        )
+        self.assertAlmostEqual(
+            ticket["total"],
+            round(sum(i["subtotal"] for i in ticket["items"]), 2),
+            places=2,
+        )
+
         cierre_barra = self.client.post(
             "/api/cuentas/barra/96/cerrar",
             params={"forma_pago": "efectivo", "liberar_barra": "true"},
@@ -655,7 +800,12 @@ class BoliranaTest(unittest.TestCase):
                     "origen_tipo": "barra",
                     "origen_barra_numero": 97,
                 },
-                {"tipo": "alias", "alias": "Nico"},
+                {
+                    "tipo": "alias",
+                    "alias": "Nico",
+                    "origen_tipo": "barra",
+                    "origen_barra_numero": 97,
+                },
             ],
         )
         participantes = partida["partida"]["participantes"]
@@ -700,13 +850,16 @@ class BoliranaTest(unittest.TestCase):
         cargos = [
             p
             for p in cuenta["pedidos"]
-            if p["concepto"] and "Consumo Bolirana" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
         self.assertEqual(len(cargos), 1)
         self.assertAlmostEqual(cargos[0]["total"], total, places=2)
-
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        self.assertFalse(any(c["alias"] == "Marta" for c in pendientes))
+        self.assertEqual(
+            cargos[0]["concepto"], f"Bolirana #{bolirana['id']} · Marta"
+        )
+        self.assertEqual(
+            cargos[0]["concepto_detalle"], "Ronda completa: 1 Refresco"
+        )
 
         cierre = self.client.post(
             "/api/cuentas/barra/97/cerrar",
@@ -738,13 +891,13 @@ class BoliranaTest(unittest.TestCase):
                     "mesa_id": mesa_uno["id"],
                     "equipo": "Equipo Uno",
                 },
-                {"tipo": "alias", "alias": "Jugador Uno", "equipo": "Equipo Uno"},
+                {"tipo": "alias", "alias": "Jugador Uno", "origen_tipo": "mesa", "origen_mesa_id": mesa_uno["id"], "equipo": "Equipo Uno"},
                 {
                     "tipo": "mesa",
                     "mesa_id": mesa_dos["id"],
                     "equipo": "Equipo Dos",
                 },
-                {"tipo": "alias", "alias": "Jugador Dos", "equipo": "Equipo Dos"},
+                {"tipo": "alias", "alias": "Jugador Dos", "origen_tipo": "mesa", "origen_mesa_id": mesa_dos["id"], "equipo": "Equipo Dos"},
             ],
             modalidad="equipos",
         )
@@ -778,35 +931,22 @@ class BoliranaTest(unittest.TestCase):
         cargos_mesas = [
             p
             for p in cuenta_uno["pedidos"] + cuenta_dos["pedidos"]
-            if p["concepto"] and "Equipo perdedor" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
-        self.assertEqual(len(cargos_mesas), 2)
+        self.assertEqual(len(cargos_mesas), len(participantes))
+        self.assertEqual(len(cargos_mesas), 4)
 
-        pendientes = self.client.get("/api/boliranas/cargos-pendientes").json()
-        cargos_alias = [
-            c
-            for c in pendientes
-            if c["alias"] in {"Jugador Uno", "Jugador Dos"}
-        ]
-        self.assertEqual(len(cargos_alias), 2)
-
-        montos = [p["total"] for p in cargos_mesas] + [
-            c["total"] for c in cargos_alias
-        ]
-        self.assertEqual(len(montos), len(participantes))
+        montos = [p["total"] for p in cargos_mesas]
         self.assertAlmostEqual(sum(montos), total, places=2)
-
-        for cargo in cargos_alias:
-            pago = self.client.post(
-                f"/api/boliranas/cargos/{cargo['pedido_id']}/pagar",
-                json={
-                    "usuario_id": 1,
-                    "pagos": [
-                        {"forma_pago": "efectivo", "monto": cargo["total"]}
-                    ],
-                },
+        self.assertEqual(
+            {p["alias"] for p in cargos_mesas},
+            {"Jugador Uno", "Jugador Dos", None},
+        )
+        for cargo in cargos_mesas:
+            self.assertEqual(
+                cargo["concepto_detalle"],
+                "1/4 de: 2 Refresco",
             )
-            self.assertEqual(pago.status_code, 200, pago.text)
 
         for mesa in (mesa_uno, mesa_dos):
             cierre = self.client.post(
@@ -939,15 +1079,16 @@ class BoliranaTest(unittest.TestCase):
         cargos = [
             p
             for p in cuenta_mesa["pedidos"]
-            if p["concepto"] and "Equipo perdedor" in p["concepto"]
+            if p.get("bolirana_partida_id") is not None
         ]
         self.assertEqual(len(cargos), 2)
         self.assertEqual({p["alias"] for p in cargos}, {"Camilo", "Andrés"})
-        self.assertTrue(
-            all(
-                "Camilo" in p["concepto"] or "Andrés" in p["concepto"]
-                for p in cargos
-            )
+        self.assertEqual(
+            {p["concepto"] for p in cargos},
+            {
+                f"Bolirana #{bolirana['id']} · Camilo (Equipo A)",
+                f"Bolirana #{bolirana['id']} · Andrés (Equipo A)",
+            },
         )
         self.assertAlmostEqual(
             sum(p["total"] for p in cargos), total, places=2
@@ -957,12 +1098,16 @@ class BoliranaTest(unittest.TestCase):
         self.assertAlmostEqual(
             cargos[1]["total"], round(total - base, 2), places=2
         )
+        for cargo in cargos:
+            self.assertEqual(
+                cargo["concepto_detalle"], "½ de: 2 Refresco"
+            )
 
         # La barra ganadora no recibe cargos.
         cuenta_barra = self.client.get("/api/cuentas/barra/98").json()
         self.assertFalse(
             any(
-                p["concepto"] and "Equipo perdedor" in p["concepto"]
+                p.get("bolirana_partida_id") is not None
                 for p in cuenta_barra["pedidos"]
             )
         )
@@ -972,6 +1117,23 @@ class BoliranaTest(unittest.TestCase):
             params={"forma_pago": "efectivo", "liberar_mesa": "true"},
         )
         self.assertEqual(cierre_mesa.status_code, 200, cierre_mesa.text)
+
+        # Los dos perdedores de la misma mesa se agrupan en una sola fila
+        # dentro de un único ticket, sumando fracciones y montos.
+        tickets = self.client.get("/api/caja/tickets").json()["tickets"]
+        ticket_mesa = next(t for t in tickets if t["mesa"] == "Mesa 907")
+        self.assertEqual(len(ticket_mesa["items"]), 1)
+        cargo_ticket = ticket_mesa["items"][0]
+        self.assertTrue(cargo_ticket["es_cargo"])
+        self.assertEqual(
+            cargo_ticket["nombre"],
+            f"Bolirana #{bolirana['id']} · Camilo y Andrés (Equipo A)",
+        )
+        self.assertEqual(
+            cargo_ticket["detalle"], "Ronda completa: 2 Refresco"
+        )
+        self.assertAlmostEqual(cargo_ticket["subtotal"], total, places=2)
+        self.assertAlmostEqual(ticket_mesa["total"], total, places=2)
         cierre_barra = self.client.post(
             "/api/cuentas/barra/98/cerrar",
             params={"forma_pago": "efectivo", "liberar_barra": "true"},
@@ -1057,10 +1219,9 @@ class BoliranaTest(unittest.TestCase):
         self.assertEqual(crear.status_code, 403, crear.text)
 
     def test_04_cierre_turno_sin_pendientes(self):
-        """Al final del flujo no quedan partidas ni cargos de bolirana."""
+        """Al final del flujo no quedan partidas activas de bolirana."""
         boliranas = self.client.get("/api/boliranas/").json()
         self.assertTrue(all(b["estado"] == "disponible" for b in boliranas))
-        self.assertEqual(self.client.get("/api/boliranas/cargos-pendientes").json(), [])
 
         respuesta = self.client.post("/api/caja/cerrar", json={"observaciones": ""})
         if respuesta.status_code != 200:

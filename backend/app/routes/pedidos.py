@@ -75,6 +75,12 @@ def _pedido_to_out(pedido: Pedido) -> PedidoOut:
             else pedido.alias_cliente
         ),
         concepto=pedido.concepto,
+        concepto_detalle=pedido.concepto_detalle,
+        bolirana_numero=pedido.bolirana_numero,
+        bolirana_equipo=pedido.bolirana_equipo,
+        bolirana_fraccion_num=pedido.bolirana_fraccion_num,
+        bolirana_fraccion_den=pedido.bolirana_fraccion_den,
+        bolirana_bebidas=pedido.bolirana_bebidas,
         bolirana_partida_id=pedido.bolirana_partida_id,
         es_pago_division=bool(pedido.es_pago_division),
         usuario_cierre_id=pedido.usuario_cierre_id,

@@ -2,15 +2,17 @@
 
 Flujo:
   1. El Administrador crea las boliranas (Bartender solo opera).
-  2. Se inicia una partida con dos o más mesas, barras o jugadores; varios
-     jugadores pueden compartir la misma mesa, barra o cliente individual.
+  2. Se inicia una partida con dos o más mesas, barras, clientes
+     individuales o jugadores vinculados a una cuenta; varios jugadores
+     pueden compartir la misma mesa, barra o cliente individual.
   3. Las bebidas se cargan a la ronda y descuentan stock, pero no son una
      venta todavía.
   4. Al finalizar, el total se reparte en partes iguales entre los perdedores.
-     Las mesas/barras reciben un cargo abierto en su cuenta; los alias libres
-     quedan como cobros pendientes que se pagan simple o mixto.
+     Todas las partes se cargan a la cuenta de origen (mesa, barra o cliente
+     individual): no quedan jugadores libres ni cobros sueltos.
 """
 
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -75,9 +77,49 @@ def _etiqueta_bolirana(nombre: str) -> str:
     return limpio or "Bolirana"
 
 
+def _numero_bolirana(partida: PartidaBolirana) -> int:
+    """Número visible de la máquina; usa el primer número del nombre."""
+    nombre = _etiqueta_bolirana(partida.bolirana.nombre)
+    coincidencia = re.search(r"\d+", nombre)
+    if coincidencia:
+        return int(coincidencia.group(0))
+    return int(partida.bolirana_id or 0)
+
+
 def _concepto_partida(partida: PartidaBolirana) -> str:
-    """Concepto único con el que se registra el consumo de una partida."""
-    return f"Consumo Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)} (Partida)"
+    """Título corto del cargo: "Bolirana #1"."""
+    return f"Bolirana #{_numero_bolirana(partida)}"
+
+
+def _fraccion_corta(numerador: int, denominador: int) -> Optional[str]:
+    """Fracción compacta: ½, 1/3, 2/3, 1/4, 3/4, 1/5..."""
+    if denominador <= 0 or numerador >= denominador:
+        return None
+    if numerador == 1 and denominador == 2:
+        return "½"
+    return f"{numerador}/{denominador}"
+
+
+def _bebidas_texto(consumo: List[ConsumoBoliranaOut]) -> Optional[str]:
+    """Lista corta de bebidas: "2 Aguila 350ml · 2 Poker 350ml"."""
+    if not consumo:
+        return None
+    return " · ".join(
+        f"{item.cantidad} {item.producto_nombre}" for item in consumo
+    )
+
+
+def _detalle_cargo(
+    consumo: List[ConsumoBoliranaOut], numerador: int, denominador: int
+) -> Optional[str]:
+    """Sub-línea del cargo: fracción y bebidas exactas de la ronda."""
+    bebidas = _bebidas_texto(consumo)
+    if not bebidas:
+        return None
+    fraccion = _fraccion_corta(numerador, denominador)
+    if fraccion is None:
+        return f"Ronda completa: {bebidas}"
+    return f"{fraccion} de: {bebidas}"
 
 
 def _exigir_admin(db: Session, usuario_id: int) -> Usuario:
@@ -288,7 +330,8 @@ def _mesa_destino_participante(
 ) -> Optional[Mesa]:
     """Cuenta que debe recibir la deuda de un participante.
 
-    Devuelve None para los alias libres, que se cobran como cargo pendiente.
+    Solo los cargos legacy de jugadores libres devuelven None; las partidas
+    nuevas siempre tienen una cuenta de origen.
     """
     if participante.tipo == "mesa":
         return _mesa_por_id(db, participante.mesa_id or 0)
@@ -306,16 +349,16 @@ def _mesa_destino_participante(
 def _concepto_cargo(
     partida: PartidaBolirana, participante: ParticipanteBolirana
 ) -> str:
-    """Concepto del cargo; en equipos indica jugador y equipo perdedor."""
-    if partida.modalidad == "equipos" and participante.equipo:
-        jugador = f"{participante.alias} · " if participante.alias else ""
-        return (
-            f"Consumo Bolirana {_etiqueta_bolirana(partida.bolirana.nombre)} "
-            f"— {jugador}{participante.equipo} (Equipo perdedor)"
-        )
+    """Título del cargo: "Bolirana #1 · Fabio (Equipo B)"."""
     concepto = _concepto_partida(partida)
-    if participante.tipo == "alias" and participante.alias:
-        return f"{concepto} — {participante.alias}"
+    jugador = participante.alias if participante.tipo == "alias" else None
+    equipo = participante.equipo or None
+    if jugador and equipo:
+        return f"{concepto} · {jugador} ({equipo})"
+    if jugador:
+        return f"{concepto} · {jugador}"
+    if equipo:
+        return f"{concepto} · {equipo}"
     return concepto
 
 
@@ -327,6 +370,10 @@ def _crear_cargo_cuenta(
     monto: float,
     usuario_id: int,
     ahora,
+    detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> Pedido:
     """Crea un cargo abierto en la cuenta de origen del perdedor."""
     alias_cliente = None
@@ -342,6 +389,12 @@ def _crear_cargo_cuenta(
         total=round(float(monto), 2),
         estado="abierto",
         concepto=_concepto_cargo(partida, participante),
+        concepto_detalle=detalle,
+        bolirana_numero=_numero_bolirana(partida),
+        bolirana_equipo=participante.equipo or None,
+        bolirana_fraccion_num=fraccion_num,
+        bolirana_fraccion_den=fraccion_den,
+        bolirana_bebidas=bebidas,
         bolirana_partida_id=partida.id,
         fecha_ocupacion=mesa.fecha_ocupacion or ahora,
         alias_cliente=alias_cliente,
@@ -363,8 +416,16 @@ def _crear_cargo_alias(
     monto: float,
     usuario_id: int,
     ahora,
+    detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> Pedido:
-    """Crea un cobro pendiente para un jugador libre."""
+    """Cargo legacy para jugadores libres de partidas antiguas.
+
+    Las partidas nuevas exigen una cuenta de origen, así que este camino solo
+    conserva la compatibilidad con cargos pendientes ya existentes.
+    """
     cargo = Pedido(
         mesa_id=None,
         usuario_id=usuario_id,
@@ -372,6 +433,12 @@ def _crear_cargo_alias(
         total=round(float(monto), 2),
         estado="pendiente",
         concepto=_concepto_cargo(partida, participante),
+        concepto_detalle=detalle,
+        bolirana_numero=_numero_bolirana(partida),
+        bolirana_equipo=participante.equipo or None,
+        bolirana_fraccion_num=fraccion_num,
+        bolirana_fraccion_den=fraccion_den,
+        bolirana_bebidas=bebidas,
         bolirana_partida_id=partida.id,
         fecha_ocupacion=ahora,
         alias_cliente=participante.alias,
@@ -392,6 +459,10 @@ def _liquidar_participante(
     monto: float,
     usuario_id: int,
     ahora,
+    detalle: Optional[str] = None,
+    bebidas: Optional[str] = None,
+    fraccion_num: Optional[int] = None,
+    fraccion_den: Optional[int] = None,
 ) -> None:
     """Marca al perdedor y crea su cargo en la cuenta que corresponda."""
     participante.es_perdedor = 1
@@ -403,12 +474,31 @@ def _liquidar_participante(
     mesa = _mesa_destino_participante(db, participante)
     if mesa is not None:
         cargo = _crear_cargo_cuenta(
-            db, partida, participante, mesa, monto, usuario_id, ahora
+            db,
+            partida,
+            participante,
+            mesa,
+            monto,
+            usuario_id,
+            ahora,
+            detalle,
+            bebidas,
+            fraccion_num,
+            fraccion_den,
         )
         participante.estado_pago = "transferido"
     else:
         cargo = _crear_cargo_alias(
-            db, partida, participante, monto, usuario_id, ahora
+            db,
+            partida,
+            participante,
+            monto,
+            usuario_id,
+            ahora,
+            detalle,
+            bebidas,
+            fraccion_num,
+            fraccion_den,
         )
         participante.estado_pago = "pendiente"
     participante.pedido_cobro_id = cargo.id
@@ -432,7 +522,7 @@ def listar_boliranas(db: Session = Depends(get_db)):
 
 @router.get("/cargos-pendientes", response_model=List[CargoBoliranaOut])
 def cargos_pendientes(db: Session = Depends(get_db)):
-    """Cobros de jugadores libres que aún no se han pagado."""
+    """Cargos legacy de jugadores libres que aún no se han pagado."""
     filas = (
         db.query(Pedido, PartidaBolirana, Bolirana)
         .join(PartidaBolirana, PartidaBolirana.id == Pedido.bolirana_partida_id)
@@ -641,7 +731,6 @@ def iniciar_partida(
                 )
 
             # Clave de la cuenta de origen para validar duplicados.
-            origen_clave = ("libre", "")
             if participante.origen_tipo in {"mesa", "individual"}:
                 origen = _mesa_por_id(db, participante.origen_mesa_id or 0)
                 es_individual = (origen.tipo or "mesa") == "individual"
@@ -698,6 +787,14 @@ def iniciar_partida(
                     )
                 exigir_barra_sin_bolirana(db, numero_barra)
                 origen_clave = ("barra", numero_barra)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"El jugador {alias} debe estar vinculado a una mesa, "
+                        "barra o cliente individual."
+                    ),
+                )
 
             # Solo se bloquea el mismo nombre en la misma cuenta de origen.
             combinacion = (alias.lower(), origen_clave)
@@ -955,6 +1052,8 @@ def finalizar_partida(
         2,
     )
     partida.total_bebidas = total
+    consumo = _consumo_partida(db, partida.id)
+    bebidas = _bebidas_texto(consumo)
 
     ahora = ahora_local()
 
@@ -978,6 +1077,8 @@ def finalizar_partida(
         ):
             integrantes = equipos[nombre_equipo]
             montos = _repartir(monto_equipo, len(integrantes))
+            denominador = len(equipos_perdedores) * len(integrantes)
+            detalle = _detalle_cargo(consumo, 1, denominador)
             for integrante, monto in zip(integrantes, montos):
                 _liquidar_participante(
                     db,
@@ -986,9 +1087,15 @@ def finalizar_partida(
                     monto,
                     datos.usuario_id,
                     ahora,
+                    detalle,
+                    bebidas,
+                    1,
+                    denominador,
                 )
     else:
         montos = _repartir(total, len(datos.perdedores))
+        denominador = len(datos.perdedores)
+        detalle = _detalle_cargo(consumo, 1, denominador)
         for participante_id, monto in zip(datos.perdedores, montos):
             _liquidar_participante(
                 db,
@@ -997,6 +1104,10 @@ def finalizar_partida(
                 monto,
                 datos.usuario_id,
                 ahora,
+                detalle,
+                bebidas,
+                1,
+                denominador,
             )
 
     partida.estado = "finalizada"
@@ -1011,7 +1122,7 @@ def pagar_cargo(
     datos: PagarCargoBoliranaIn,
     db: Session = Depends(get_db),
 ):
-    """Cobra un cargo pendiente de un jugador libre (simple o mixto)."""
+    """Cobra un cargo legacy pendiente de un jugador libre (simple o mixto)."""
     exigir_turno_abierto(db)
     _usuario(db, datos.usuario_id)
 

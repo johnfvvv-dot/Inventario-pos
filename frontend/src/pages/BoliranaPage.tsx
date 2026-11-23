@@ -15,16 +15,12 @@ import {
   useTurno,
 } from "../context/TurnoContext";
 import ConfirmModal from "../components/ConfirmModal";
-import CobroParaLlevarModal, {
-  type PagoParaLlevar,
-} from "../components/CobroParaLlevarModal";
 import IniciarPartidaBoliranaModal from "../components/IniciarPartidaBoliranaModal";
 import LiquidarPartidaBoliranaModal from "../components/LiquidarPartidaBoliranaModal";
 import TurnoRequeridoAviso from "../components/TurnoRequeridoAviso";
 import Icon from "../components/Icon";
 import type {
   Bolirana,
-  CargoBolirana,
   ParticipanteBolirana,
   PartidaBolirana,
 } from "../types/bolirana";
@@ -84,7 +80,6 @@ export default function BoliranaPage() {
   const sinTurno = !cargandoTurno && !turno;
 
   const [boliranas, setBoliranas] = useState<Bolirana[]>([]);
-  const [cargos, setCargos] = useState<CargoBolirana[]>([]);
   const [mesas, setMesas] = useState<MesaDisponible[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,19 +93,13 @@ export default function BoliranaPage() {
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState(false);
 
-  const [cargoCobrar, setCargoCobrar] = useState<CargoBolirana | null>(null);
-  const [procesandoCargo, setProcesandoCargo] = useState(false);
-  const [errorCargo, setErrorCargo] = useState<string | null>(null);
-
   const cargar = async () => {
     try {
-      const [bols, pendientes, mesasData]: any = await Promise.all([
+      const [bols, mesasData]: any = await Promise.all([
         api.getBoliranas(),
-        api.getCargosBolirana(),
         api.getMesas(),
       ]);
       setBoliranas(bols);
-      setCargos(pendientes);
       setMesas(mesasData);
       setError(null);
     } catch (err: any) {
@@ -168,46 +157,9 @@ export default function BoliranaPage() {
     navigate(`${basePedidos}/pedidos?bolirana=${bolirana.id}`);
   };
 
-  const alLiquidar = async (opciones: {
-    cobrarAliasAhora: boolean;
-    partidaId: number;
-  }) => {
+  const alLiquidar = async () => {
     setMensaje("Partida liquidada correctamente.");
     await cargar();
-    if (opciones.cobrarAliasAhora) {
-      try {
-        const pendientes: any = await api.getCargosBolirana();
-        setCargos(pendientes);
-        // Abre el cargo generado por esta liquidación, no uno anterior.
-        const propio = pendientes.find(
-          (cargo: CargoBolirana) => cargo.partida_id === opciones.partidaId
-        );
-        if (propio) setCargoCobrar(propio);
-      } catch {
-        /* el cargo queda visible en la lista de pendientes */
-      }
-    }
-  };
-
-  const cobrarCargo = async (pagos: PagoParaLlevar[]) => {
-    if (!cargoCobrar) return;
-    setProcesandoCargo(true);
-    setErrorCargo(null);
-    try {
-      await api.pagarCargoBolirana(cargoCobrar.pedido_id, {
-        usuario_id: usuarioId,
-        pagos,
-      });
-      setMensaje(
-        `Cargo de ${cargoCobrar.alias || "jugador libre"} cobrado correctamente.`
-      );
-      setCargoCobrar(null);
-      await cargar();
-    } catch (err: any) {
-      setErrorCargo(err.message);
-    } finally {
-      setProcesandoCargo(false);
-    }
   };
 
   if (!negocio.modulo_bolirana) {
@@ -455,45 +407,6 @@ export default function BoliranaPage() {
         </div>
       )}
 
-      <section className="panel bolirana-cargos-panel">
-        <h3>
-          <Icon nombre="recibo" size={15} />
-          Cargos pendientes de jugadores libres
-        </h3>
-        {cargos.length === 0 ? (
-          <p className="muted small">
-            No hay cargos pendientes. Los jugadores libres perdedores aparecen
-            aquí para cobrarlos en caja.
-          </p>
-        ) : (
-          <div className="bolirana-cargos-lista">
-            {cargos.map((cargo) => (
-              <div key={cargo.pedido_id} className="bolirana-cargo-fila">
-                <div>
-                  <strong>{cargo.alias || "Jugador libre"}</strong>
-                  <span className="muted small"> · {cargo.concepto}</span>
-                </div>
-                <div className="bolirana-cargo-acciones">
-                  <strong>{formatearPrecio(cargo.total)}</strong>
-                  <button
-                    className="btn-primary btn-small"
-                    onClick={() => {
-                      setErrorCargo(null);
-                      setCargoCobrar(cargo);
-                    }}
-                    disabled={!turno || cargandoTurno}
-                    title={!turno ? MENSAJE_TURNO_REQUERIDO : undefined}
-                  >
-                    <Icon nombre="efectivo" size={14} />
-                    Cobrar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
       {iniciarEn && (
         <IniciarPartidaBoliranaModal
           bolirana={iniciarEn}
@@ -512,29 +425,6 @@ export default function BoliranaPage() {
           partida={liquidarEn.partida}
           onClose={() => setLiquidarEn(null)}
           onLiquidado={alLiquidar}
-        />
-      )}
-
-      {cargoCobrar && (
-        <CobroParaLlevarModal
-          items={[
-            {
-              nombre: cargoCobrar.concepto,
-              cantidad: 1,
-              precio: cargoCobrar.total,
-            },
-          ]}
-          total={cargoCobrar.total}
-          cliente={cargoCobrar.alias}
-          titulo="Cobrar cargo de Bolirana"
-          etiquetaResumen="Cargo pendiente"
-          confirmar={cobrarCargo}
-          onClose={() => {
-            setCargoCobrar(null);
-            setErrorCargo(null);
-          }}
-          procesando={procesandoCargo}
-          error={errorCargo}
         />
       )}
 

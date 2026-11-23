@@ -134,9 +134,18 @@ class Pedido(Base):
     # Nombre del cliente de una venta "Para llevar". Se guarda directo en el
     # pedido porque estas ventas no crean mesa, división ni participante.
     alias_cliente = Column(String(60), nullable=True)
-    # Cargo sin producto (ej. "Consumo Bolirana 1 (Partida)"). Se usa en los
+    # Cargo sin producto (ej. "Consumo Bolirana # 1 (Partida)"). Se usa en los
     # pedidos que transfieren el total de una partida a una cuenta.
     concepto = Column(String(140), nullable=True)
+    # Sub-línea visible del cargo (bebidas y fracción que paga la cuenta).
+    concepto_detalle = Column(String(400), nullable=True)
+    # Metadatos del cargo de Bolirana para agrupar y mostrar fracciones sin
+    # depender del texto: número de máquina, equipo, fracción y bebidas.
+    bolirana_numero = Column(Integer, nullable=True)
+    bolirana_equipo = Column(String(60), nullable=True)
+    bolirana_fraccion_num = Column(Integer, nullable=True)
+    bolirana_fraccion_den = Column(Integer, nullable=True)
+    bolirana_bebidas = Column(String(400), nullable=True)
     # Partida de bolirana que originó el consumo o el cargo transferido.
     bolirana_partida_id = Column(
         Integer, ForeignKey("partidas_bolirana.id"), nullable=True, index=True
@@ -320,9 +329,9 @@ class PartidaBolirana(Base):
 class ParticipanteBolirana(Base):
     """Mesa, barra, cliente individual o alias que compite en una partida.
 
-    Un alias puede estar vinculado a una cuenta de origen (mesa, barra o
-    cliente individual). Al liquidar, su parte se carga a esa cuenta. Si no
-    tiene origen queda como jugador libre con un cargo pendiente.
+    Un alias siempre está vinculado a una cuenta de origen (mesa, barra o
+    cliente individual). Al liquidar, su parte se carga a esa cuenta; ya no
+    existen jugadores libres con cargos pendientes.
     """
 
     __tablename__ = "participantes_bolirana"

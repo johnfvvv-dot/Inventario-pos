@@ -45,14 +45,3 @@ export interface Bolirana {
   estado: "disponible" | "en_partida";
   partida?: PartidaBolirana | null;
 }
-
-export interface CargoBolirana {
-  pedido_id: number;
-  partida_id: number;
-  bolirana_id: number;
-  bolirana_nombre: string;
-  alias?: string | null;
-  concepto: string;
-  total: number;
-  fecha: string;
-}

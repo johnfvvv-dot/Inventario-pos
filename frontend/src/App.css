@@ -1114,6 +1114,21 @@ select:focus {
   padding-left: 0.8rem;
 }
 
+.cuenta-linea-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.cuenta-linea-detalle {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .cuenta-subtotal {
   border-top: 1px dashed var(--border);
   margin-top: 0.35rem;
@@ -2282,6 +2297,15 @@ select:focus {
   word-break: break-word;
 }
 
+.ticket-item-detalle {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
 .ticket-item-precio {
   white-space: nowrap;
   font-weight: 600;
@@ -3320,6 +3344,12 @@ body {
   --nav-activo-bg: #eff6ff;
   --nav-activo-texto: #1d4ed8;
   --nav-activo-borde: #3b82f6;
+}
+
+.admin-nav a.menu-link--bolirana {
+  --nav-activo-bg: #fff7ed;
+  --nav-activo-texto: #c2410c;
+  --nav-activo-borde: #f97316;
 }
 
 .admin-nav a.menu-link--reportes {
@@ -4538,6 +4568,14 @@ tbody tr:last-child td {
   line-height: 1.4;
 }
 
+.historial-detalle {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .historial-total {
   text-align: right;
   white-space: nowrap;
@@ -5436,37 +5474,6 @@ tbody tr:last-child td {
   color: #c2410c;
 }
 
-/* Cargos pendientes de jugadores libres */
-
-.bolirana-cargos-panel {
-  border-top: 3px solid #f97316;
-}
-
-.bolirana-cargos-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-
-.bolirana-cargo-fila {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.8rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.bolirana-cargo-acciones {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
 /* Modales de partida y liquidación */
 
 .modal-bolirana {
@@ -5813,20 +5820,6 @@ tbody tr:last-child td {
   background: #fff7ed;
   color: #9a3412;
   font-size: 0.9rem;
-}
-
-.bolirana-check-cobro {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  margin-top: 0.7rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.bolirana-check-cobro input {
-  margin-top: 0.15rem;
-  accent-color: #f97316;
 }
 
 @media (max-width: 760px) {
